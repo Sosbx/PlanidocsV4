@@ -1,0 +1,93 @@
+/* 
+ * ThemeColors.css - Centralisation de toutes les couleurs du site
+ * Ce fichier définit toutes les couleurs utilisées dans l'application
+ * Pour modifier l'apparence globale, modifiez uniquement ce fichier
+ */
+
+:root {
+  /* Couleurs principales */
+  --primary: #4F46E5;
+  --primary-light: #818CF8;
+  --primary-dark: #3730A3;
+  
+  --secondary: #10B981;
+  --secondary-light: #34D399;
+  --secondary-dark: #059669;
+  
+  --accent: #F59E0B;
+  --accent-light: #FBBF24;
+  --accent-dark: #D97706;
+  
+  /* Couleurs de texte */
+  --text-primary: #1F2937;
+  --text-secondary: #4B5563;
+  --text-tertiary: #9CA3AF;
+  
+  /* Couleurs de fond */
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #F9FAFB;
+  --bg-tertiary: #F3F4F6;
+  
+  /* Couleurs des périodes */
+  --period-morning-bg: #E6F0FA;
+  --period-morning-text: #4A95D6;
+  --period-morning-border: #7CB9E8;
+  --period-morning-hover: #D6EBFF;
+  --period-morning-ring: rgba(76, 149, 214, 0.3);
+
+  --period-afternoon-bg: #EEF2FF;
+  --period-afternoon-text: #4F46E5;
+  --period-afternoon-border: #6366F1;
+  --period-afternoon-hover: #E0E7FF;
+  --period-afternoon-ring: rgba(99, 102, 241, 0.3);
+
+  --period-evening-bg: #F3E8FF;
+  --period-evening-text: #9333EA;
+  --period-evening-border: #A855F7;
+  --period-evening-hover: #F5D0FE;
+  --period-evening-ring: rgba(168, 85, 247, 0.3);
+  
+  /* États */
+  --interested-color: #34D399;
+  --interested-ring: rgba(52, 211, 153, 0.5);
+  --conflict-color: #F87171;
+  --conflict-ring: rgba(248, 113, 113, 0.5);
+  
+  /* Désiderata */
+  --desiderata-primary: rgba(252, 165, 165, 0.85);  /* Rouge clair plus vif */
+  --desiderata-secondary: rgba(147, 197, 253, 0.85); /* Bleu clair plus vif */
+  
+  /* Remplaçants - couleurs plus douces (pour les badges) */
+  --replacement-badge-bg: #FDE68A; /* Ambre plus pâle */
+  --replacement-badge-text: #92400E; /* Texte brun foncé */
+  --replacement-badge-border: #F59E0B; /* Bordure ambre */
+  --replacement-badge-hover: #FEF3C7; /* Survol encore plus pâle */
+  
+  /* Couleurs d'état */
+  --success: #10B981;
+  --warning: #F59E0B;
+  --error: #EF4444;
+  --info: #3B82F6;
+  
+  /* Couleurs des options d'échange - retour à la configuration originale */
+  --exchange-bg: #DBEAFE; /* bg-blue-100 - pour échange (E) */
+  --exchange-text: #1E40AF; /* text-blue-700 */
+  --exchange-border: #93C5FD; /* border-blue-300 */
+  --exchange-hover: #BFDBFE; /* bg-blue-200 */
+  
+  --give-bg: #FEF9C3; /* bg-yellow-100 - pour cession (C) */
+  --give-text: #A16207; /* text-yellow-700 */
+  --give-border: #FDE047; /* border-yellow-300 */
+  --give-hover: #FEF08A; /* bg-yellow-200 */
+  
+  --replacement-bg: #FEF3C7; /* bg-amber-100 - pour remplaçant (R) */
+  --replacement-text: #B45309; /* text-amber-700 */
+  --replacement-border: #FCD34D; /* border-amber-300 */
+  --replacement-hover: #FFFBEB; /* bg-amber-50 */
+  
+  /* Couleur pour la combinaison d'échange + cession */
+  --combined-bg: #FAE8FF; /* bg-purple-100 */
+  --combined-text: #7E22CE; /* text-purple-700 */
+  --combined-border: #E9D5FF; /* border-purple-300 */
+  --combined-hover: #F3E8FF; /* bg-purple-200 */
+}

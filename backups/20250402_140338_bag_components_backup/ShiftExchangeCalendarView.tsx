@@ -1,0 +1,363 @@
+import React, { useState } from 'react';
+import { format, isToday as isTodayFn } from 'date-fns';
+import { fr } from 'date-fns/locale';
+import { isGrayedOut } from '../../utils/dateUtils';
+import { useDesiderataState } from '../../hooks/useDesiderataState';
+import { useReplacementManagement } from '../../hooks/shiftExchange/useReplacementManagement';
+import { UserPlus } from 'lucide-react';
+import type { ShiftExchange } from '../../types/planning';
+import type { User } from '../../types/users';
+
+interface ShiftExchangeCalendarViewProps {
+  days: Date[];
+  isMobile: boolean;
+  filteredExchanges: ShiftExchange[];
+  userAssignments: Record<string, any>;
+  conflictStates: Record<string, boolean>;
+  interestedPeriodsMap: Record<string, boolean>;
+  conflictPeriodsMap: Record<string, boolean>;
+  showDesiderata: boolean;
+  user: any;
+  users: User[];
+  onToggleInterest: (exchange: ShiftExchange) => void;
+  isInteractionDisabled: boolean;
+  selectedDate?: string;
+  onSelectDate: (date: string) => void;
+  receivedShifts?: Record<string, any>;
+  currentMonth: Date;
+  calendarViewMode: 'month';
+  bagPhaseConfig: { phase: 'submission' | 'distribution' | 'completed' };
+}
+
+const ShiftExchangeCalendarView: React.FC<ShiftExchangeCalendarViewProps> = ({
+  days,
+  isMobile,
+  filteredExchanges,
+  userAssignments,
+  conflictStates,
+  showDesiderata,
+  user,
+  users,
+  onToggleInterest,
+  isInteractionDisabled,
+  selectedDate,
+  onSelectDate,
+  currentMonth,
+  bagPhaseConfig,
+}) => {
+  // Utiliser le hook de gestion des remplaçants
+  const { 
+    proposingShift, 
+    handleProposeToReplacements: proposeToReplacements
+  } = useReplacementManagement();
+  
+  // Fonction pour proposer une garde aux remplaçants
+  const handleProposeToReplacements = (exchange: ShiftExchange, e: React.MouseEvent) => {
+    e.stopPropagation(); // Éviter de déclencher le handleSelectDate du parent
+    proposeToReplacements(exchange, undefined, (error) => {
+      console.error('Erreur lors de la proposition aux remplaçants:', error);
+      alert('Une erreur est survenue lors de la proposition aux remplaçants: ' + (error instanceof Error ? error.message : 'Erreur inconnue'));
+    });
+  };
+  
+  // Récupérer les données de désiderata pour l'utilisateur
+  const { selections, isLoading: isLoadingDesiderata } = useDesiderataState();
+  
+  // Debug - afficher les sélections au chargement du composant
+  React.useEffect(() => {
+    console.log("Désiderata chargées dans le calendrier:", { selections, isLoading: isLoadingDesiderata });
+  }, [selections, isLoadingDesiderata]);
+  
+  // Créer un objet mappant les dates aux échanges pour un accès plus facile
+  const exchangesByDate: Record<string, Record<string, ShiftExchange[]>> = {};
+  
+  // Filtrer les échanges en fonction de la phase
+  const displayExchanges = bagPhaseConfig.phase === 'completed'
+    ? filteredExchanges.filter(exchange => exchange.userId === user?.id)
+    : filteredExchanges;
+  
+  // Grouper les échanges par date et période
+  displayExchanges.forEach(exchange => {
+    const { date, period } = exchange;
+    if (!exchangesByDate[date]) {
+      exchangesByDate[date] = { M: [], AM: [], S: [] };
+    }
+    exchangesByDate[date][period].push(exchange);
+  });
+
+  return (
+    <div className="w-full calendar-view">
+      {/* Entêtes des jours uniquement pour les écrans non-mobiles */}
+      {!isMobile && (
+        <div className="grid grid-cols-7 gap-1 mb-2">
+          {['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map(day => (
+            <div key={day} className="text-center font-medium text-gray-600 py-2 text-sm">
+              {day}
+            </div>
+          ))}
+        </div>
+      )}
+      
+      {/* Conteneur de grille avec nombre de colonnes adapté selon la taille de l'écran */}
+      <div className={`grid ${
+        isMobile 
+          ? 'grid-cols-3 xs:grid-cols-4 gap-0.5' // 3 colonnes sur très petits écrans, 4 sur petits écrans
+          : 'grid-cols-7 gap-1'                  // 7 colonnes sur écrans normaux
+      }`}>
+        {/* Les cellules vides sont supprimées car nous incluons maintenant les jours du mois précédent */}
+        
+        {/* Jours du mois actuel - rendu exact comme l'original */}
+        {days.map(day => {
+          try {
+            const dateStr = format(day, 'yyyy-MM-dd');
+            const dayNum = day.getDate();
+            
+            // Vérifier si c'est un week-end ou un jour férié
+            const isWeekend = isGrayedOut(day);
+            
+            // Vérifier si c'est aujourd'hui
+            const isCurrentDay = isTodayFn(day);
+            const isSelectedDay = selectedDate === dateStr;
+            
+            // Récupérer les gardes de l'utilisateur pour cette date
+            const userShifts: Record<string, boolean> = {};
+            ['M', 'AM', 'S'].forEach(period => {
+              const key = `${dateStr}-${period}`;
+              userShifts[period] = Boolean(userAssignments[key]);
+            });
+            
+            // Récupérer les échanges disponibles pour cette date
+            const dayExchanges = exchangesByDate[dateStr] || { M: [], AM: [], S: [] };
+            
+            return (
+              <div 
+                key={dateStr}
+                className={`
+                  relative overflow-visible
+                  ${isMobile ? 'p-0.5 min-h-[52px]' : 'p-1.5 min-h-[100px]'}
+                  rounded ${isMobile ? 'shadow-sm' : 'border'} transition-all duration-200
+                  ${isCurrentDay ? 'border-indigo-400 border-2' : isMobile ? 'border-transparent' : 'border-gray-200'}
+                  ${isWeekend ? 'bg-gray-100/80 shadow-inner' : 'bg-white'}
+                  ${day.getMonth() !== currentMonth.getMonth() ? 'opacity-70 bg-gray-50/80' : ''}
+                  ${isSelectedDay ? 'ring-2 ring-indigo-400 shadow-md' : ''}
+                  hover:bg-gray-50/50 cursor-pointer
+                `}
+                style={{ position: 'relative', zIndex: 10 }}
+                onClick={() => onSelectDate(dateStr)}
+              >
+                {/* En-tête de la cellule avec numéro du jour */}
+                <div className={`flex justify-between items-center relative z-10 ${isMobile ? 'mb-0' : 'mb-1'}`}>
+                  {isWeekend && (
+                    <span className="absolute top-0 left-0 w-full h-full border-t-2 border-gray-200 rounded-t-md opacity-40 z-0"></span>
+                  )}
+                  
+                  {isMobile ? (
+                    <div className="flex items-center gap-0.5 px-1">
+                      <span className="text-[9px] font-medium text-gray-700">
+                        {dayNum}
+                      </span>
+                      <span className="text-[7px] text-gray-500">
+                        {format(day, 'EEE', { locale: fr }).substring(0, 3)}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1 px-1">
+                      <span className="text-sm font-medium text-gray-700">
+                        {dayNum}
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {format(day, 'EEE', { locale: fr })}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                
+                <div className={`${isMobile ? 'mt-1' : 'mt-0.5'} flex gap-[1px] justify-between px-0.5`}>
+                  {/* Gardes par période - En colonnes - Toujours afficher les 3 colonnes même si vides */}
+                  {['M', 'AM', 'S'].map(period => {
+                    const hasUserShift = userShifts[period];
+                    const dayPeriodExchanges = dayExchanges[period] || [];
+                    const hasPeriodExchanges = dayPeriodExchanges.length > 0;
+                    const key = `${dateStr}-${period}`;
+                    
+                    // Trouver l'échange de l'utilisateur pour cette période
+                    const userExchange = dayPeriodExchanges.find(exchange => exchange.userId === user?.id);
+                    
+                    // Vérifier si un désidérata existe pour cette période
+                    const desidKey = `${dateStr}-${period}`;
+                    const desiderata = showDesiderata && !isLoadingDesiderata && bagPhaseConfig.phase !== 'completed' 
+                      ? selections[desidKey]?.type 
+                      : null;
+                    
+                    // Ajouter un log pour debug seulement si sélectionné
+                    if (selectedDate === dateStr && desiderata) {
+                      console.log(`Désiderata pour ${desidKey}:`, selections[desidKey], "type:", desiderata);
+                    }
+                    
+                    return (
+                      <div key={`period-${period}`} className={`flex flex-col ${isMobile ? 'gap-0.5 relative' : 'gap-0.5'} ${
+                        period === 'M' ? 'items-start' : 
+                        period === 'AM' ? 'items-center' : 'items-end'
+                      }`}>
+                        
+                        <div className={`flex flex-col ${isMobile ? 'gap-0.5' : 'gap-0.5'} ${isMobile ? 'w-6' : 'w-8'} relative`}>
+                          {/* Barre de désiderata spécifique à la période - maintenant à l'intérieur de la div de colonne */}
+                          {desiderata && (
+                            <div 
+                              className={`absolute top-[-3px] left-0 right-0 desiderata-bar ${
+                                desiderata === 'primary' ? 'desiderata-primary' : 
+                                desiderata === 'secondary' ? 'desiderata-secondary' : ''
+                              }`}
+                              style={{ 
+                                height: '3px', 
+                                width: '100%', 
+                                backgroundColor: desiderata === 'primary' ? 'rgba(239, 68, 68, 0.7)' : 'rgba(96, 165, 250, 0.7)',
+                                borderRadius: '1px'
+                              }}
+                              title={desiderata === 'primary' 
+                                ? `Désidérata primaire - ${period}` 
+                                : desiderata === 'secondary' 
+                                  ? `Désidérata secondaire - ${period}` 
+                                  : ''}
+                            />
+                          )}
+                          {/* Toujours réserver la première ligne pour la garde de l'utilisateur */}
+                          {/* Garde de l'utilisateur */}
+                          {hasUserShift ? (() => {
+                            const assignment = userAssignments[key];
+                            
+                            return (
+                              <div className="flex flex-col gap-0.5">
+                                <div 
+                                  key={`my-${period}`} 
+                                  className={`
+                                    text-center mb-0.5
+                                    ${isMobile 
+                                      ? 'text-[8px] w-full px-0.5 py-0.5 font-bold' 
+                                      : 'text-[9px] w-full px-0.5 py-0.5 font-semibold'
+                                    } 
+                                    rounded-sm bg-gray-100/80 text-gray-900 border border-gray-300/40 border-dotted ring-1 ring-gray-200/20 shadow-sm opacity-80 font-bold
+                                  `}
+                                  title="Ma garde"
+                                >
+                                  {assignment?.shiftType || period}
+                                </div>
+                                
+                                {/* Bouton "Proposer aux remplaçants" pour les gardes de l'utilisateur en phase "completed" */}
+                                {bagPhaseConfig.phase === 'completed' && userExchange && (
+                                  <button
+                                    onClick={(e) => handleProposeToReplacements(userExchange, e)}
+                                    disabled={proposingShift === userExchange.id}
+                                    className={`
+                                      text-[7px] px-0.5 py-0.5 rounded-sm
+                                      ${userExchange.proposedToReplacements 
+                                        ? 'bg-amber-100 text-amber-800 hover:bg-amber-200' 
+                                        : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                                      }
+                                      transition-colors flex items-center justify-center gap-0.5
+                                      ${proposingShift === userExchange.id ? 'opacity-50 cursor-not-allowed' : ''}
+                                    `}
+                                  >
+                                    <UserPlus className="h-2 w-2" />
+                                    {proposingShift === userExchange.id 
+                                      ? '...' 
+                                      : userExchange.proposedToReplacements 
+                                        ? 'Annuler' 
+                                        : 'Remplaçant'
+                                    }
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })() : (
+                            // Espace réservé vide quand l'utilisateur n'a pas de garde - hauteur réduite 
+                            <div className="h-[18px] w-full mb-0.5"></div>
+                          )}
+                          
+                          {/* Gardes disponibles - toujours en dessous de l'espace réservé à l'utilisateur */}
+                          {hasPeriodExchanges && bagPhaseConfig.phase !== 'completed' && 
+                            dayPeriodExchanges
+                              .filter(exchange => exchange.userId !== user?.id)
+                              .map(exchange => {
+                                const isInterested = exchange.interestedUsers?.includes(user?.id || '');
+                                const hasConflict = conflictStates[exchange.id];
+                                
+                                // Utiliser les classes CSS définies dans ShiftBadges.css
+                                let badgeClass = '';
+                                
+                                if (period === 'M') {
+                                  badgeClass = 'shift-badge-morning badge-morning';
+                                } else if (period === 'AM') {
+                                  badgeClass = 'shift-badge-afternoon badge-afternoon';
+                                } else {
+                                  badgeClass = 'shift-badge-evening badge-evening';
+                                }
+                                
+                                // Indicateurs pour gardes intéressées - masqués en phase "Terminé"
+                                let interestClass = '';
+                                if (isInterested && bagPhaseConfig.phase !== 'completed') {
+                                  if (hasConflict) {
+                                    interestClass = 'shift-badge-conflict';
+                                  } else {
+                                    interestClass = 'shift-badge-interested';
+                                  }
+                                }
+                                
+                                return (
+                                  <button
+                                    key={exchange.id}
+                                    onClick={(e) => {
+                                      e.stopPropagation(); // Éviter de déclencher le handleSelectDate du parent
+                                      if (!isInteractionDisabled) {
+                                        onToggleInterest(exchange);
+                                      }
+                                    }}
+                                    disabled={isInteractionDisabled}
+                                    className={`
+                                      relative truncate border transition-all font-bold touch-manipulation w-full
+                                      ${isMobile
+                                        ? 'text-[9px] h-[18px] px-0.5 py-0.5 font-semibold' 
+                                        : 'text-[10px] h-[20px] px-0.5 py-0.5 border-[0.5px]'
+                                      }
+                                      rounded-sm my-0.5 
+                                      cursor-pointer hover:shadow-sm active:translate-y-0.5
+                                      ${badgeClass} ${interestClass} calendar-badge calendar-item
+                                      ${isInteractionDisabled ? 'opacity-50' : ''}
+                                      ${exchange.userId === user?.id 
+                                        ? 'opacity-60 scale-95 border-dotted z-0 grayscale bg-gray-100/80 text-gray-900 border border-gray-300/30' 
+                                        : 'shadow-sm z-10 border-[0.5px] border-opacity-20'
+                                      }
+                                      ${isInterested && isMobile ? 'scale-100' : ''}
+                                      ${exchange.proposedToReplacements ? 'shift-badge-replacement' : ''}
+                                    `}
+                                    title={`${exchange.shiftType} - ${(() => {
+                                      const exchangeUser = users.find(u => u.id === exchange.userId);
+                                      return exchangeUser ? `${exchangeUser.lastName} ${exchangeUser.firstName}` : 'Utilisateur';
+                                    })()}${hasConflict ? ' (Conflit potentiel)' : ''}`}
+                                  >
+                                    {exchange.shiftType}
+                                  </button>
+                                );
+                              })
+                          }
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          } catch (error) {
+            console.error("Erreur lors du rendu d'une cellule de jour:", error);
+            // Cellule de secours en cas d'erreur
+            return (
+              <div key={`error-${Math.random()}`} className={`${isMobile ? 'min-h-[50px]' : 'min-h-[100px]'} bg-red-50/20 border border-gray-200`}></div>
+            );
+          }
+        })}
+      </div>
+    </div>
+  );
+};
+
+export default ShiftExchangeCalendarView;

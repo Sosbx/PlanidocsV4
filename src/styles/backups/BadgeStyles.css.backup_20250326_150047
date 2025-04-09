@@ -1,0 +1,549 @@
+/* 
+ * Styles communs pour tous les badges dans l'application
+ * Ce fichier centralise les styles des badges de garde pour une harmonisation globale
+ */
+
+/* Variables pour les couleurs des badges */
+:root {
+  /* Matin - bleu très clair */
+  --morning-bg: #E6F0FA;
+  --morning-text: #4A95D6;
+  --morning-border: #7CB9E8;
+  --morning-hover: #D6EBFF;
+  --morning-ring: rgba(76, 149, 214, 0.3);
+
+  /* Après-midi - bleu-indigo */
+  --afternoon-bg: #EEF2FF;
+  --afternoon-text: #4F46E5;
+  --afternoon-border: #6366F1;
+  --afternoon-hover: #E0E7FF;
+  --afternoon-ring: rgba(99, 102, 241, 0.3);
+
+  /* Soir - violet plus foncé */
+  --evening-bg: #F3E8FF;
+  --evening-text: #9333EA;
+  --evening-border: #A855F7;
+  --evening-hover: #F5D0FE;
+  --evening-ring: rgba(168, 85, 247, 0.3);
+
+  /* États */
+  --interested-color: #34D399;
+  --interested-ring: rgba(52, 211, 153, 0.5);
+  --conflict-color: #F87171;
+  --conflict-ring: rgba(248, 113, 113, 0.5);
+  
+  /* Désiderata */
+  --desiderata-primary: rgba(252, 165, 165, 0.85);  /* Rouge clair plus vif */
+  --desiderata-secondary: rgba(147, 197, 253, 0.85); /* Bleu clair plus vif */
+}
+
+/* Animations pour les badges et éléments interactifs */
+@keyframes ripple {
+  0% {
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4);
+    transform: scale(1);
+  }
+  70% {
+    box-shadow: 0 0 0 15px rgba(99, 102, 241, 0);
+    transform: scale(1.05);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0);
+    transform: scale(1);
+  }
+}
+
+@keyframes removeInterest {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.95);
+    opacity: 0.7;
+  }
+}
+
+@keyframes check {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes conflict {
+  0% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-3px);
+  }
+  50% {
+    transform: translateX(3px);
+  }
+  75% {
+    transform: translateX(-3px);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 var(--conflict-ring);
+  }
+  70% {
+    box-shadow: 0 0 0 5px rgba(239, 68, 68, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+
+/* Variante pour les petits écrans */
+@keyframes small-pulse {
+  0% {
+    box-shadow: 0 0 0 0 var(--conflict-ring);
+  }
+  70% {
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(-5px);
+    opacity: 0.8;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes dateIndicatorUpdate {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+}
+
+/* Classes d'animation */
+.badge-ripple {
+  animation: ripple 0.8s ease-out;
+}
+
+.badge-remove-interest {
+  animation: removeInterest 0.3s ease-out forwards;
+}
+
+/* Classes pour les badges par période */
+.badge-morning, .shift-badge-morning {
+  background-color: var(--morning-bg) !important;
+  color: var(--morning-text) !important;
+  border-color: var(--morning-border) !important;
+}
+
+.badge-morning:hover:not(:disabled), .shift-badge-morning:hover:not(:disabled) {
+  background-color: var(--morning-hover) !important;
+}
+
+.badge-afternoon, .shift-badge-afternoon {
+  background-color: var(--afternoon-bg) !important;
+  color: var(--afternoon-text) !important;
+  border-color: var(--afternoon-border) !important;
+}
+
+.badge-afternoon:hover:not(:disabled), .shift-badge-afternoon:hover:not(:disabled) {
+  background-color: var(--afternoon-hover) !important;
+}
+
+.badge-evening, .shift-badge-evening {
+  background-color: var(--evening-bg) !important;
+  color: var(--evening-text) !important;
+  border-color: var(--evening-border) !important;
+}
+
+.badge-evening:hover:not(:disabled), .shift-badge-evening:hover:not(:disabled) {
+  background-color: var(--evening-hover) !important;
+}
+
+/* Styles spécifiques pour la vue calendrier (bordures plus légères et fond plus transparent) */
+.calendar-view .badge-morning,
+.calendar-view .shift-badge-morning,
+.calendar-badge.badge-morning,
+.calendar-badge.shift-badge-morning,
+.calendar-item.badge-morning,
+.calendar-item.shift-badge-morning {
+  background-color: rgba(230, 240, 250, 0.6);
+  border-color: rgba(124, 185, 232, 0.15);
+  color: rgba(74, 149, 214, 0.8);
+  transition: all 0.2s ease-out;
+  box-shadow: 0 0 0 rgba(0, 0, 0, 0.05);
+}
+
+.calendar-view .badge-morning:hover,
+.calendar-view .shift-badge-morning:hover,
+.calendar-badge.badge-morning:hover,
+.calendar-badge.shift-badge-morning:hover,
+.calendar-item.badge-morning:hover,
+.calendar-item.shift-badge-morning:hover {
+  background-color: rgba(230, 240, 250, 0.5);
+  border-color: rgba(124, 185, 232, 0.4);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.07);
+}
+
+.calendar-view .badge-afternoon,
+.calendar-view .shift-badge-afternoon,
+.calendar-badge.badge-afternoon,
+.calendar-badge.shift-badge-afternoon,
+.calendar-item.badge-afternoon,
+.calendar-item.shift-badge-afternoon {
+  background-color: rgba(238, 242, 255, 0.6);
+  border-color: rgba(99, 102, 241, 0.15);
+  color: rgba(79, 70, 229, 0.8);
+  transition: all 0.2s ease-out;
+  box-shadow: 0 0 0 rgba(0, 0, 0, 0.05);
+}
+
+.calendar-view .badge-afternoon:hover,
+.calendar-view .shift-badge-afternoon:hover,
+.calendar-badge.badge-afternoon:hover,
+.calendar-badge.shift-badge-afternoon:hover,
+.calendar-item.badge-afternoon:hover,
+.calendar-item.shift-badge-afternoon:hover {
+  background-color: rgba(238, 242, 255, 0.5);
+  border-color: rgba(99, 102, 241, 0.4);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.07);
+}
+
+.calendar-view .badge-evening,
+.calendar-view .shift-badge-evening,
+.calendar-badge.badge-evening,
+.calendar-badge.shift-badge-evening,
+.calendar-item.badge-evening,
+.calendar-item.shift-badge-evening {
+  background-color: rgba(243, 232, 255, 0.6);
+  border-color: rgba(168, 85, 247, 0.15);
+  color: rgba(147, 51, 234, 0.8);
+  transition: all 0.2s ease-out;
+  box-shadow: 0 0 0 rgba(0, 0, 0, 0.05);
+}
+
+.calendar-view .badge-evening:hover,
+.calendar-view .shift-badge-evening:hover,
+.calendar-badge.badge-evening:hover,
+.calendar-badge.shift-badge-evening:hover,
+.calendar-item.badge-evening:hover,
+.calendar-item.shift-badge-evening:hover {
+  background-color: rgba(243, 232, 255, 0.5);
+  border-color: rgba(168, 85, 247, 0.4);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.07);
+}
+
+/* Classes pour le statut des badges */
+.badge-interested {
+  position: relative;
+  box-shadow: 0 2px 6px rgba(5, 150, 105, 0.2);
+}
+
+.badge-interested::after,
+.shift-badge-interested::after {
+  content: '✓';
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background-color: var(--interested-color) !important;
+  color: white !important;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  animation: check 0.3s ease-out;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+  transform-origin: center;
+  transition: transform 0.2s ease-out;
+  z-index: 10;
+}
+
+/* Version plus grande pour les éléments de liste */
+.list-view .badge-interested::after,
+.list-view .shift-badge-interested::after {
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  font-size: 11px;
+}
+
+.badge-interested:hover::after {
+  transform: scale(1.1);
+}
+
+/* Cacher le badge d'intérêt si le badge de conflit est présent */
+.badge-conflict.badge-interested::after {
+  display: none;
+}
+
+/* Badge de conflit */
+.badge-conflict {
+  animation: conflict 0.5s ease-in-out, pulse 2s infinite;
+  box-shadow: 0 0 0 var(--conflict-ring);
+  position: relative;
+}
+
+/* Styles spécifiques pour la vue calendrier */
+.calendar-view .badge-conflict,
+.calendar-view .shift-badge-conflict,
+.calendar-badge.badge-conflict,
+.calendar-badge.shift-badge-conflict,
+.calendar-item.badge-conflict,
+.calendar-item.shift-badge-conflict {
+  animation: conflict 0.5s ease-in-out, small-pulse 2s infinite;
+  border-color: rgba(239, 68, 68, 0.5) !important;
+  background-color: rgba(254, 240, 240, 0.7) !important;
+  box-shadow: 0 1px 3px rgba(239, 68, 68, 0.2) !important;
+}
+
+.calendar-view .badge-conflict:hover,
+.calendar-view .shift-badge-conflict:hover,
+.calendar-badge.badge-conflict:hover,
+.calendar-badge.shift-badge-conflict:hover,
+.calendar-item.badge-conflict:hover,
+.calendar-item.shift-badge-conflict:hover {
+  background-color: rgba(254, 240, 240, 0.8) !important;
+  border-color: rgba(239, 68, 68, 0.6) !important;
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.25) !important;
+}
+
+.calendar-view .badge-interested:not(.badge-conflict),
+.calendar-view .shift-badge-interested:not(.shift-badge-conflict),
+.calendar-badge.badge-interested:not(.badge-conflict),
+.calendar-badge.shift-badge-interested:not(.shift-badge-conflict),
+.calendar-item.badge-interested:not(.badge-conflict),
+.calendar-item.shift-badge-interested:not(.shift-badge-conflict) {
+  border-color: rgba(16, 185, 129, 0.5) !important;
+  background-color: rgba(240, 253, 244, 0.7) !important;
+  box-shadow: 0 1px 3px rgba(16, 185, 129, 0.2) !important;
+}
+
+.calendar-view .badge-interested:not(.badge-conflict):hover,
+.calendar-view .shift-badge-interested:not(.shift-badge-conflict):hover,
+.calendar-badge.badge-interested:not(.badge-conflict):hover,
+.calendar-badge.shift-badge-interested:not(.shift-badge-conflict):hover,
+.calendar-item.badge-interested:not(.badge-conflict):hover,
+.calendar-item.shift-badge-interested:not(.shift-badge-conflict):hover {
+  background-color: rgba(240, 253, 244, 0.8) !important;
+  border-color: rgba(16, 185, 129, 0.6) !important;
+  box-shadow: 0 2px 4px rgba(16, 185, 129, 0.25) !important;
+}
+
+/* Réduit davantage la taille des badges dans la vue calendrier */
+.calendar-view .badge-interested::after,
+.calendar-view .badge-conflict::after,
+.calendar-badge.badge-interested::after,
+.calendar-badge.badge-conflict::after,
+.calendar-view .shift-badge-interested::after,
+.calendar-view .shift-badge-conflict::after,
+.calendar-badge.shift-badge-interested::after,
+.calendar-badge.shift-badge-conflict::after,
+.calendar-item.shift-badge-interested::after,
+.calendar-item.shift-badge-conflict::after,
+.calendar-item.badge-interested::after,
+.calendar-item.badge-conflict::after {
+  top: -2px !important;
+  right: -2px !important;
+  width: 8px !important;
+  height: 8px !important;
+  font-size: 6px !important;
+  line-height: 1 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2) !important;
+}
+
+.badge-conflict::after,
+.shift-badge-conflict::after {
+  content: '⇄';
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background-color: var(--conflict-color) !important;
+  color: white !important;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: bold;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+  z-index: 20;
+}
+
+/* Version plus grande pour les éléments de liste */
+.list-view .badge-conflict::after,
+.list-view .shift-badge-conflict::after {
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  font-size: 11px;
+}
+
+/* Désiderata */
+@keyframes desiderata-glow {
+  0% {
+    opacity: 0.8;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  }
+  100% {
+    opacity: 0.8;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  }
+}
+
+.desiderata-bar {
+  height: 0.25rem;
+  width: 100%;
+  margin-bottom: 0;
+  z-index: 5;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+button:hover .desiderata-bar {
+  animation: desiderata-glow 2s infinite;
+  height: 0.3rem;
+}
+
+.desiderata-primary {
+  background-color: var(--desiderata-primary);
+  background: linear-gradient(to right, var(--desiderata-primary), rgba(252, 165, 165, 0.9));
+  border-bottom: 1px solid rgba(252, 165, 165, 1);
+}
+
+.desiderata-secondary {
+  background-color: var(--desiderata-secondary);
+  background: linear-gradient(to right, var(--desiderata-secondary), rgba(147, 197, 253, 0.9));
+  border-bottom: 1px solid rgba(147, 197, 253, 1);
+}
+
+/* Classes additionnelles pour la vue admin */
+.bg-amber-100 {
+  background-color: var(--morning-bg) !important;
+}
+
+.bg-sky-100 {
+  background-color: var(--afternoon-bg) !important;
+}
+
+.bg-violet-100 {
+  background-color: var(--evening-bg) !important;
+}
+
+.text-amber-800 {
+  color: var(--morning-text) !important;
+}
+
+.text-sky-800 {
+  color: var(--afternoon-text) !important;
+}
+
+.text-violet-800 {
+  color: var(--evening-text) !important;
+}
+
+.border-amber-200 {
+  border-color: var(--morning-border) !important;
+}
+
+.border-sky-200 {
+  border-color: var(--afternoon-border) !important;
+}
+
+.border-violet-200 {
+  border-color: var(--evening-border) !important;
+}
+
+/* Animation lors du hover sur les cartes */
+.shift-card {
+  transition: all 0.2s ease-out;
+}
+
+.shift-card:hover {
+  transform: translateY(-2px);
+}
+
+/* Style pour les gardes de l'utilisateur */
+.shift-card-user {
+  filter: grayscale(30%);
+  transform: scale(0.98);
+}
+
+/* Classes d'aide supplémentaires */
+.item-interested {
+  animation: slideIn 0.3s ease-out;
+  position: relative;
+}
+
+.item-conflict {
+  position: relative;
+  overflow: hidden;
+}
+
+/* Style global pour rendre toutes les bordures des badges plus transparentes dans la vue calendrier */
+.calendar-badge, .calendar-item {
+  border-color: rgba(124, 185, 232, 0.08) !important;
+  border-width: 0.5px !important;
+}
+
+/* Styles spécifiques pour chaque type de badge */
+.calendar-badge.badge-morning, .calendar-item.badge-morning,
+.calendar-badge.shift-badge-morning, .calendar-item.shift-badge-morning {
+  border-color: rgba(124, 185, 232, 0.08) !important;
+}
+
+.calendar-badge.badge-afternoon, .calendar-item.badge-afternoon,
+.calendar-badge.shift-badge-afternoon, .calendar-item.shift-badge-afternoon {
+  border-color: rgba(99, 102, 241, 0.08) !important;
+}
+
+.calendar-badge.badge-evening, .calendar-item.badge-evening,
+.calendar-badge.shift-badge-evening, .calendar-item.shift-badge-evening {
+  border-color: rgba(168, 85, 247, 0.08) !important;
+}
+
+.date-indicator-update {
+  animation: dateIndicatorUpdate 0.5s ease-out;
+}

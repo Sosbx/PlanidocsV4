@@ -1,0 +1,44 @@
+@@ .. @@
+ [build.environment]
+   NETLIFY_SITE_URL = "https://planidocs.com"
+ 
+-[[redirects]]
+-  from = "/privacy"
+-  to = "/index.html"
+-  status = 200
+-  force = true
+-
+-[[redirects]]
+-  from = "/terms"
+-  to = "/index.html"
+-  status = 200
+-  force = true
+-
+ [[redirects]]
+   from = "/*"
+   to = "/index.html"
+   status = 200
+   force = false
+-  exclude = ["/google386a9495ad8e8a73.html"]
++  exclude = [
++    "/google386a9495ad8e8a73.html",
++    "/privacy",
++    "/terms"
++  ]
+ 
+ # Force HTTPS
+ [[redirects]]
+   from = "http://*"
+   to = "https://:splat"
+   status = 301
+   force = true
+ 
+ [[headers]]
+   for = "/*"
+   [headers.values]
+     X-Frame-Options = "DENY"
+     X-XSS-Protection = "1; mode=block"
+     X-Content-Type-Options = "nosniff"
+     Referrer-Policy = "strict-origin-when-cross-origin"
+-    Content-Security-Policy = "default-src 'self' https:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:;"
++    Content-Security-Policy = "default-src 'self' https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://apis.google.com https://www.googleapis.com;"

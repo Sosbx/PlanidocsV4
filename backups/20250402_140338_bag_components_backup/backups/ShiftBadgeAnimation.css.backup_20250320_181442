@@ -1,0 +1,205 @@
+/* Animations pour les badges de garde */
+
+/* Animation de ripple (effet d'onde) */
+@keyframes ripple {
+  0% {
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4);
+    transform: scale(1);
+  }
+  70% {
+    box-shadow: 0 0 0 15px rgba(99, 102, 241, 0);
+    transform: scale(1.05);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0);
+    transform: scale(1);
+  }
+}
+
+/* Animation de check (coche) */
+@keyframes check {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Animation de conflit */
+@keyframes conflict {
+  0% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-3px);
+  }
+  50% {
+    transform: translateX(3px);
+  }
+  75% {
+    transform: translateX(-3px);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+/* Animation de pulse pour les conflits */
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+
+/* Animation de glissement (pour les cartes intéressées) */
+@keyframes slideIn {
+  from {
+    transform: translateX(-5px);
+    opacity: 0.8;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Classes d'animation */
+.shift-badge-ripple {
+  animation: ripple 0.8s ease-out;
+}
+
+.shift-badge-interested {
+  position: relative;
+  box-shadow: 0 2px 6px rgba(5, 150, 105, 0.2);
+}
+
+.shift-item-interested {
+  animation: slideIn 0.3s ease-out;
+  position: relative;
+}
+
+.shift-badge-interested::after {
+  content: '✓';
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background-color: #10B981; /* Vert */
+  color: white;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  animation: check 0.3s ease-out;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  transform-origin: center;
+  transition: transform 0.2s ease-out;
+  z-index: 10;
+}
+
+.shift-badge-interested:hover::after {
+  transform: scale(1.1);
+}
+
+/* Tous les badges d'intérêt sont verts */
+.shift-badge-morning.shift-badge-interested::after,
+.shift-badge-afternoon.shift-badge-interested::after,
+.shift-badge-evening.shift-badge-interested::after {
+  background-color: #10B981; /* Vert uniforme pour tous les badges d'intérêt */
+}
+
+/* Améliorations pour les conflits */
+.shift-badge-conflict {
+  animation: conflict 0.5s ease-in-out, pulse 2s infinite;
+  box-shadow: 0 0 0 rgba(239, 68, 68, 0.7);
+  position: relative;
+}
+
+.shift-badge-conflict::after {
+  content: '⇄';
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background-color: #EF4444; /* Rouge */
+  color: white;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  z-index: 10;
+}
+
+.shift-item-conflict {
+  position: relative;
+  overflow: hidden;
+}
+
+/* Suppression de la bordure latérale pour les conflits */
+
+/* Animation pour l'indicateur de dates */
+@keyframes dateIndicatorUpdate {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+}
+
+.date-indicator-update {
+  animation: dateIndicatorUpdate 0.5s ease-out;
+}
+
+/* Badges de période */
+.shift-badge-morning {
+  border-bottom: 2px solid #FCD34D;
+}
+
+.shift-badge-afternoon {
+  border-bottom: 2px solid #60A5FA;
+}
+
+.shift-badge-evening {
+  border-bottom: 2px solid #A78BFA;
+}
+
+/* Animation lors du hover sur les cartes */
+.shift-card {
+  transition: all 0.2s ease-out;
+}
+
+.shift-card:hover {
+  transform: translateY(-2px);
+}
+
+/* Style pour les gardes de l'utilisateur */
+.shift-card-user {
+  filter: grayscale(30%);
+  transform: scale(0.98);
+}

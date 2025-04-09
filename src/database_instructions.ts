@@ -1,0 +1,1 @@
+// Ce fichier doit être supprimé car il contient uniquement des instructions pour Supabase
