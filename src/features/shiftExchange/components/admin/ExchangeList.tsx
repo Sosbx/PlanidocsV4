@@ -2,8 +2,13 @@ import React, { useState } from 'react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { X, AlertTriangle, UserPlus } from 'lucide-react';
-import { proposeToReplacements } from '../../../../lib/firebase/shifts';
-import type { ShiftExchange, BagPhaseConfig, ShiftAssignment } from '../../../../types/planning';
+import { proposeToReplacements, cancelPropositionToReplacements } from '../../../../lib/firebase/exchange';
+import type { BagPhaseConfig, ShiftAssignment } from '../../../../types/planning';
+import type { ShiftExchange as PlanningShiftExchange } from '../../../../types/planning';
+import type { ShiftExchange as FeatureShiftExchange } from '../../types';
+
+// Type union pour accepter les deux types de ShiftExchange
+type ShiftExchange = PlanningShiftExchange | FeatureShiftExchange;
 import type { User } from '../../../../types/users';
 import { isGrayedOut } from '../../../../utils/dateUtils';
 import InterestedUserCard from './InterestedUserCard';
@@ -11,10 +16,11 @@ import { ConfirmationModal } from '../../../../components/modals';
 import '../../../../styles/BadgeStyles.css';
 
 interface ExchangeListProps {
-  exchanges: ShiftExchange[];
+  exchanges: ShiftExchange[]; // Utiliser le type union défini plus haut
   users: User[];
   bagPhaseConfig: BagPhaseConfig;
   conflictStates: Record<string, Record<string, boolean>>;
+  conflictShiftTypes?: Record<string, Record<string, string>>;
   userAssignments: Record<string, Record<string, ShiftAssignment>>;
   onValidateExchange: (exchangeId: string, interestedUserId: string, hasConflict: boolean) => void;
   onRejectExchange: (exchangeId: string) => void;
@@ -33,6 +39,7 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
   users,
   bagPhaseConfig,
   conflictStates,
+  conflictShiftTypes,
   userAssignments,
   onValidateExchange,
   onRejectExchange,
@@ -59,7 +66,7 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
   const handleProposeToReplacements = async (exchange: ShiftExchange) => {
     try {
       setProposingToReplacements(exchange.id);
-      await proposeToReplacements(exchange);
+      await proposeToReplacements(exchange as PlanningShiftExchange);
       alert(`La garde du ${format(new Date(exchange.date), 'dd/MM/yyyy')} (${exchange.period}) a été proposée aux remplaçants.`);
     } catch (error) {
       console.error('Error proposing to replacements:', error);
@@ -191,6 +198,7 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
                             users={users}
                             exchange={exchange}
                             conflictStates={conflictStates}
+                            conflictShiftTypes={conflictShiftTypes}
                             userAssignments={userAssignments}
                             bagPhaseConfig={bagPhaseConfig}
                             onValidateExchange={onValidateExchange}
@@ -310,6 +318,7 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
                       users={users}
                       exchange={exchange}
                       conflictStates={conflictStates}
+                      conflictShiftTypes={conflictShiftTypes}
                       userAssignments={userAssignments}
                       bagPhaseConfig={bagPhaseConfig}
                       onValidateExchange={onValidateExchange}

@@ -16,10 +16,10 @@ export const useDesiderata = () => {
 
   /**
    * Sauvegarde les desiderata d'un utilisateur
-   * @param selections - Les sélections de périodes (primary, secondary ou null)
+   * @param selections - Les sélections de périodes avec type et commentaires
    * @returns true si la sauvegarde a réussi, false sinon
    */
-  const saveUserDesiderata = useCallback(async (selections: Record<string, PeriodSelection['type']>) => {
+  const saveUserDesiderata = useCallback(async (selections: Record<string, PeriodSelection>) => {
     if (!user) return false;
     
     setIsSaving(true);

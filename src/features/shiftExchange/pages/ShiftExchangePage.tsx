@@ -18,6 +18,7 @@ import {
   PhaseInfoBanner,
   ShiftExchangeCalendarView
 } from '../components';
+import PermanentPlanningPreview from '../../../features/planning/components/PermanentPlanningPreview';
 
 /**
  * Version refactorisée de ShiftExchangePage utilisant les hooks composables
@@ -42,6 +43,14 @@ const ShiftExchangePage: React.FC = () => {
     message: string;
     type: 'success' | 'error' | 'info';
   }>({ visible: false, message: '', type: 'success' });
+  
+  // État pour la date sélectionnée
+  const [selectedDate, setSelectedDate] = useState<string | undefined>(undefined);
+  
+  // Fonction pour sélectionner une date
+  const handleSelectDate = (date: string) => {
+    setSelectedDate(date);
+  };
 
   // États de filtrage et d'affichage - valeurs par défaut qui seront remplacées par celles du hook
   const [filterOptions, setFilterOptions] = useState({
@@ -192,90 +201,93 @@ const ShiftExchangePage: React.FC = () => {
     if (!user) return null;
     
     return (
-      <div 
-        ref={calendarContainerRef}
-        className="w-full bg-white rounded-lg shadow-lg overflow-hidden"
-        style={{ touchAction: 'pan-y', WebkitOverflowScrolling: 'touch' }}
-      >
-        <div className="p-4">
-          {/* Contrôles du calendrier */}
-          <div className="flex flex-col items-center mb-4">
-            <div className="flex items-center justify-center gap-3 mb-1">
-              <button
-                onClick={goToPrevious}
-                className="p-1.5 rounded-md border border-gray-100 text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"
-                aria-label="Mois précédent"
-              >
-                &larr;
-              </button>
+      <div className="w-full">
+        {/* Vue calendrier principale */}
+        <div 
+          ref={calendarContainerRef}
+          className="w-full bg-white rounded-lg shadow-lg overflow-hidden"
+          style={{ touchAction: 'pan-y', WebkitOverflowScrolling: 'touch' }}
+        >
+          <div className="p-4">
+            {/* Contrôles du calendrier */}
+            <div className="flex flex-col items-center mb-4">
+              <div className="flex items-center justify-center gap-3 mb-1">
+                <button
+                  onClick={goToPrevious}
+                  className="p-1.5 rounded-md border border-gray-100 text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"
+                  aria-label="Mois précédent"
+                >
+                  &larr;
+                </button>
+                
+                <span className="text-base font-medium text-gray-800 min-w-[120px] text-center">
+                  {new Intl.DateTimeFormat('fr-FR', {
+                    month: 'long',
+                    year: 'numeric'
+                  }).format(currentMonth).replace(/^./, str => str.toUpperCase())}
+                </span>
+                
+                <button
+                  onClick={goToNext}
+                  className="p-1.5 rounded-md border border-gray-100 text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"
+                  aria-label="Mois suivant"
+                >
+                  &rarr;
+                </button>
+              </div>
               
-              <span className="text-base font-medium text-gray-800 min-w-[120px] text-center">
-                {new Intl.DateTimeFormat('fr-FR', {
-                  month: 'long',
-                  year: 'numeric'
-                }).format(currentMonth).replace(/^./, str => str.toUpperCase())}
-              </span>
-              
-              <button
-                onClick={goToNext}
-                className="p-1.5 rounded-md border border-gray-100 text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"
-                aria-label="Mois suivant"
-              >
-                &rarr;
-              </button>
-            </div>
-            
-            {/* Message pour le swipe sur mobile */}
-            {isMobile && (
-              <p className="text-[9px] text-gray-400 italic">
-                Glissez horizontalement pour naviguer entre les mois
-              </p>
-            )}
-          </div>
-
-          {/* Vue calendrier */}
-          <ShiftExchangeCalendarView 
-            days={getDaysToDisplay()}
-            isMobile={isMobile}
-            filteredExchanges={filteredExchanges}
-            userAssignments={userAssignments}
-            conflictStates={conflictStates}
-            interestedPeriodsMap={interestedPeriodsMap}
-            conflictPeriodsMap={conflictPeriodsMap}
-            showDesiderata={filterOptions.showDesiderata}
-            hidePrimaryDesiderata={filterOptions.hidePrimaryDesiderata}
-            filterPeriod={filterOptions.filterPeriod}
-            hideSecondaryDesiderata={filterOptions.hideSecondaryDesiderata}
-            user={user}
-            users={users}
-            onToggleInterest={handleToggleInterest}
-            isInteractionDisabled={isInteractionDisabled}
-            selectedDate={undefined}
-            onSelectDate={() => {}}
-            receivedShifts={receivedShifts}
-            currentMonth={currentMonth}
-            calendarViewMode={calendarViewMode}
-            bagPhaseConfig={bagPhaseConfig}
-          />
-          
-          {/* Légende minimaliste */}
-          <div className="mt-2 border-t border-gray-200 pt-1 flex flex-wrap items-center justify-between text-[9px] text-gray-500">
-            <div className="flex gap-2">
-              <span className="flex items-center"><span className="inline-block h-2 w-2 bg-[#E6F0FA] border border-[#7CB9E8] rounded-full mr-1"></span>M</span>
-              <span className="flex items-center"><span className="inline-block h-2 w-2 bg-[#EEF2FF] border border-[#6366F1] rounded-full mr-1"></span>AM</span>
-              <span className="flex items-center"><span className="inline-block h-2 w-2 bg-[#F3E8FF] border border-[#A855F7] rounded-full mr-1"></span>S</span>
-            </div>
-            
-            <div className="flex gap-2 flex-wrap">
-              <span className="flex items-center"><span className="inline-block h-2 w-2 opacity-70 bg-blue-50/60 border border-dotted border-blue-200/60 rounded-full mr-1"></span>Mes gardes</span>
-              <span className="flex items-center"><span className="inline-block h-2 w-2 bg-green-500 rounded-full mr-1"></span>Intéressé</span>
-              <span className="flex items-center"><span className="inline-block h-2 w-2 bg-red-500 rounded-full mr-1"></span>Conflit</span>
-              {filterOptions.showDesiderata && (
-                <>
-                  <span className="flex items-center"><span className="inline-block h-2 w-2 bg-red-300/70 mr-1"></span>Désid. 1</span>
-                  <span className="flex items-center"><span className="inline-block h-2 w-2 bg-blue-300/70 mr-1"></span>Désid. 2</span>
-                </>
+              {/* Message pour le swipe sur mobile */}
+              {isMobile && (
+                <p className="text-[9px] text-gray-400 italic">
+                  Glissez horizontalement pour naviguer entre les mois
+                </p>
               )}
+            </div>
+
+            {/* Vue calendrier */}
+            <ShiftExchangeCalendarView 
+              days={getDaysToDisplay()}
+              isMobile={isMobile}
+              filteredExchanges={filteredExchanges}
+              userAssignments={userAssignments}
+              conflictStates={conflictStates}
+              interestedPeriodsMap={interestedPeriodsMap}
+              conflictPeriodsMap={conflictPeriodsMap}
+              showDesiderata={filterOptions.showDesiderata}
+              hidePrimaryDesiderata={filterOptions.hidePrimaryDesiderata}
+              filterPeriod={filterOptions.filterPeriod}
+              hideSecondaryDesiderata={filterOptions.hideSecondaryDesiderata}
+              user={user}
+              users={users}
+              onToggleInterest={(exchange) => handleToggleInterest(exchange as unknown as import('../types').ShiftExchange)}
+              isInteractionDisabled={isInteractionDisabled}
+              selectedDate={selectedDate}
+              onSelectDate={handleSelectDate}
+              receivedShifts={receivedShifts}
+              currentMonth={currentMonth}
+              calendarViewMode={calendarViewMode}
+              bagPhaseConfig={bagPhaseConfig}
+            />
+            
+            {/* Légende minimaliste */}
+            <div className="mt-2 border-t border-gray-200 pt-1 flex flex-wrap items-center justify-between text-[9px] text-gray-500">
+              <div className="flex gap-2">
+                <span className="flex items-center"><span className="inline-block h-2 w-2 bg-[#E6F0FA] border border-[#7CB9E8] rounded-full mr-1"></span>M</span>
+                <span className="flex items-center"><span className="inline-block h-2 w-2 bg-[#EEF2FF] border border-[#6366F1] rounded-full mr-1"></span>AM</span>
+                <span className="flex items-center"><span className="inline-block h-2 w-2 bg-[#F3E8FF] border border-[#A855F7] rounded-full mr-1"></span>S</span>
+              </div>
+              
+              <div className="flex gap-2 flex-wrap">
+                <span className="flex items-center"><span className="inline-block h-2 w-2 opacity-70 bg-blue-50/60 border border-dotted border-blue-200/60 rounded-full mr-1"></span>Mes gardes</span>
+                <span className="flex items-center"><span className="inline-block h-2 w-2 bg-green-500 rounded-full mr-1"></span>Intéressé</span>
+                <span className="flex items-center"><span className="inline-block h-2 w-2 bg-red-500 rounded-full mr-1"></span>Conflit</span>
+                {filterOptions.showDesiderata && (
+                  <>
+                    <span className="flex items-center"><span className="inline-block h-2 w-2 bg-red-300/70 mr-1"></span>Désid. 1</span>
+                    <span className="flex items-center"><span className="inline-block h-2 w-2 bg-blue-300/70 mr-1"></span>Désid. 2</span>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -297,8 +309,8 @@ const ShiftExchangePage: React.FC = () => {
         title="Bourse aux Gardes"
         user={user}
         users={users}
-        exchanges={exchanges}
-        filteredExchanges={filteredExchanges}
+        exchanges={exchanges as unknown as import('../../../types/planning').ShiftExchange[]}
+        filteredExchanges={filteredExchanges as unknown as import('../../../types/planning').ShiftExchange[]}
         loading={loading}
         error={null}
         userAssignments={userAssignments}
@@ -308,7 +320,7 @@ const ShiftExchangePage: React.FC = () => {
         interestedPeriodsMap={interestedPeriodsMap}
         bagPhaseConfig={bagPhaseConfig}
         isInteractionDisabled={isInteractionDisabled}
-        onToggleInterest={handleToggleInterest}
+        onToggleInterest={(exchange) => handleToggleInterest(exchange as unknown as import('../types').ShiftExchange)}
         filterOptions={{
           showOwnShifts: filterOptions.showOwnShifts,
           setShowOwnShifts: (value) => updateFilterOption('showOwnShifts', value),
@@ -335,7 +347,7 @@ const ShiftExchangePage: React.FC = () => {
         isOpen={showConflictModal}
         onClose={handleCloseConflictModal}
         onConfirm={handleConfirmConflict}
-        exchange={conflictExchange}
+        exchange={conflictExchange as unknown as import('../../../types/planning').ShiftExchange}
         exchangeUser={exchangeUser}
         helpText={conflictHelpText}
       />

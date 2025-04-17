@@ -1,7 +1,11 @@
 import { useState, useEffect } from 'react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from "../../../lib/firebase/config";
-import type { ShiftExchange, GeneratedPlanning, ShiftAssignment } from '../../../types/planning';
+import type { ShiftExchange as PlanningShiftExchange, GeneratedPlanning, ShiftAssignment } from '../../../types/planning';
+import type { ShiftExchange as FeatureShiftExchange } from '../../../features/shiftExchange/types';
+
+// Type union pour accepter les deux types de ShiftExchange
+type ShiftExchange = PlanningShiftExchange | FeatureShiftExchange;
 
 export const useUserAssignments = (exchanges: ShiftExchange[]) => {
   const [userAssignments, setUserAssignments] = useState<Record<string, Record<string, ShiftAssignment>>>({});
@@ -10,10 +14,11 @@ export const useUserAssignments = (exchanges: ShiftExchange[]) => {
   useEffect(() => {
     const loadAssignments = async () => {
       try {
-        // Récupérer la liste unique des utilisateurs intéressés
-        const uniqueUserIds = Array.from(new Set(
-          exchanges.flatMap(exchange => exchange.interestedUsers || [])
-        ));
+        // Récupérer la liste unique des utilisateurs intéressés et des propriétaires d'échanges
+        const uniqueUserIds = Array.from(new Set([
+          ...exchanges.map(exchange => exchange.userId),
+          ...exchanges.flatMap(exchange => exchange.interestedUsers || [])
+        ]));
 
         if (uniqueUserIds.length === 0) {
           setLoading(false);
@@ -21,12 +26,30 @@ export const useUserAssignments = (exchanges: ShiftExchange[]) => {
         }
 
         // Charger tous les plannings en parallèle
-        const promises = uniqueUserIds.map(userId =>
-          getDoc(doc(db, 'generated_plannings', userId)).then(doc => ({
-            userId,
-            assignments: doc.exists() ? (doc.data() as GeneratedPlanning).assignments : {}
-          }))
-        );
+        const promises = uniqueUserIds.map(async userId => {
+          const docRef = doc(db, 'generated_plannings', userId);
+          const docSnap = await getDoc(docRef);
+          
+          if (!docSnap.exists()) {
+            return { userId, assignments: {} };
+          }
+          
+          const data = docSnap.data();
+          let mergedAssignments: Record<string, ShiftAssignment> = {};
+          
+          // Utiliser uniquement la nouvelle structure (par périodes)
+          if (data.periods) {
+            // Parcourir toutes les périodes
+            Object.values(data.periods).forEach((periodData: any) => {
+              if (periodData.assignments) {
+                // Fusionner les assignments de cette période
+                mergedAssignments = { ...mergedAssignments, ...periodData.assignments };
+              }
+            });
+          }
+          
+          return { userId, assignments: mergedAssignments };
+        });
 
         const results = await Promise.all(promises);
 

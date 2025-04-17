@@ -96,6 +96,8 @@ export interface ExchangeHistory {
   status: 'completed'; // Modifié pour être compatible avec /src/types/planning.ts
   createdAt?: string;
   originalExchangeId?: string; // ID de l'échange d'origine avant validation
+  originalUserPeriodId?: string | null; // ID de la période d'origine pour l'utilisateur original
+  interestedUserPeriodId?: string | null; // ID de la période d'origine pour l'utilisateur intéressé
 }
 
 /**

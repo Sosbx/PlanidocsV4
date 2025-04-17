@@ -2,7 +2,12 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { PieChart, BarChart, ArrowDownUp, Filter } from 'lucide-react';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from "../../../lib/firebase/config";
-import type { ShiftExchange, ExchangeHistory } from '../types';
+import type { ExchangeHistory } from '../types';
+import type { ShiftExchange as FeatureShiftExchange } from '../types';
+import type { ShiftExchange as PlanningShiftExchange } from '../../../types/planning';
+
+// Type union pour accepter les deux types de ShiftExchange
+type ShiftExchange = FeatureShiftExchange | PlanningShiftExchange;
 import type { User } from '../../../types/users';
 import { isGrayedOut } from '../../../utils/dateUtils';
 import Toast from '../../../components/Toast';

@@ -23,7 +23,6 @@ const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const UserPlanningPage = lazy(() => import('./features/planning/pages/UserPlanningPage'));
 const GeneratedPlanningPage = lazy(() => import('./features/planning/pages/GeneratedPlanningPage'));
 const UsersManagementPage = lazy(() => import('./pages/UsersManagementPage'));
-const ValidatedPlanningsPage = lazy(() => import('./features/planning/pages/ValidatedPlanningsPage'));
 const PlanningPreviewPage = lazy(() => import('./features/planning/pages/PlanningPreviewPage'));
 const ReplacementsPage = lazy(() => import('./pages/ReplacementsPage'));
 const DirectExchangePage = lazy(() => import('./features/directExchange/pages/DirectExchangePage'));
@@ -116,7 +115,7 @@ const App: React.FC = () => {
                                 element={
                                   <ProtectedRoute requiredRoles={['isAdmin']}>
                                     <Suspense fallback={<div className="flex justify-center items-center h-screen"><LoadingSpinner /></div>}>
-                                      <ValidatedPlanningsPage />
+                                      <Navigate to="/admin?tab=validated-plannings" replace />
                                     </Suspense>
                                   </ProtectedRoute>
                                 }

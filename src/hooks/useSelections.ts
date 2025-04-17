@@ -121,19 +121,16 @@ export const useSelections = ({
     setActiveDesiderata(null);
     setHasUnsavedChanges(false);
     // Passer un objet vide du type attendu par saveDesiderata
-    await saveDesiderata({} as Record<string, 'primary' | 'secondary' | null>);
+    await saveDesiderata({} as Record<string, PeriodSelection>);
   }, [saveDesiderata]);
 
   const saveSelections = useCallback(async () => {
     if (!hasUnsavedChanges) return;
     
-    // Transformer les sélections pour qu'elles correspondent au type attendu par saveDesiderata
-    const transformedSelections: Record<string, 'primary' | 'secondary' | null> = {};
-    Object.entries(localSelections).forEach(([key, value]) => {
-      transformedSelections[key] = value.type;
-    });
-    
-    await saveDesiderata(transformedSelections);
+    // Transmettre les objets complets, y compris les commentaires
+    // Pas de transformation nécessaire, nous envoyons directement localSelections
+    // qui contient à la fois le type et les commentaires
+    await saveDesiderata(localSelections);
     setHasUnsavedChanges(false);
   }, [saveDesiderata, localSelections, hasUnsavedChanges]);
 

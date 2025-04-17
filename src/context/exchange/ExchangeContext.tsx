@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { ShiftExchange, ExchangeType, ExchangeFilters, ShiftPeriod } from '../../types/exchange';
-import { getShiftExchanges } from '../../lib/firebase/shifts';
+import { ShiftExchange, ExchangeType, ExchangeFilters, ShiftPeriod, OperationType } from '../../types/exchange';
+import { getShiftExchanges } from '../../lib/firebase/exchange';
 import { getDirectExchanges } from '../../lib/firebase/directExchange';
 import { useAuth } from '../../features/auth/hooks';
 
@@ -65,7 +65,8 @@ export const ExchangeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           ...exchange,
           period,
           exchangeType: 'bag' as ExchangeType,
-          operationType: 'exchange' as 'exchange' | 'give' | 'replacement'
+          operationType: 'exchange' as OperationType,
+          operationTypes: (exchange.operationTypes || ['exchange']) as OperationType[]
         };
       });
       

@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { db } from "../../../lib/firebase/config";
 import { useAuth } from "../../../features/auth/hooks";
+import { getAllDesiderata } from "../../../lib/firebase/desiderata";
 
-export const useDesiderataState = () => {
+export const useDesiderataState = (includeArchived: boolean = false) => {
   const { user } = useAuth();
   // Nous changeons la structure pour s'adapter aux composants qui attendent une propriété type
   const [selections, setSelectionsState] = useState<Record<string, { type: 'primary' | 'secondary' | null }>>({});
@@ -17,29 +16,21 @@ export const useDesiderataState = () => {
     }
 
     setIsLoading(true);
-    const unsubscribe = onSnapshot(
-      doc(db, 'desiderata', user.id),
-      (doc) => {
-        if (doc.exists()) {
-          const data = doc.data()?.selections || {};
+    
+    // Utiliser getAllDesiderata avec le paramètre includeArchived
+    const loadDesiderata = async () => {
+      try {
+        const data = await getAllDesiderata(user.id, includeArchived);
+        
+        if (data?.selections) {
           // Log détaillé pour comprendre la structure exacte des données
-          console.log("Données de désiderata chargées:", data);
-          console.log("Structure d'un élément:", Object.keys(data).length > 0 ? 
-            Object.entries(data)[0] : "Aucun élément");
-          
-          // Log de vérification pour voir si les éléments ont une propriété 'type'
-          if (Object.keys(data).length > 0) {
-            const firstKey = Object.keys(data)[0];
-            console.log(`Premier désiderata [${firstKey}]:`, data[firstKey], 
-              "a une propriété type?", data[firstKey] && typeof data[firstKey] === 'object' ? 
-              'type' in data[firstKey] : "N'est pas un objet");
-          }
+          console.log(`Données de désiderata chargées (${includeArchived ? 'incluant' : 'excluant'} archivées):`, data.selections);
           
           // Transformer les données si nécessaire pour s'assurer qu'elles ont la structure attendue
           const formattedData: Record<string, { type: 'primary' | 'secondary' | null }> = {};
           
           // Parcourir toutes les entrées et les transformer au format attendu
-          Object.entries(data).forEach(([key, value]) => {
+          Object.entries(data.selections).forEach(([key, value]) => {
             // Si la valeur est déjà un objet avec une propriété type, l'utiliser tel quel
             if (value && typeof value === 'object' && 'type' in value) {
               formattedData[key] = value as { type: 'primary' | 'secondary' | null };
@@ -54,23 +45,25 @@ export const useDesiderataState = () => {
             }
           });
           
-          console.log("Données formatées:", formattedData);
+          console.log(`Données formatées (${includeArchived ? 'incluant' : 'excluant'} archivées):`, formattedData);
           setSelectionsState(formattedData);
         } else {
           console.log("Aucune donnée de désiderata trouvée");
           setSelectionsState({});
         }
-        setIsLoading(false);
-      },
-      (error) => {
+      } catch (error) {
         console.error('Error loading desiderata:', error);
         setSelectionsState({});
+      } finally {
         setIsLoading(false);
       }
-    );
-
-    return () => unsubscribe();
-  }, [user]);
+    };
+    
+    loadDesiderata();
+    
+    // Pas besoin d'un unsubscribe car nous n'utilisons plus onSnapshot
+    return () => {};
+  }, [user, includeArchived]);
 
   const setSelections = (newSelections: Record<string, { type: 'primary' | 'secondary' | null }>) => {
     setSelectionsState(newSelections);

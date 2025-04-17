@@ -3,7 +3,7 @@ import { format, isSameMonth, getDaysInMonth } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { getMonthsInRange, isGrayedOut } from '../../../utils/dateUtils';
 import type { Selections } from '../types';
-import PlanningCell from './PlanningCell';
+import PlanningSelectionCell from './PlanningSelectionCell';
 
 interface DesktopTableProps {
   startDate: Date;
@@ -86,7 +86,7 @@ const DesktopTable: React.FC<DesktopTableProps> = ({
                   {['M', 'AM', 'S'].map(period => {
                     const cellKey = `${dateStr}-${period}`;
                     return (
-                      <PlanningCell
+                      <PlanningSelectionCell
                         key={cellKey}
                         cellKey={cellKey}
                         selection={selections[cellKey] || { type: null }}

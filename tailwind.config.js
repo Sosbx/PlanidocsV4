@@ -11,6 +11,11 @@ export default {
       '2xl': '1536px',
     },
     extend: {
+      colors: {
+        violet: {
+          800: '#6C46E5',  // Couleur plus proche du bleu-violet de l'après-midi, harmonisée avec ThemeColors.css
+        },
+      },
       keyframes: {
         fadeIn: {
           '0%': { opacity: '0', transform: 'scale(0.95)' },

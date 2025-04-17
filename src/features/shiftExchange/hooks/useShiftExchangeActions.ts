@@ -4,7 +4,7 @@ import { useBagPhase } from './useBagPhase';
 import { useShiftExchangeData } from './useShiftExchangeData';
 import { useShiftInteraction } from './useShiftInteraction';
 import { ShiftExchange } from '../types';
-import { getShiftExchanges, toggleInterest } from '../../../lib/firebase/shifts';
+import { getShiftExchanges, toggleInterest } from '../../../lib/firebase/exchange';
 import { addDoc, collection, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { db } from "../../../lib/firebase/config";
 

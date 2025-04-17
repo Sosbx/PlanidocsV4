@@ -86,7 +86,7 @@ export const exportPlanningToCSV = (options: ExportPlanningOptions): void => {
 
 export const exportAllPlanningsToZip = async (
   users: User[],
-  desiderataData: Record<string, { selections: Record<string, 'primary' | 'secondary' | null> }>,
+  desiderataData: Record<string, { selections: Record<string, any> }>,
   startDate: Date,
   endDate: Date
 ): Promise<void> => {
@@ -101,19 +101,43 @@ export const exportAllPlanningsToZip = async (
     const userData = desiderataData[user.id];
     if (!userData?.selections) return;
 
-    // Transformer les sélections pour correspondre au type Selections
+    // Conserver les données brutes avec leurs commentaires
+    console.log(`Préparation CSV pour ${user.lastName}, avec ${Object.keys(userData.selections).length} sélections`);
+    
+    // Examiner la structure des données
+    if (Object.keys(userData.selections).length > 0) {
+      const firstKey = Object.keys(userData.selections)[0];
+      console.log(`Exemple de donnée pour ${firstKey}:`, userData.selections[firstKey]);
+    }
+
+    // Transformer les sélections pour correspondre au type Selections tout en préservant les commentaires
     const transformedSelections: Selections = {};
     Object.entries(userData.selections).forEach(([key, value]) => {
-      transformedSelections[key] = {
-        type: value
-      };
+      if (typeof value === 'object' && value !== null) {
+        // Si c'est déjà un objet avec type et éventuellement comment, l'utiliser tel quel
+        if ('type' in value) {
+          transformedSelections[key] = value;
+        } else {
+          // Si c'est un autre type d'objet, essayer d'extraire le type
+          transformedSelections[key] = {
+            type: value.type || value as any,
+            comment: value.comment || ''
+          };
+        }
+      } else {
+        // Si c'est une valeur directe (primary/secondary/null)
+        transformedSelections[key] = {
+          type: value as any
+        };
+      }
     });
 
     const csvContent = generateCSVContent({
       userName: user.lastName,
       startDate,
       endDate,
-      selections: transformedSelections
+      selections: transformedSelections,
+      isDesiderata: true  // Activer l'affichage des commentaires
     });
 
     folder.file(
@@ -160,29 +184,66 @@ const generateCSVContent = ({
     rows.push('Nom,Date,Periode,Priorite');
   }
   
+  // Débogage: Afficher le nombre de sélections reçues
+  console.log(`Nombre de sélections à exporter: ${Object.keys(selections).length}`);
+  
   const days = getDaysArray(startDate, endDate);
   
   days.forEach(day => {
     const dateStr = format(day, 'dd/MM/yyyy', { locale: fr });
+    const ymdStr = format(day, 'yyyy-MM-dd');
     
     standardPeriods.forEach(period => {
-      const key = `${format(day, 'yyyy-MM-dd')}-${period}`;
+      const key = `${ymdStr}-${period}`;
+      
+      // Débogage: Afficher la clé recherchée
+      if (selections[key]) {
+        console.log(`Trouvé sélection pour: ${key}`, selections[key]);
+      }
+      
       const selection = selections[key];
       
-      if (selection?.type) {
+      // Déterminer le type de sélection, qu'il soit un objet ou une valeur directe
+      let selectionType = null;
+      if (selection) {
+        if (typeof selection === 'object' && selection !== null) {
+          selectionType = selection.type;
+        } else if (typeof selection === 'string') {
+          selectionType = selection;
+        }
+      }
+      
+      if (selectionType) {
         if (isDesiderata) {
           // Utiliser la fonction formatPeriod pour afficher le nom lisible de la période
           const periodName = formatPeriod(period);
-          const type = selection.type === 'primary' ? 'Primaire' : 'Secondaire';
-          const comment = selection.comment || '';
+          const type = selectionType === 'primary' ? 'Primaire' : 'Secondaire';
+          
+          // Extraire le commentaire (si disponible)
+          let comment = '';
+          if (selection && typeof selection === 'object') {
+            comment = selection.comment || '';
+            
+            // Nettoyer le commentaire pour éviter les problèmes avec les virgules dans le CSV
+            comment = comment.replace(/"/g, '""'); // Échapper les guillemets
+            if (comment.includes(',')) {
+              comment = `"${comment}"`; // Entourer de guillemets si contient des virgules
+            }
+          }
+          
           rows.push(`${dateStr},${periodName},${type},${comment}`);
         } else {
           // Utiliser directement la période standardisée au lieu d'un numéro
-          rows.push(`${userName.toUpperCase()},${dateStr},${period},${selection.type}`);
+          rows.push(`${userName.toUpperCase()},${dateStr},${period},${selectionType}`);
         }
       }
     });
   });
+  
+  // Ajouter une ligne vide en bas si pas de sélections pour éviter un CSV vide
+  if (rows.length === 1) {
+    rows.push('');
+  }
   
   return rows.join('\n');
 };

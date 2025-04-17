@@ -31,7 +31,9 @@ const DisplayOptionsDropdown: React.FC<DisplayOptionsDropdownProps> = ({
   hidePrimaryDesiderata,
   setHidePrimaryDesiderata,
   hideSecondaryDesiderata,
-  setHideSecondaryDesiderata
+  setHideSecondaryDesiderata,
+  isInteractionDisabled,
+  isCalendarView = false
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);

@@ -1,7 +1,6 @@
 import { ShiftPeriod } from '../types/exchange';
 import { 
   normalizePeriod as normalizeFromDateUtils, 
-  standardizePeriod as standardizeFromDateUtils,
   getPeriodDisplayText,
   formatPeriod
 } from './dateUtils';
@@ -97,4 +96,4 @@ export function formatPeriodForDisplay(period: any): string {
 }
 
 // Réexporter les fonctions de dateUtils pour la rétrocompatibilité
-export { normalizeFromDateUtils, standardizeFromDateUtils, getPeriodDisplayText, formatPeriod };
+export { normalizeFromDateUtils, getPeriodDisplayText, formatPeriod };

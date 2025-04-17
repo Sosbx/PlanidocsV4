@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Calendar, Clock, Repeat, Trash2 } from 'lucide-react';
-import { removeShiftExchange, getShiftExchanges } from '../lib/firebase/shifts';
+import { removeShiftExchange, getShiftExchanges } from '../lib/firebase/exchange';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useAuth } from '../features/auth/hooks';
@@ -202,6 +202,12 @@ const CommentModal: React.FC<CommentModalProps> = ({
                   </button>
                   )
                 )}
+                <button
+                  type="submit"
+                  className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-md hover:bg-indigo-700 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                >
+                  Enregistrer
+                </button>
                 <button
                   type="button"
                   onClick={onClose}

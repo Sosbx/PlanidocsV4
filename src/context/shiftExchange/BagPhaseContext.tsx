@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { db } from "../../lib/firebase/config";
 import { BagPhaseConfig, defaultBagPhaseConfig } from '../../types/planning';
-import { finalizeAllExchanges, restorePendingExchanges } from '../../lib/firebase/shifts';
+import { finalizeAllExchanges, restorePendingExchanges } from '../../lib/firebase/exchange';
 
 /**
  * Type pour le contexte de phase de la bourse aux gardes

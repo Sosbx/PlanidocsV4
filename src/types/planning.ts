@@ -59,6 +59,8 @@ export interface ExchangeHistory {
   status: 'completed'; // Plus de status 'reverted' car on supprime ces entrées
   createdAt?: string;
   originalExchangeId?: string; // ID de l'échange d'origine avant validation
+  originalUserPeriodId?: string | null; // ID de la période d'origine pour l'utilisateur original
+  interestedUserPeriodId?: string | null; // ID de la période d'origine pour l'utilisateur intéressé
 }
 
 export interface ExchangeValidationError extends Error {
@@ -89,9 +91,17 @@ export interface PlanningPeriod {
   validatedAt?: Date;
 }
 
+export interface PlanningPeriodData {
+  assignments: Record<string, ShiftAssignment>;
+  uploadedAt: Date | { toDate: () => Date };
+  isArchived?: boolean; // Indique si cette période contient des gardes archivées
+}
+
 export interface GeneratedPlanning {
-  periodId?: string; // ID de la période associée
-  assignments: Record<string, ShiftAssignment>;  // Clé au format "YYYY-MM-DD-PERIOD"
+  periodId?: string; // ID de la période associée (ancienne structure)
+  /** @deprecated Utiliser periods à la place - Maintenu pour compatibilité */
+  assignments?: Record<string, ShiftAssignment>;  // Clé au format "YYYY-MM-DD-PERIOD" (ancienne structure)
+  periods: Record<string, PlanningPeriodData>; // Nouvelle structure avec périodes
   uploadedAt: Date | { toDate: () => Date };  // Peut être un Date ou un Timestamp Firestore
 }
 

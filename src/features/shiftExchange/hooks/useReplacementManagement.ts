@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { proposeToReplacements, cancelPropositionToReplacements } from '../../../lib/firebase/shifts';
+import { proposeToReplacements, cancelPropositionToReplacements } from '../../../lib/firebase/exchange';
 import type { ShiftExchange } from '../types';
 
 /**

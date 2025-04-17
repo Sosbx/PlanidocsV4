@@ -3,7 +3,7 @@ import { format } from 'date-fns';
 import { useAuth } from '../../../features/auth/hooks';
 import { useUsers } from '../../../features/auth/hooks';
 import { useBagPhase } from './useBagPhase';
-import { getShiftExchanges } from '../../../lib/firebase/shifts';
+import { getShiftExchanges, getExchangeHistory } from '../../../lib/firebase/exchange';
 import type { ShiftExchange, ShiftAssignment } from '../types';
 import type { User } from '../../../features/users/types';
 import { doc, getDoc, onSnapshot, collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
@@ -53,15 +53,17 @@ export const useShiftExchangeData = () => {
     if (!user) return {hasConflict: false};
     
     try {
-      const planningDoc = await getDoc(doc(db, 'generated_plannings', user.id));
-      if (!planningDoc.exists()) return {hasConflict: false};
+      // Utiliser getGeneratedPlanning pour récupérer le planning complet
+      const { getGeneratedPlanning } = await import('../../../lib/firebase/planning');
+      const planning = await getGeneratedPlanning(user.id);
       
-      const planning = planningDoc.data() as any;
+      if (!planning || !planning.assignments) return {hasConflict: false};
+      
       const assignmentKey = `${exchange.date}-${exchange.period}`;
-      
       const conflictAssignment = planning.assignments[assignmentKey];
       
       if (conflictAssignment) {
+        console.log(`Conflit détecté pour ${assignmentKey}:`, conflictAssignment);
         return {
           hasConflict: true,
           conflictDetails: {
@@ -83,6 +85,60 @@ export const useShiftExchangeData = () => {
     setSelectedDate(date);
   }, []);
 
+  // Fonction pour forcer le rechargement des données
+  const refreshData = useCallback(async () => {
+    if (!user) return;
+    
+    setLoading(true);
+    
+    try {
+      // Recharger les échanges
+      const exchanges = await getShiftExchanges();
+      setExchanges(exchanges);
+      
+      // Recharger le planning de l'utilisateur
+      const { getGeneratedPlanning } = await import('../../../lib/firebase/planning');
+      const planning = await getGeneratedPlanning(user.id);
+      if (planning && planning.assignments) {
+        setUserAssignments(planning.assignments);
+      }
+      
+      // Recharger l'historique des échanges
+      const history = await getExchangeHistory();
+      const receivedShiftsData: Record<string, { 
+        originalUserId: string; 
+        newUserId: string; 
+        isPermutation: boolean;
+        shiftType: string;
+        timeSlot: string;
+      }> = {};
+      
+      history.forEach((item: any) => {
+        if (item.originalUserId === user.id || item.newUserId === user.id) {
+          const key = `${item.date}-${item.period}`;
+          receivedShiftsData[key] = {
+            originalUserId: item.originalUserId,
+            newUserId: item.newUserId,
+            isPermutation: Boolean(item.isPermutation),
+            shiftType: item.shiftType,
+            timeSlot: item.timeSlot
+          };
+        }
+      });
+      
+      setReceivedShifts(receivedShiftsData);
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+      setToast({
+        visible: true,
+        message: 'Erreur lors du rafraîchissement des données',
+        type: 'error'
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+  
   // useEffect pour charger les données
   useEffect(() => {
     if (!user) return;
@@ -225,12 +281,16 @@ export const useShiftExchangeData = () => {
       // Charger les données supplémentaires de manière asynchrone
       const loadAdditionalData = async () => {
         try {
-          // Charger le planning de l'utilisateur
-          const planningDoc = await getDoc(doc(db, 'generated_plannings', user.id));
-          if (planningDoc.exists()) {
-            const planning = planningDoc.data() as any;
-            setUserAssignments(planning.assignments || {});
-          }
+      // Charger le planning de l'utilisateur en utilisant getGeneratedPlanning
+      const { getGeneratedPlanning } = await import('../../../lib/firebase/planning');
+      const planning = await getGeneratedPlanning(user.id);
+      if (planning && planning.assignments) {
+        console.log("Planning chargé avec succès:", Object.keys(planning.assignments).length, "gardes");
+        setUserAssignments(planning.assignments);
+      } else {
+        console.log("Aucun planning trouvé pour l'utilisateur");
+        setUserAssignments({});
+      }
   
           // Charger l'historique des échanges pour les gardes reçues
           const historyQuery = query(
@@ -402,7 +462,8 @@ export const useShiftExchangeData = () => {
     
     // Méthodes
     checkForConflict,
-    handleSelectDate
+    handleSelectDate,
+    refreshData // Exposer la fonction de rafraîchissement
   };
 };
 

@@ -41,11 +41,11 @@
   --period-afternoon-hover: #E0E7FF;
   --period-afternoon-ring: rgba(99, 102, 241, 0.3);
 
-  --period-evening-bg: #F3E8FF;
-  --period-evening-text: #9333EA;
-  --period-evening-border: #A855F7;
-  --period-evening-hover: #F5D0FE;
-  --period-evening-ring: rgba(168, 85, 247, 0.3);
+  --period-evening-bg: #EEE8FF;  /* Plus proche du bleu-violet de l'après-midi */
+  --period-evening-text: #6C46E5; /* Mélange entre le bleu de l'AM et le violet du soir */
+  --period-evening-border: #7E66F1; /* Mélange entre la bordure de l'AM et celle du soir */
+  --period-evening-hover: #E8E0FF; /* Plus proche du hover de l'AM */
+  --period-evening-ring: rgba(126, 102, 241, 0.3); /* Ajusté pour correspondre à la nouvelle bordure */
   
   /* États */
   --interested-color: #34D399;
@@ -87,7 +87,7 @@
   
   /* Couleur pour la combinaison d'échange + cession */
   --combined-bg: #FAE8FF; /* bg-purple-100 */
-  --combined-text: #7E22CE; /* text-purple-700 */
+  --combined-text: #7719C2; /* text-purple-700 ajusté pour moins de vivacité */
   --combined-border: #E9D5FF; /* border-purple-300 */
   --combined-hover: #F3E8FF; /* bg-purple-200 */
 }

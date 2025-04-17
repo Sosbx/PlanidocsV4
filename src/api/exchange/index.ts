@@ -16,7 +16,7 @@ import {
   revertToExchange,
   proposeToReplacements,
   cancelPropositionToReplacements
-} from '../../lib/firebase/shifts';
+} from '../../lib/firebase/exchange';
 
 import {
   getDirectExchanges,

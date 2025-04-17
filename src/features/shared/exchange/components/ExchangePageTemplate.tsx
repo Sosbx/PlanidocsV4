@@ -5,7 +5,12 @@ import ViewModeSwitcher from './ViewModeSwitcher';
 import { LoadingState, EmptyState, ErrorState } from '../../../../features/shiftExchange/components/ShiftExchangeStates';
 import GroupedShiftExchangeList from '../../../../features/shiftExchange/components/GroupedShiftExchangeList';
 import PermanentPlanningPreview from '../../../../features/planning/components/PermanentPlanningPreview';
-import type { ShiftExchange, BagPhaseConfig, ShiftAssignment } from '../../../../types/planning';
+import type { BagPhaseConfig, ShiftAssignment } from '../../../../types/planning';
+import type { ShiftExchange as PlanningShiftExchange } from '../../../../types/planning';
+import type { ShiftExchange as FeatureShiftExchange } from '../../../../features/shiftExchange/types';
+
+// Type union pour accepter les deux types de ShiftExchange
+type ShiftExchange = PlanningShiftExchange | FeatureShiftExchange;
 import type { User } from '../../../../features/users/types';
 import { ShiftPeriod } from '../../../../features/shiftExchange/types';
 
@@ -25,7 +30,7 @@ interface ExchangePageTemplateProps {
   interestedPeriodsMap: Record<string, boolean>;
   bagPhaseConfig: BagPhaseConfig;
   isInteractionDisabled: boolean;
-  onToggleInterest: (exchange: ShiftExchange) => Promise<void>;
+  onToggleInterest: (exchange: ShiftExchange) => Promise<void> | void;
   onRetry?: () => void;
   filterOptions: {
     showOwnShifts: boolean;
@@ -86,7 +91,18 @@ const ExchangePageTemplate: React.FC<ExchangePageTemplateProps> = ({
     type: 'success' | 'error' | 'info';
   }>({ visible: false, message: '', type: 'success' });
   
-  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+  // Utiliser isCalendarView pour initialiser viewMode
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>(isCalendarView ? 'calendar' : 'list');
+  
+  // Synchroniser viewMode avec isCalendarView uniquement lors de l'initialisation
+  // mais ne pas forcer le retour à la vue liste si l'utilisateur change manuellement
+  React.useEffect(() => {
+    // Uniquement lors du montage initial du composant
+    if (isCalendarView) {
+      setViewMode('calendar');
+    }
+    // Ne pas ajouter de dépendance à viewMode pour éviter les boucles
+  }, [isCalendarView]);
   const [selectedDate, setSelectedDate] = useState<string | undefined>(undefined);
 
   // Fonction pour sélectionner une date

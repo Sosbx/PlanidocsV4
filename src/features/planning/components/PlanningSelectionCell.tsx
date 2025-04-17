@@ -2,9 +2,9 @@ import React, { useState, useCallback } from 'react';
 import { MessageSquare } from 'lucide-react';
 import CommentModal from './CommentModal';
 import Portal from './Portal';
-import type { PeriodSelection } from '../types/planning';
+import type { PeriodSelection } from '../types';
 
-interface PlanningCellProps {
+interface PlanningSelectionCellProps {
   cellKey: string;
   selection: PeriodSelection;
   onMouseDown: (key: string, event: React.MouseEvent) => void;
@@ -17,7 +17,11 @@ interface PlanningCellProps {
   readOnly?: boolean;
 }
 
-const PlanningCell: React.FC<PlanningCellProps> = ({
+/**
+ * Cellule de planning pour afficher et interagir avec les sélections de périodes
+ * Permet de sélectionner des périodes et d'ajouter des commentaires
+ */
+const PlanningSelectionCell: React.FC<PlanningSelectionCellProps> = ({
   cellKey,
   selection,
   onMouseDown,
@@ -58,12 +62,12 @@ const PlanningCell: React.FC<PlanningCellProps> = ({
     }
   }, [readOnly, selection.type, cellKey, onOpenModal]);
 
-  const handleMouseDown = (e: React.MouseEvent) => {
+  const handleMouseDown = (event: React.MouseEvent) => {
     // Ne déclencher que pour le clic gauche (button 0) et si pas en lecture seule
     if (readOnly) {
-      onMouseDown(cellKey, e);
-    } else if (!isModalOpen && e.button === 0) {
-      onMouseDown(cellKey, e);
+      onMouseDown(cellKey, event);
+    } else if (!isModalOpen && event.button === 0) {
+      onMouseDown(cellKey, event);
     }
   };
 
@@ -74,34 +78,65 @@ const PlanningCell: React.FC<PlanningCellProps> = ({
   };
 
   const getCellClasses = () => {
+    // Classes de base qui s'appliquent à toutes les cellules
     const baseClasses = `${selection.comment ? 'border-2 border-black' : 'border'} px-2 py-1 text-center select-none transition-colors`;
     const cursorClasses = readOnly ? 'cursor-default' : 'cursor-pointer';
     const commentCursor = selection?.type !== null ? 'context-menu' : 'default';
     const hasComment = Boolean(selection.comment);
-    const isWeekend = isGrayedOut; // Renommé pour plus de clarté
-
-    let colorClasses = '';
-    if (selection?.type === 'primary') {
-      colorClasses = hasComment
-        ? 'bg-yellow-50 text-red-800' 
-        : isWeekend 
-          ? 'bg-red-200 text-red-900'
-          : 'bg-red-100 text-red-800';
-      colorClasses += ` ${commentCursor}`;
-    } else if (selection?.type === 'secondary') {
-      colorClasses = hasComment
-        ? 'bg-yellow-50 text-blue-800' 
-        : isWeekend
-          ? 'bg-blue-200 text-blue-900'
-          : 'bg-blue-100 text-blue-800';
-      colorClasses += ` ${commentCursor}`;
-    } else if (isWeekend) {
-      colorClasses = 'bg-gray-100';
-    } else {
-      colorClasses = readOnly ? '' : 'hover:bg-gray-50';
+    const isWeekend = isGrayedOut;
+    
+    // Créer un tableau de classes pour pouvoir les ajouter de manière plus structurée
+    const classes = [baseClasses, cursorClasses];
+    
+    // NOUVELLE APPROCHE: Appliquer les couleurs dans un ordre de priorité clair
+    
+    // 1. D'abord la couleur de base pour les week-ends
+    if (isWeekend) {
+      classes.push('bg-gray-100');
     }
-
-    return `${baseClasses} ${colorClasses} ${cursorClasses}`;
+    
+    // 2. Ensuite les classes pour les types de sélection
+    if (selection?.type === 'primary') {
+      // Classe de texte toujours appliquée
+      classes.push('text-red-800');
+      
+      // Si c'est un week-end, la couleur est plus foncée
+      if (isWeekend) {
+        classes.push('bg-red-200');
+        classes.push('text-red-900'); // Texte plus foncé pour les week-ends
+      } else if (!hasComment) {
+        // Si pas de commentaire, utiliser la couleur normale
+        classes.push('bg-red-100');
+      }
+      
+      classes.push(commentCursor);
+    } else if (selection?.type === 'secondary') {
+      // Classe de texte toujours appliquée
+      classes.push('text-blue-800');
+      
+      // Si c'est un week-end, la couleur est plus foncée
+      if (isWeekend) {
+        classes.push('bg-blue-200');
+        classes.push('text-blue-900'); // Texte plus foncé pour les week-ends
+      } else if (!hasComment) {
+        // Si pas de commentaire, utiliser la couleur normale
+        classes.push('bg-blue-100');
+      }
+      
+      classes.push(commentCursor);
+    }
+    
+    // 3. Appliquer la classe de commentaire en dernier (priorité la plus élevée)
+    if (hasComment) {
+      classes.push('bg-yellow-50');
+    }
+    
+    // 4. Ajouter un hover uniquement si nécessaire
+    if (!readOnly && !selection?.type && !isWeekend) {
+      classes.push('hover:bg-gray-50');
+    }
+    
+    return classes.join(' ');
   };
 
   return (
@@ -142,4 +177,4 @@ const PlanningCell: React.FC<PlanningCellProps> = ({
   );
 };
 
-export default PlanningCell;
+export default PlanningSelectionCell;

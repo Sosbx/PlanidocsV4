@@ -2,6 +2,9 @@ import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../auth/hooks';
 import { useDirectExchangeData } from './useDirectExchangeData';
 import type { User } from '../../users/types';
+import { getGeneratedPlanning } from '../../../lib/firebase/planning';
+import { usePlanningPeriod } from '../../../context/planning/PlanningPeriodContext';
+import { useBagPhase } from '../../../context/shiftExchange';
 
 interface UseComposableExchangeDataOptions {
   startDate?: Date;
@@ -20,6 +23,8 @@ export const useComposableExchangeData = (
   options: UseComposableExchangeDataOptions = {}
 ) => {
   const { user } = useAuth();
+  const { isInBagPeriod, isBagActive, allPeriods } = usePlanningPeriod();
+  const { config: bagPhaseConfig } = useBagPhase();
   const [userAssignments, setUserAssignments] = useState<Record<string, any>>({});
   const [conflictStates, setConflictStates] = useState<Record<string, string>>({});
   const [conflictPeriodsMap, setConflictPeriodsMap] = useState<Record<string, string[]>>({});
@@ -34,12 +39,53 @@ export const useComposableExchangeData = (
     loading
   } = useDirectExchangeData(userAssignments);
 
-  // Simuler le chargement des assignations utilisateur
+  // Charger les assignations utilisateur
   useEffect(() => {
-    // Dans une implémentation réelle, cela chargerait les données depuis une API
-    // Pour l'instant, nous utilisons un objet vide
-    setUserAssignments({});
-  }, [user]);
+    if (!user) return;
+    
+    const loadUserAssignments = async () => {
+      try {
+        // Récupérer le planning généré de l'utilisateur
+        const planning = await getGeneratedPlanning(user.id);
+        
+        if (planning && planning.assignments) {
+          // Filtrer les gardes pour exclure celles qui font partie d'une BaG en cours
+          const filteredAssignments = Object.entries(planning.assignments).reduce((acc, [key, assignment]) => {
+            // Extraire la date de la clé (format: "YYYY-MM-DD-PERIOD")
+            const dateStr = key.split('-').slice(0, 3).join('-');
+            const date = new Date(dateStr);
+            
+            // Vérifier si cette garde fait partie d'une période future (BaG en cours)
+            const isFuturePeriod = allPeriods.some(period => 
+              period.status === 'future' && 
+              period.bagPhase !== 'completed' &&
+              date >= period.startDate && 
+              date <= period.endDate
+            );
+            
+            // Si la BaG est active et que la date est dans une période future avec BaG non complétée,
+            // ne pas inclure cette garde dans les échanges directs
+            if (isBagActive && isFuturePeriod) {
+              return acc;
+            }
+            
+            // Sinon, inclure la garde
+            acc[key] = assignment;
+            return acc;
+          }, {} as Record<string, any>);
+          
+          setUserAssignments(filteredAssignments);
+        } else {
+          setUserAssignments({});
+        }
+      } catch (error) {
+        console.error('Erreur lors du chargement des assignations utilisateur:', error);
+        setUserAssignments({});
+      }
+    };
+    
+    loadUserAssignments();
+  }, [user, isBagActive, allPeriods]);
 
   // Calculer les états de conflit
   useEffect(() => {

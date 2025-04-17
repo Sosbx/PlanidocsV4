@@ -172,7 +172,8 @@ const UserStatusList: React.FC<UserStatusListProps> = ({
         userName: user.lastName || 'Utilisateur',
         startDate: config.startDate,
         endDate: config.endDate,
-        selections: desiderata.selections
+        selections: desiderata.selections,
+        isDesiderata: true // Activer l'affichage des commentaires
       });
       
       setToast({
@@ -205,10 +206,11 @@ const UserStatusList: React.FC<UserStatusListProps> = ({
       const desiderataResults = await Promise.all(desiderataPromises);
       const desiderataData = desiderataResults.reduce((acc, curr) => ({ ...acc, ...curr }), {});
 
-      // Filtrer les données null et undefined
-      const filteredDesiderataData: Record<string, { selections: Record<string, 'primary' | 'secondary' | null> }> = {};
+      // Filtrer les données null et undefined mais conserver la structure complète (avec commentaires)
+      const filteredDesiderataData: Record<string, { selections: Record<string, any> }> = {};
       Object.entries(desiderataData).forEach(([userId, data]) => {
         if (data && data.selections) {
+          // Conserver les données telles quelles sans transformation pour préserver les commentaires
           filteredDesiderataData[userId] = { selections: data.selections };
         }
       });
@@ -254,11 +256,22 @@ const UserStatusList: React.FC<UserStatusListProps> = ({
       const desiderataResults = await Promise.all(desiderataPromises);
       const desiderataData = desiderataResults.reduce((acc, curr) => ({ ...acc, ...curr }), {});
 
-      // Filtrer les données null et undefined
-      const filteredDesiderataData: Record<string, { selections: Record<string, 'primary' | 'secondary' | null> }> = {};
+      // Filtrer les données null et undefined mais conserver la structure complète (avec commentaires)
+      const filteredDesiderataData: Record<string, { selections: Record<string, any>; validatedAt?: string }> = {};
       Object.entries(desiderataData).forEach(([userId, data]) => {
         if (data && data.selections) {
-          filteredDesiderataData[userId] = { selections: data.selections };
+          // Conserver les données telles quelles sans transformation pour préserver les commentaires
+          filteredDesiderataData[userId] = { 
+            selections: data.selections,
+            validatedAt: data.validatedAt
+          };
+          
+          // Débogage des données
+          console.log(`PDF en masse: ${userId} a ${Object.keys(data.selections).length} sélections`);
+          if (Object.keys(data.selections).length > 0) {
+            const firstKey = Object.keys(data.selections)[0];
+            console.log(`Exemple de donnée: ${firstKey}:`, data.selections[firstKey]);
+          }
         }
       });
 

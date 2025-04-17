@@ -126,7 +126,6 @@ const Navbar = () => {
     { to: "/admin", icon: Settings, label: "Configuration", requiredRoles: ['isAdmin'] },
     { to: "/users", icon: Users, label: "Utilisateurs", requiredRoles: ['isAdmin'] },
     { to: "/generated-planning", icon: FileSpreadsheet, label: "Gestion Planning", requiredRoles: ['isAdmin'] },
-    { to: "/validated-plannings", icon: CheckSquare, label: "Validés", requiredRoles: ['isAdmin'] },
     { to: "/admin-shift-exchange", icon: Repeat, label: "Gestion BaG", requiredRoles: ['isAdmin'] },
     { to: "/remplacements", icon: Users, label: "Remplacements", requiredRoles: ['isAdmin'] },
   ], []);

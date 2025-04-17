@@ -7,9 +7,13 @@ import {
   getExchangeHistory,
   subscribeToShiftExchanges,
   subscribeToExchangeHistory
-} from '../../../lib/firebase/shifts';
-import type { ShiftExchange } from '../types';
+} from '../../../lib/firebase/exchange';
+import type { ShiftExchange as FeatureShiftExchange } from '../types';
+import type { ShiftExchange as PlanningShiftExchange } from '../../../types/planning';
 import type { ExchangeHistory } from '../types';
+
+// Type union pour accepter les deux types de ShiftExchange
+type ShiftExchange = FeatureShiftExchange | PlanningShiftExchange;
 import type { User } from '../../../types/users';
 
 // Fonction utilitaire pour le debounce
@@ -172,6 +176,36 @@ export const useExchangeManagement = (user: User | null) => {
     }
   }, []);
 
+  // Fonction pour recharger toutes les données
+  const refreshData = useCallback(async () => {
+    try {
+      setLoading(true);
+      console.log('Refreshing all data...');
+      
+      // Recharger les échanges et l'historique en parallèle
+      const [exchangesResult, historyResult] = await Promise.all([
+        getShiftExchanges(), // Appel direct à l'API pour contourner le cache
+        getExchangeHistory()  // Appel direct à l'API pour contourner le cache
+      ]);
+      
+      console.log('Data refreshed:', {
+        exchanges: exchangesResult.length,
+        history: historyResult.length
+      });
+      
+      // Mettre à jour l'état avec les nouvelles données
+      setExchanges(exchangesResult);
+      setHistory(historyResult);
+      
+      return true;
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   return {
     exchanges,
     history,
@@ -182,7 +216,8 @@ export const useExchangeManagement = (user: User | null) => {
     handleRejectExchange,
     handleRemoveUser,
     loadExchanges,
-    loadHistory
+    loadHistory,
+    refreshData
   };
 };
 

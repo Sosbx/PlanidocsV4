@@ -3,7 +3,7 @@ import { format, isSameMonth } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { getDaysArray, getMonthsInRange, isGrayedOut } from '../../../utils/dateUtils';
 import type { Selections } from '../types';
-import PlanningCell from './PlanningCell';
+import PlanningSelectionCell from './PlanningSelectionCell';
 
 interface MobileTableProps {
   startDate: Date;
@@ -71,7 +71,7 @@ const MobileTable: React.FC<MobileTableProps> = ({
                         {['M', 'AM', 'S'].map(period => {
                           const cellKey = `${dateStr}-${period}`;
                           return (
-                            <PlanningCell
+                            <PlanningSelectionCell
                               key={cellKey}
                               cellKey={cellKey}
                               selection={selections[cellKey] || { type: null }}

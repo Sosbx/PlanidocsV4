@@ -1,84 +1,191 @@
-# Feature de Planification
+# Module de Planning
 
-Cette fonctionnalité permet de gérer les plannings, les périodes, les assignations de gardes et les desideratas.
+Ce module fournit une solution complète pour la gestion des plannings, avec des fonctionnalités de visualisation, d'import/export et de navigation temporelle.
 
-## Structure du dossier
+## Structure du module
 
-La fonctionnalité est organisée selon une architecture orientée feature, avec les sous-dossiers suivants :
-
-- **components/** : Composants React spécifiques à la planification
-  - `PlanningTable.tsx` : Tableau de planning
-  - `PlanningPeriodSelector.tsx` : Sélecteur de période
-  - `DesiderataControls.tsx` : Contrôles pour les desideratas
-  - `index.ts` : Exporte tous les composants
-
-- **hooks/** : Hooks React spécifiques à la planification
-  - `usePlanningPeriod.ts` : Gestion des périodes de planning
-  - `useShiftAssignments.ts` : Gestion des assignations de gardes
-  - `useDesiderata.ts` : Gestion des desideratas
-  - `index.ts` : Exporte tous les hooks
-
-- **utils/** : Fonctions utilitaires spécifiques à la planification
-  - `planningUtils.ts` : Fonctions de formatage, validation, etc.
-  - `index.ts` : Exporte toutes les fonctions utilitaires
-
-- **types.ts** : Types TypeScript spécifiques à la planification
-- **index.ts** : Point d'entrée qui exporte tous les éléments de la fonctionnalité
+```
+planning/
+├── components/           # Composants UI
+│   ├── admin/            # Composants pour l'administration
+│   │   ├── PeriodSelector.tsx       # Sélection de période
+│   │   ├── ImportDropZone.tsx       # Zone de glisser-déposer pour l'import
+│   │   ├── PlanningToolbar.tsx      # Barre d'outils
+│   │   ├── UserSelector.tsx         # Sélection d'utilisateur
+│   │   └── AdminPlanningContainer.tsx # Conteneur pour la vue admin
+│   └── shared/           # Composants partagés
+│       ├── PlanningGrid.tsx         # Grille de planning
+│       ├── PeriodNavigation.tsx     # Navigation entre périodes
+│       ├── PlanningContainer.tsx    # Conteneur de base
+│       └── UserPlanningContainer.tsx # Conteneur pour la vue utilisateur
+├── context/              # Contextes React
+│   └── PlanningViewContext.tsx      # Contexte pour la vue temporelle
+├── hooks/                # Hooks personnalisés
+│   ├── usePlanningView.ts           # Gestion des vues temporelles
+│   └── useImportExport.ts           # Import/export de plannings
+├── pages/                # Pages
+│   ├── UserPlanningPage.tsx         # Page de planning utilisateur
+│   └── GeneratedPlanningPage.tsx    # Page de planning généré
+└── types/                # Types TypeScript
+    └── viewTypes.ts                 # Types pour les vues temporelles
+```
 
 ## Fonctionnalités principales
 
-### Gestion des périodes
+### Vues temporelles
 
-- Création, modification et suppression de périodes
-- Changement de statut des périodes (brouillon, publié, validé, archivé)
+Le module permet de visualiser les plannings selon différentes périodes :
+- Mois
+- Quadrimestre (4 mois)
+- Semestre (6 mois)
+- Année
+- Personnalisée
 
-### Gestion des plannings
+La navigation entre les périodes est gérée par le hook `usePlanningView` et le contexte `PlanningViewContext`.
 
-- Génération de plannings
-- Visualisation des plannings
-- Modification des assignations
-- Validation des plannings
+### Import/Export
 
-### Gestion des desideratas
+Le module permet d'importer et d'exporter des plannings dans différents formats :
+- Import de fichiers CSV
+- Export en PDF
+- Export en CSV
 
-- Soumission de desideratas par les utilisateurs
-- Visualisation des desideratas
-- Prise en compte des desideratas lors de la génération des plannings
+Ces fonctionnalités sont gérées par le hook `useImportExport`.
+
+### Conteneurs
+
+Le module fournit deux types de conteneurs :
+- `PlanningContainer` : Conteneur de base pour afficher un planning
+- `UserPlanningContainer` : Conteneur pour la vue utilisateur
+- `AdminPlanningContainer` : Conteneur pour la vue administrateur
 
 ## Utilisation
 
-Pour utiliser cette fonctionnalité dans une page ou un composant :
+### Vue utilisateur
 
 ```tsx
-import { PlanningTable, PlanningPeriodSelector } from '../features/planning';
-import { usePlanningPeriod, useShiftAssignments } from '../features/planning';
+import { UserPlanningContainer, PlanningViewProvider } from 'features/planning';
 
-const PlanningPage: React.FC = () => {
-  const { currentPeriod, periods, selectPeriod } = usePlanningPeriod();
-  const { assignments, loading, updateAssignment } = useShiftAssignments(currentPeriod?.id);
-  
+const UserPlanningPage = () => {
+  // ...
   return (
-    <div>
-      <PlanningPeriodSelector 
-        periods={periods} 
-        selectedPeriod={currentPeriod} 
-        onSelectPeriod={selectPeriod} 
+    <PlanningViewProvider initialView="month">
+      <UserPlanningContainer
+        assignments={assignments}
+        exchanges={exchanges}
+        directExchanges={directExchanges}
+        replacements={replacements}
+        desiderata={desiderata}
+        userId={userId}
+        showDesiderata={showDesiderata}
+        onToggleDesiderata={handleToggleDesiderata}
+        bagPhaseConfig={bagPhaseConfig}
+        onCellClick={handleCellClick}
+        periodId={periodId}
+        users={users}
+        loadExporters={loadExporters}
+        plannings={plannings}
       />
-      <PlanningTable 
-        assignments={assignments} 
-        loading={loading} 
-        onUpdateAssignment={updateAssignment} 
-      />
-    </div>
+    </PlanningViewProvider>
   );
 };
 ```
 
-## Interactions avec d'autres modules
+### Vue administrateur
 
-Cette fonctionnalité interagit principalement avec :
+```tsx
+import { AdminPlanningContainer, PlanningViewProvider } from 'features/planning';
 
-- **API Firebase** : Pour la persistance des données
-- **Context utilisateur** : Pour l'authentification et les informations utilisateur
-- **Feature d'échanges directs** : Pour la gestion des échanges de gardes
-- **Feature de bourse aux gardes** : Pour la gestion des échanges de gardes
+const AdminPlanningPage = () => {
+  // ...
+  return (
+    <PlanningViewProvider initialView="month">
+      <AdminPlanningContainer
+        users={users}
+        selectedUserId={selectedUserId}
+        onUserChange={handleUserChange}
+        onPreviousUser={handlePreviousUser}
+        onNextUser={handleNextUser}
+        assignments={assignments}
+        exchanges={exchanges}
+        directExchanges={directExchanges}
+        replacements={replacements}
+        desiderata={desiderata}
+        showDesiderata={showDesiderata}
+        onToggleDesiderata={handleToggleDesiderata}
+        bagPhaseConfig={bagPhaseConfig}
+        onCellClick={handleCellClick}
+        uploadPeriodId={uploadPeriodId}
+        plannings={plannings}
+        saveGeneratedPlanning={saveGeneratedPlanning}
+        loadExporters={loadExporters}
+        showImportZone={true}
+      />
+    </PlanningViewProvider>
+  );
+};
+```
+
+### Utilisation du hook usePlanningView
+
+```tsx
+import { usePlanningView } from 'features/planning';
+
+const MyComponent = () => {
+  const {
+    viewType,
+    dateRange,
+    monthsToShow,
+    setViewType,
+    setCustomRange,
+    setMonthsToShow,
+    navigateNext,
+    navigatePrevious,
+    resetToToday,
+    jumpToDate
+  } = usePlanningView('month');
+
+  // ...
+};
+```
+
+### Utilisation du hook useImportExport
+
+```tsx
+import { useImportExport } from 'features/planning';
+
+const MyComponent = () => {
+  const {
+    isProcessing,
+    error,
+    handleFileUpload,
+    handleExportPDF,
+    handleExportCSV,
+    handleExportAllPDF,
+    handleExportAllCSV
+  } = useImportExport({
+    uploadPeriodId,
+    users,
+    onSuccess: (message) => {
+      // ...
+    },
+    onError: (message) => {
+      // ...
+    },
+    saveGeneratedPlanning,
+    loadExporters,
+    plannings,
+    startDate,
+    endDate
+  });
+
+  // ...
+};
+```
+
+## Améliorations futures
+
+- Ajout de vues supplémentaires (semaine, jour)
+- Filtrage avancé des plannings
+- Statistiques sur les plannings
+- Synchronisation avec des calendriers externes (Google Calendar, Outlook)

@@ -38,7 +38,24 @@ export const validateExchangeData = (data: SimpleExchangeData): void => {
   
   // Vérifier que la période est valide en utilisant l'enum ShiftPeriod
   const validPeriods = [ShiftPeriod.MORNING, ShiftPeriod.AFTERNOON, ShiftPeriod.EVENING];
-  const normalizedPeriod = normalizePeriod(data.period);
+  const normalizedPeriodStr = normalizePeriod(data.period);
+  
+  // Convertir la chaîne normalisée en ShiftPeriod
+  let normalizedPeriod: ShiftPeriod;
+  switch (normalizedPeriodStr) {
+    case 'M':
+      normalizedPeriod = ShiftPeriod.MORNING;
+      break;
+    case 'AM':
+      normalizedPeriod = ShiftPeriod.AFTERNOON;
+      break;
+    case 'S':
+      normalizedPeriod = ShiftPeriod.EVENING;
+      break;
+    default:
+      console.error('Période invalide après normalisation:', normalizedPeriodStr);
+      throw new Error(`Période invalide: ${data.period}`);
+  }
   
   if (!validPeriods.includes(normalizedPeriod)) {
     console.error('Période invalide pour l\'échange de garde:', data.period);
@@ -445,7 +462,24 @@ export const createCombinedExchange = async (
     }
     
     // Normaliser la période
-    const normalizedPeriod = normalizePeriod(exchange.period);
+    const normalizedPeriodStr = normalizePeriod(exchange.period);
+    
+    // Convertir la chaîne normalisée en ShiftPeriod
+    let normalizedPeriod: ShiftPeriod;
+    switch (normalizedPeriodStr) {
+      case 'M':
+        normalizedPeriod = ShiftPeriod.MORNING;
+        break;
+      case 'AM':
+        normalizedPeriod = ShiftPeriod.AFTERNOON;
+        break;
+      case 'S':
+        normalizedPeriod = ShiftPeriod.EVENING;
+        break;
+      default:
+        console.error('Période invalide après normalisation:', normalizedPeriodStr);
+        throw new Error(`Période invalide: ${exchange.period}`);
+    }
     
     // Vérifier si la garde est déjà dans la bourse aux gardes
     const { exists: existingInShiftExchange, exchangeIds } = await checkExistingShiftExchange(

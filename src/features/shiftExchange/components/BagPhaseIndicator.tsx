@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Clock, Check, RefreshCw, Eye, Download, X } from 'lucide-react';
 import { getTimeRemaining } from '../../../utils/timeUtils';
-import { getExchangeHistory } from '../../../lib/firebase/shifts';
+import { getExchangeHistory } from '../../../lib/firebase/exchange';
 import { useUsers } from '../../../features/auth/hooks';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';

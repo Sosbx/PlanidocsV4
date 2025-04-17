@@ -31,8 +31,8 @@ const PermanentPlanningPreview: React.FC<PermanentPlanningPreviewProps> = ({
   hidePrimaryDesiderata = false,
   hideSecondaryDesiderata = false,
 }) => {
-  // Access user's desiderata
-  const { selections, isLoading } = useDesiderataState();
+  // Access user's desiderata (includeArchived = true pour afficher tous les désidératas)
+  const { selections, isLoading } = useDesiderataState(true);
   const initialDate = selectedDate ? new Date(selectedDate) : new Date();
   const [currentDate, setCurrentDate] = useState<Date>(initialDate);
   const [viewMode, setViewMode] = useState<'month' | '5days'>('5days');

@@ -1,138 +1,237 @@
-import { format, startOfMonth, eachMonthOfInterval, Locale } from 'date-fns';
+import { addDays, addMonths, format as dateFnsFormat, isWeekend, startOfMonth, Locale } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { isHoliday, isBridgeDay } from './holidayUtils';
 import { ShiftPeriod } from '../types/exchange';
+import Holidays from 'date-holidays';
 
-export const getDaysArray = (start: Date, end: Date): Date[] => {
-  const arr = [];
-  const dt = new Date(start);
-  while (dt <= end) {
-    arr.push(new Date(dt));
-    dt.setDate(dt.getDate() + 1);
+// Initialiser la bibliothèque avec les paramètres français (métropole uniquement)
+const holidays = new Holidays('FR');
+
+/**
+ * Vérifie si une date est un jour férié national français
+ * @param date - La date à vérifier
+ * @returns true si la date est un jour férié, false sinon
+ */
+const isHoliday = (date: Date): boolean => {
+  // Utiliser la bibliothèque pour vérifier si c'est un jour férié
+  const holiday = holidays.isHoliday(date);
+  
+  // Vérifier si c'est un jour férié national (pas régional)
+  if (holiday && Array.isArray(holiday)) {
+    return holiday.some(h => h.type === 'public');
   }
-  return arr;
+  
+  return !!holiday;
 };
 
-export const getMonthsInRange = (start: Date, end: Date) => {
-  return eachMonthOfInterval({ start, end });
+/**
+ * Vérifie si une date est un "pont" (jour entre un jour férié et un weekend)
+ * @param date - La date à vérifier
+ * @returns true si la date est un pont, false sinon
+ */
+const isBridge = (date: Date): boolean => {
+  // Vérifier si c'est un vendredi et si le jeudi est férié
+  if (date.getDay() === 5) { // Vendredi
+    const thursday = new Date(date);
+    thursday.setDate(date.getDate() - 1);
+    if (isHoliday(thursday)) {
+      return true;
+    }
+  }
+  
+  // Vérifier si c'est un lundi et si le mardi est férié
+  if (date.getDay() === 1) { // Lundi
+    const tuesday = new Date(date);
+    tuesday.setDate(date.getDate() + 1);
+    if (isHoliday(tuesday)) {
+      return true;
+    }
+  }
+  
+  return false;
 };
 
-export const isWeekend = (date: Date): boolean => {
-  const day = date.getDay();
-  return day === 0 || day === 6;
-};
-
+/**
+ * Vérifie si une date est un jour grisé (weekend, jour férié ou pont)
+ * @param date - La date à vérifier
+ * @returns true si la date doit être grisée, false sinon
+ */
 export const isGrayedOut = (date: Date): boolean => {
-  return isWeekend(date) || isHoliday(date) || isBridgeDay(date);
+  return isWeekend(date) || isHoliday(date) || isBridge(date);
 };
 
 /**
- * Formate une date avec le nom du mois commençant par une majuscule
- * @param date La date à formater
- * @param formatString Le format de date (utilisant la syntaxe de date-fns)
- * @param options Options additionnelles pour le formatage
- * @returns La date formatée avec le mois en majuscule
+ * Obtient tous les mois dans une plage de dates
+ * @param startDate - Date de début
+ * @param endDate - Date de fin
+ * @returns Un tableau de dates représentant le premier jour de chaque mois
  */
-export const formatWithCapitalizedMonth = (
-  date: Date | number, 
-  formatString: string, 
-  options?: { locale?: Locale }
-): string => {
-  const formatted = format(date, formatString, { locale: fr, ...options });
+export const getMonthsInRange = (startDate: Date, endDate: Date): Date[] => {
+  const months: Date[] = [];
   
-  // Si le format contient un nom de mois (MMMM ou MMM), le mettre en majuscule
-  if (formatString.includes('MMMM') || formatString.includes('MMM')) {
-    return formatted.replace(/^([a-zà-ü])|(\s)([a-zà-ü])/g, (match, p1, p2, p3) => {
-      if (p1) return p1.toUpperCase();
-      if (p3) return p2 + p3.toUpperCase();
-      return match;
-    });
+  // Obtenir le premier jour du mois de la date de début
+  const currentMonth = startOfMonth(new Date(startDate));
+  
+  // Obtenir le premier jour du mois de la date de fin
+  const endMonth = startOfMonth(new Date(endDate));
+  
+  // Ajouter le premier mois
+  months.push(new Date(currentMonth));
+  
+  // Ajouter les mois suivants jusqu'à atteindre ou dépasser le mois de fin
+  while (dateFnsFormat(currentMonth, 'yyyy-MM') !== dateFnsFormat(endMonth, 'yyyy-MM')) {
+    // Ajouter un mois
+    const nextMonth = addMonths(currentMonth, 1);
+    
+    // Mettre à jour le mois courant
+    currentMonth.setFullYear(nextMonth.getFullYear());
+    currentMonth.setMonth(nextMonth.getMonth());
+    
+    // Ajouter le mois au tableau
+    months.push(new Date(currentMonth));
   }
   
-  return formatted;
+  return months;
 };
 
-// Importer les fonctions améliorées de periodUtils
-import { 
-  standardizePeriod as standardizePeriodImproved,
-  periodToEnum,
-  formatPeriodForDisplay
-} from './periodUtils';
-
 /**
- * Normalise une période dans le format standardisé (ShiftPeriod enum)
- * @param period La période à normaliser (string, any)
- * @returns La période normalisée (ShiftPeriod)
+ * Obtient un tableau de dates pour tous les jours dans une plage de dates
+ * @param startDate - Date de début
+ * @param endDate - Date de fin
+ * @returns Un tableau de dates pour chaque jour dans la plage
  */
-export const normalizePeriod = (period: unknown): ShiftPeriod => {
-  return periodToEnum(period);
+export const getDaysArray = (startDate: Date, endDate: Date): Date[] => {
+  const days: Date[] = [];
+  const currentDate = new Date(startDate);
+  
+  // Ajouter chaque jour jusqu'à atteindre ou dépasser la date de fin
+  while (currentDate <= endDate) {
+    days.push(new Date(currentDate));
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+  
+  return days;
 };
 
-// Fonction de rétrocompatibilité pour éviter de casser les appels existants
-export const standardizePeriod = normalizePeriod;
-
 /**
- * Obtient le texte d'affichage pour une période donnée
- * @param period La période (ShiftPeriod ou string)
- * @returns Le texte formaté pour la période
+ * Formate une période (M, AM, S) en texte lisible
+ * @param period - La période à formater
+ * @returns La période formatée
  */
-export const getPeriodDisplayText = (period: ShiftPeriod | string): string => {
-  return formatPeriodForDisplay(period);
+export const formatPeriod = (period: string): string => {
+  switch (period) {
+    case 'M':
+      return 'Matin';
+    case 'AM':
+      return 'Après-midi';
+    case 'S':
+      return 'Soir';
+    default:
+      return period;
+  }
 };
 
-// Fonction de rétrocompatibilité
-export const formatPeriod = getPeriodDisplayText;
+/**
+ * Obtient le texte d'affichage pour une période
+ * @param period - La période (M, AM, S ou ShiftPeriod)
+ * @returns Le texte d'affichage de la période
+ */
+export const getPeriodDisplayText = (period: string | ShiftPeriod): string => {
+  let normalizedPeriod: string;
+  
+  // Si c'est un ShiftPeriod, le convertir en chaîne
+  if (typeof period !== 'string') {
+    switch (period) {
+      case ShiftPeriod.MORNING:
+        normalizedPeriod = 'M';
+        break;
+      case ShiftPeriod.AFTERNOON:
+        normalizedPeriod = 'AM';
+        break;
+      case ShiftPeriod.EVENING:
+        normalizedPeriod = 'S';
+        break;
+      default:
+        normalizedPeriod = 'M';
+    }
+  } else {
+    normalizedPeriod = period;
+  }
+  
+  // Utiliser formatPeriod pour obtenir le texte d'affichage
+  return formatPeriod(normalizedPeriod);
+};
 
 /**
- * Formate une date pour l'affichage
- * @param dateStr La date au format ISO (YYYY-MM-DD)
- * @param type Le type de formatage (long, medium, short)
+ * Normalise une période pour assurer la cohérence
+ * @param period - La période à normaliser
+ * @returns La période normalisée
+ */
+export const normalizePeriod = (period: string): 'M' | 'AM' | 'S' => {
+  const normalizedPeriod = period.toUpperCase();
+  
+  if (normalizedPeriod === 'M' || normalizedPeriod === 'AM' || normalizedPeriod === 'S') {
+    return normalizedPeriod as 'M' | 'AM' | 'S';
+  }
+  
+  // Fallback pour les cas non standard
+  if (normalizedPeriod.includes('MAT')) return 'M';
+  if (normalizedPeriod.includes('APR') || normalizedPeriod.includes('PM')) return 'AM';
+  if (normalizedPeriod.includes('SOI') || normalizedPeriod.includes('NUI')) return 'S';
+  
+  // Valeur par défaut
+  return 'M';
+};
+
+/**
+ * Formate une date selon le format spécifié
+ * @param dateStr - La date à formater (chaîne au format YYYY-MM-DD)
+ * @param formatType - Le type de format ('short' pour JJ/MM/YYYY, 'long' pour format complet)
  * @returns La date formatée
  */
-export const formatDate = (dateStr: string, type: 'long' | 'medium' | 'short' = 'medium'): string => {
+export const formatDate = (dateStr: string, formatType: 'short' | 'long' = 'short'): string => {
   try {
     const date = new Date(dateStr);
+    
+    // Vérifier si la date est valide
     if (isNaN(date.getTime())) {
+      console.error('Date invalide:', dateStr);
       return dateStr;
     }
     
-    switch (type) {
-      case 'long':
-        return format(date, 'EEEE d MMMM yyyy', { locale: fr }).replace(/^\w/, c => c.toUpperCase());
-      case 'medium':
-        return format(date, 'd MMMM yyyy', { locale: fr });
-      case 'short':
-        return format(date, 'dd/MM/yyyy');
-      default:
-        return format(date, 'd MMMM yyyy', { locale: fr });
+    // Formater selon le type demandé
+    if (formatType === 'short') {
+      return dateFnsFormat(date, 'dd/MM/yyyy');
+    } else {
+      return dateFnsFormat(date, 'EEEE d MMMM yyyy', { locale: fr });
     }
   } catch (error) {
-    console.error(`Erreur lors du formatage de la date ${dateStr}:`, error);
+    console.error('Erreur lors du formatage de la date:', error);
     return dateStr;
   }
 };
 
 /**
- * Formate une date et une période pour l'affichage
- * @param dateStr La date au format ISO (YYYY-MM-DD)
- * @param period La période (ShiftPeriod ou string)
- * @param type Le type de formatage de date (long, medium, short)
- * @returns La date et la période formatées
+ * Formate une date avec la première lettre du mois en majuscule
+ * @param date - La date à formater
+ * @param formatStr - Le format à utiliser (comme dans date-fns)
+ * @param options - Options supplémentaires pour le formatage
+ * @returns La date formatée avec le mois capitalisé
  */
-export const formatDateWithPeriod = (dateStr: string, period: ShiftPeriod | string, type: 'long' | 'medium' | 'short' = 'medium'): string => {
-  return `${formatDate(dateStr, type)} (${getPeriodDisplayText(period)})`;
-};
-
-/**
- * Standardise une clé de garde au format "date-period"
- * @param key La clé à standardiser
- * @returns La clé standardisée avec la période normalisée
- */
-export const standardizeShiftKey = (key: string): string => {
-  if (!key || !key.includes('-')) return key;
-  
-  const [date, periodRaw] = key.split('-');
-  const standardizedPeriod = normalizePeriod(periodRaw);
-  
-  return `${date}-${standardizedPeriod}`;
+export const formatWithCapitalizedMonth = (
+  date: Date | string | number,
+  formatStr: string,
+  options: { locale?: Locale } = { locale: fr }
+): string => {
+  try {
+    // Formater la date avec date-fns
+    const formattedDate = dateFnsFormat(date, formatStr, options);
+    
+    // Capitaliser la première lettre (utile pour les mois en français)
+    return formattedDate.replace(/^([a-z])|\s+([a-z])/g, function(match) {
+      return match.toUpperCase();
+    });
+  } catch (error) {
+    console.error('Erreur lors du formatage de la date avec mois capitalisé:', error);
+    return String(date);
+  }
 };

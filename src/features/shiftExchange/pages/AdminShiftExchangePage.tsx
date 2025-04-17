@@ -2,12 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { Settings, History, BarChart as ChartBar } from 'lucide-react';
 import ConfirmationModal from '../../../components/ConfirmationModal';
 import { useAuth } from '../../../features/auth/hooks';
-import { getExchangeHistory, revertToExchange, getShiftExchanges } from '../../../lib/firebase/shifts';
+import { getExchangeHistory, revertToExchange } from '../../../lib/firebase/exchange';
 import { useUsers } from '../../../features/auth/hooks';
 import Toast from '../../../components/Toast';
 import { useBagPhase } from '../../../context/shiftExchange';
-import type { User } from '../../../features/users/types';
 import type { ExchangeHistory } from '../types';
+// Import depuis le fichier index.ts
 import { ValidatePlanningButton } from '../../../features/planning/components/admin';
 import { useUserAssignments } from '../../../features/users/hooks';
 import '../../../styles/BadgeStyles.css';
@@ -38,14 +38,7 @@ const AdminShiftExchangePage: React.FC = () => {
   const [showPhaseConfig, setShowPhaseConfig] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' as 'success' | 'error' | 'info' });
-  const [showExchangeConfirmation, setShowExchangeConfirmation] = useState(false);
-  const [exchangeToValidate, setExchangeToValidate] = useState<{
-    exchangeId: string;
-    interestedUserId: string;
-    hasConflict: boolean;
-    exchangeUser?: User;
-    interestedUser?: User;
-  } | null>(null);
+  // Variables d'état pour la confirmation d'annulation d'échange
   const [showRevertConfirmation, setShowRevertConfirmation] = useState(false);
   const [exchangeToRevert, setExchangeToRevert] = useState<string | null>(null);
 
@@ -53,17 +46,53 @@ const AdminShiftExchangePage: React.FC = () => {
   const {
     exchanges,
     history,
-    setExchanges,
     loading,
     handleValidateExchange,
     handleRejectExchange,
     handleRemoveUser,
     loadExchanges,
-    loadHistory
+    loadHistory,
+    refreshData
   } = useExchangeManagement(user);
 
-  const { conflictStates, loading: loadingConflicts } = useConflictCheck(exchanges);
-  const { userAssignments, loading: loadingAssignments } = useUserAssignments(exchanges);
+  const { checkUserConflict } = useConflictCheck(exchanges);
+  const [conflictStates, setConflictStates] = useState<Record<string, Record<string, boolean>>>({});
+  const [conflictShiftTypes, setConflictShiftTypes] = useState<Record<string, Record<string, string>>>({});
+  
+  // Effet pour vérifier manuellement les conflits pour chaque utilisateur intéressé
+  useEffect(() => {
+    const checkConflicts = async () => {
+      if (!exchanges.length) return;
+      
+      const newConflictStates: Record<string, Record<string, boolean>> = {};
+      const newConflictShiftTypes: Record<string, Record<string, string>> = {};
+      
+      for (const exchange of exchanges) {
+        if (!exchange.interestedUsers?.length) continue;
+        
+        newConflictStates[exchange.id] = {};
+        newConflictShiftTypes[exchange.id] = {};
+        
+        for (const userId of exchange.interestedUsers) {
+          // Utiliser un cast pour résoudre le problème de type
+          const result = await checkUserConflict(userId, exchange as any);
+          newConflictStates[exchange.id][userId] = result.hasConflict;
+          
+          if (result.hasConflict && result.shiftType) {
+            newConflictShiftTypes[exchange.id][userId] = result.shiftType;
+          }
+          
+          console.log(`Conflit vérifié pour ${userId} sur ${exchange.date}-${exchange.period}:`, result);
+        }
+      }
+      
+      setConflictStates(newConflictStates);
+      setConflictShiftTypes(newConflictShiftTypes);
+    };
+    
+    checkConflicts();
+  }, [exchanges, checkUserConflict]);
+  const { userAssignments } = useUserAssignments(exchanges);
 
   // Utiliser directement l'historique du hook qui utilise un abonnement temps réel
   useEffect(() => {
@@ -89,6 +118,7 @@ const AdminShiftExchangePage: React.FC = () => {
     }
     
     try {
+      // Utiliser un try-catch pour capturer l'erreur spécifique
       await handleValidateExchange(exchangeId, interestedUserId, hasConflict);
       
       // L'historique est déjà rechargé par handleValidateExchange via useExchangeManagement
@@ -207,36 +237,54 @@ const AdminShiftExchangePage: React.FC = () => {
       const newUser = users.find(u => u.id === exchange.newUserId);
       const isPermutation = exchange.isPermutation;
       
+      console.log('Début de l\'annulation de l\'échange:', {
+        exchangeId: exchangeToRevert,
+        originalUser: originalUser?.lastName,
+        newUser: newUser?.lastName,
+        isPermutation
+      });
+      
       // Effectuer l'annulation
       await revertToExchange(exchangeToRevert);
       
       const userNames = `${originalUser?.lastName || 'Inconnu'} ${isPermutation ? '↔' : '→'} ${newUser?.lastName || 'Inconnu'}`;
       const exchangeType = isPermutation ? 'Permutation' : 'Échange';
       
-      setToast({
-        visible: true,
-        message: `${exchangeType} annulé(e) avec succès (${userNames}). ${isPermutation ? 'Les gardes ont été remises' : 'La garde a été remise'} dans leur état initial.`,
-        type: 'success'
-      });
-
+      console.log('Annulation réussie, mise à jour des données...');
+      
+      // Attendre un court délai pour s'assurer que Firestore a eu le temps de propager les changements
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
       try {
-        // Recharger l'historique et les échanges en parallèle
-        const [updatedHistory, updatedExchanges] = await Promise.all([
-          getExchangeHistory(),
-          getShiftExchanges()
-        ]);
+        // Utiliser la fonction refreshData pour recharger toutes les données
+        // Cette fonction a été améliorée pour contourner le cache et forcer le rechargement
+        console.log('Rechargement forcé des données...');
+        const refreshSuccess = await refreshData();
+        console.log('Rechargement des données terminé:', refreshSuccess);
         
-        setExchangeHistory(updatedHistory);
-        setExchanges(updatedExchanges);
+        // Recharger aussi l'historique spécifiquement pour la vue actuelle
+        if (showHistory) {
+          console.log('Rechargement spécifique de l\'historique pour la vue actuelle...');
+          const updatedHistory = await getExchangeHistory();
+          setExchangeHistory(updatedHistory);
+          console.log('Historique rechargé:', updatedHistory.length, 'entrées');
+        }
         
-        // Recharger aussi la liste des échanges via le hook en parallèle avec l'historique
-        await Promise.all([
-          loadExchanges(),
-          loadHistory()
-        ]);
+        setToast({
+          visible: true,
+          message: `${exchangeType} annulé(e) avec succès (${userNames}). ${isPermutation ? 'Les gardes ont été remises' : 'La garde a été remise'} dans leur état initial.`,
+          type: 'success'
+        });
       } catch (refreshError) {
-        console.warn('Error refreshing data after revert:', refreshError);
-        // Continue même si le rafraîchissement échoue
+        console.error('Error refreshing data after revert:', refreshError);
+        
+        // Même en cas d'erreur de rafraîchissement, afficher un message de succès
+        // car l'annulation a réussi, c'est juste le rafraîchissement qui a échoué
+        setToast({
+          visible: true,
+          message: `${exchangeType} annulé(e) avec succès (${userNames}), mais le rafraîchissement des données a échoué. Veuillez rafraîchir la page manuellement.`,
+          type: 'success'
+        });
       }
     } catch (error) {
       console.error('Error reverting exchange:', error);
@@ -258,8 +306,8 @@ const AdminShiftExchangePage: React.FC = () => {
       <>
         <BagStatsViz
           users={users}
-          exchanges={exchanges}
-          history={history}
+          exchanges={exchanges as any}
+          history={history as any}
           className="mb-6"
           key={`stats-${Date.now()}`} // Forcer un remontage du composant à chaque affichage
         />
@@ -438,11 +486,12 @@ const AdminShiftExchangePage: React.FC = () => {
             )
           ) : (
             <ExchangeList
-              exchanges={exchanges}
+              exchanges={exchanges as any}
               users={users}
-              history={history}
+              history={history as any}
               bagPhaseConfig={bagPhaseConfig}
               conflictStates={conflictStates}
+              conflictShiftTypes={conflictShiftTypes}
               userAssignments={userAssignments}
               onValidateExchange={handleValidateExchangeClick}
               onRejectExchange={handleRejectExchangeClick}

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { db } from "../../../lib/firebase/config";
 import { BagPhaseConfig, defaultBagPhaseConfig } from '../types';
-import { finalizeAllExchanges, restorePendingExchanges } from '../../../lib/firebase/shifts';
+import { finalizeAllExchanges, restorePendingExchanges } from '../../../lib/firebase/exchange';
 
 interface UseBagPhaseResult {
   config: BagPhaseConfig;

@@ -1,8 +1,9 @@
 import { doc, runTransaction, serverTimestamp, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from './config';
-import { finalizeAllExchanges } from './shifts';
+import { finalizeAllExchanges } from './exchange';
 import { addDirectExchange } from './directExchange';
 import { ShiftExchange } from '../../types/planning';
+import { ShiftPeriod } from '../../types/exchange';
 
 /**
  * Valide le planning de la bourse aux gardes après la phase 3
@@ -111,11 +112,12 @@ export const validateBagPlanning = async (): Promise<void> => {
             transaction.set(directExchangeRef, {
               userId: exchange.userId,
               date: exchange.date,
-              period: exchange.period,
+              period: exchange.period as any,
               shiftType: exchange.shiftType,
               timeSlot: exchange.timeSlot,
               comment: exchange.comment || '',
               operationType: 'exchange',
+              operationTypes: ['exchange'],
               status: 'pending',
               lastModified: serverTimestamp(),
               createdAt: serverTimestamp(),
@@ -238,11 +240,12 @@ const transferToDirectExchanges = async (): Promise<void> => {
           await addDirectExchange({
             userId: exchange.userId,
             date: exchange.date,
-            period: exchange.period,
+            period: exchange.period as any,
             shiftType: exchange.shiftType,
             timeSlot: exchange.timeSlot,
             comment: exchange.comment || '',
             operationType: 'exchange',
+            operationTypes: ['exchange'],
             status: 'pending',
             lastModified: new Date().toISOString(),
             interestedUsers: []

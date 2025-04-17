@@ -1,6 +1,11 @@
 import React, { useState } from 'react';
 import { AlertTriangle, UserCheck, X, ArrowLeftRight } from 'lucide-react';
-import type { ShiftExchange, BagPhaseConfig, ShiftAssignment } from '../../../../types/planning';
+import type { BagPhaseConfig, ShiftAssignment } from '../../../../types/planning';
+import type { ShiftExchange as PlanningShiftExchange } from '../../../../types/planning';
+import type { ShiftExchange as FeatureShiftExchange } from '../../../../features/shiftExchange/types';
+
+// Type union pour accepter les deux types de ShiftExchange
+type ShiftExchange = PlanningShiftExchange | FeatureShiftExchange;
 import type { User } from '../../../../features/auth/types';
 import { ConfirmationModal } from '../../../../components/modals';
 import { useExchangeManagement } from '../../hooks/useExchangeManagement';
@@ -11,6 +16,7 @@ interface InterestedUserCardProps {
   users: User[];
   exchange: ShiftExchange;
   conflictStates: Record<string, Record<string, boolean>>;
+  conflictShiftTypes?: Record<string, Record<string, string>>;
   userAssignments: Record<string, Record<string, ShiftAssignment>>;
   bagPhaseConfig: BagPhaseConfig;
   onValidateExchange: (exchangeId: string, interestedUserId: string, hasConflict: boolean) => void;
@@ -22,6 +28,7 @@ const InterestedUserCard: React.FC<InterestedUserCardProps> = ({
   users,
   exchange,
   conflictStates,
+  conflictShiftTypes,
   userAssignments,
   bagPhaseConfig,
   onValidateExchange,
@@ -36,16 +43,13 @@ const InterestedUserCard: React.FC<InterestedUserCardProps> = ({
   // Vérifier si la garde est déjà proposée à la bourse
   const hasConflict = conflictStates?.[exchange.id]?.[userId] ?? false;
   
-  // Désactiver les logs pour éviter d'encombrer la console
-  /*
-  if (hasConflict) {
-    console.log(`[${exchange.date}-${exchange.period}] ⚠️ Conflit pour ${interestedUser.lastName?.toUpperCase() || 'Utilisateur'}:`, {
-      exchangeId: exchange.id,
-      userId,
-      hasConflict
-    });
-  }
-  */
+  // Activer les logs pour déboguer
+  console.log(`[${exchange.date}-${exchange.period}] Vérification de conflit pour ${interestedUser.lastName?.toUpperCase() || 'Utilisateur'}:`, {
+    exchangeId: exchange.id,
+    userId,
+    hasConflict,
+    conflictStates
+  });
   
   // Vérifier si c'est une permutation - l'utilisateur intéressé a déjà une garde sur ce créneau
   const assignmentKey = `${exchange.date}-${exchange.period}`;
@@ -72,10 +76,15 @@ const InterestedUserCard: React.FC<InterestedUserCardProps> = ({
   // Vérifier si la garde est déjà en cours d'échange
   // Ajouter des logs pour déboguer
   const userHasAssignments = !!userAssignments?.[exchange.userId];
-  const assignmentExists = userHasAssignments && userAssignments[exchange.userId][assignmentKey] !== undefined;
   
-  // Garde signalée comme non disponible si l'utilisateur a des assignations mais pas celle-ci
-  const isAlreadyInExchange = userHasAssignments && !assignmentExists;
+  // Vérifier si l'assignation existe dans le planning de l'utilisateur
+  const assignmentExists = userHasAssignments && 
+                          userAssignments[exchange.userId] && 
+                          userAssignments[exchange.userId][assignmentKey] !== undefined;
+  
+  // Garde signalée comme non disponible uniquement si l'échange est marqué comme indisponible
+  // Ne pas se fier uniquement à l'absence de l'assignation dans le planning
+  const isAlreadyInExchange = exchange.status === 'unavailable';
   
   // Log pour déboguer
   if (exchange.date === "2025-06-08" && exchange.period === "AM") {
@@ -148,7 +157,7 @@ const InterestedUserCard: React.FC<InterestedUserCardProps> = ({
           </span>
           {isAlreadyInExchange && (
             <span className="text-xs text-orange-700 mt-1">
-              Cette garde n'est plus disponible dans le planning
+              Cette garde a déjà été échangée dans une autre transaction
             </span>
           )}
           {exchange.status === 'unavailable' && (
@@ -164,7 +173,7 @@ const InterestedUserCard: React.FC<InterestedUserCardProps> = ({
                 ? 'badge-afternoon'
                 : 'badge-evening'
             }`}>
-              {userAssignment?.shiftType || 'Garde inconnue'}
+              {conflictShiftTypes?.[exchange.id]?.[userId] || userAssignment?.shiftType || 'Garde inconnue'}
             </span>
           )}
         </div>
@@ -206,7 +215,7 @@ const InterestedUserCard: React.FC<InterestedUserCardProps> = ({
       isOpen={showValidateConfirmation}
       title={isAlreadyInExchange ? "Garde déjà échangée" : isPermutation ? "Confirmer la permutation" : "Confirmer l'échange"}
       message={isAlreadyInExchange 
-        ? "Cette garde a déjà été échangée ou n'est plus disponible. Veuillez vérifier l'historique des échanges."
+        ? "Cette garde a déjà été échangée dans une autre transaction. Veuillez vérifier l'historique des échanges."
         : isPermutation
           ? "Êtes-vous sûr de vouloir valider cette permutation ? Les gardes seront échangées entre les deux médecins."
           : "Êtes-vous sûr de vouloir valider cet échange simple ?"}

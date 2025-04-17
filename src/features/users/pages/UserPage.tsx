@@ -10,7 +10,7 @@ import Toast from '../../../components/Toast';
 import { getDesiderata } from '../../../lib/firebase/desiderata';
 import { loadPdfExporter, loadCsvPlanningExporter } from '../../../utils/lazyExporters';
 import Tutorial from '../../../components/Tutorial';
-import { Selections } from '../../../types/planning';
+import { Selections, PeriodSelection } from '../../../types/planning';
 
 const UserPage: React.FC = () => {
   const { config } = usePlanningConfig();
@@ -18,7 +18,7 @@ const UserPage: React.FC = () => {
   const { validateDesiderata, isSaving } = useDesiderata();
   const [isValidated, setIsValidated] = useState(user?.hasValidatedPlanning || false);
   const [showTutorial, setShowTutorial] = useState(false);
-  const [validatedSelections, setValidatedSelections] = useState<Selections>({});
+  const [validatedSelections, setValidatedSelections] = useState<Record<string, PeriodSelection>>({});
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' as 'success' | 'error' });
   const [isDeadlineExpired, setIsDeadlineExpired] = useState(false);
   const [planningRef, setPlanningRef] = useState<{ saveSelections: () => Promise<void> } | null>(null);
@@ -36,7 +36,19 @@ const UserPage: React.FC = () => {
         try {
           const desiderata = await getDesiderata(user.id);
           if (desiderata?.selections) {
-            setCurrentSelections(desiderata.selections);
+            // Conversion explicite pour satisfaire le typage
+            const simpleSelections = Object.entries(desiderata.selections).reduce((acc, [key, value]) => {
+              // Si value est un objet avec une propriété type, prendre cette valeur
+              if (typeof value === 'object' && value !== null && 'type' in value) {
+                acc[key] = value.type;
+              } else {
+                // Sinon, considérer que value est déjà du bon type
+                acc[key] = value as 'primary' | 'secondary' | null;
+              }
+              return acc;
+            }, {} as Record<string, 'primary' | 'secondary' | null>);
+            
+            setCurrentSelections(simpleSelections);
             if (desiderata.validatedAt) {
               setValidatedSelections(desiderata.selections);
             }
@@ -205,16 +217,28 @@ const UserPage: React.FC = () => {
       });
       
       try {
+        // Afficher les sélections validées pour débogage
+        console.log("validatedSelections pour PDF:", validatedSelections);
+        console.log("Nombre de sélections pour PDF:", Object.keys(validatedSelections).length);
+        
+        // Ne pas transformer les données - transmettre directement les validatedSelections
+        // Cela permettra de conserver la structure avec les commentaires
+        
+        // Afficher les données pour débogage
+        console.log("Données envoyées pour PDF:", validatedSelections);
+        console.log("Nombre de sélections pour PDF:", Object.keys(validatedSelections).length);
+        
         const exportPlanningToPDF = await loadPdfExporter();
+        
+        // Nous gardons validatedSelections tel quel pour conserver les commentaires
+        // et pour que l'exportateur PDF puisse les récupérer
+        
         exportPlanningToPDF({
           userName: `${user.lastName}_${user.firstName}`,
           startDate: config.startDate,
           endDate: config.endDate,
           assignments: {}, // Pas d'assignments pour les desiderata
-          desiderata: Object.entries(validatedSelections).reduce((acc, [key, value]) => {
-            acc[key] = value.type;
-            return acc;
-          }, {} as Record<string, 'primary' | 'secondary' | null>),
+          desiderata: validatedSelections as any, // conversion de type pour éviter l'erreur TS
           primaryLimit: config.primaryDesiderataLimit,
           secondaryLimit: config.secondaryDesiderataLimit,
           showAssignmentsOnly: false,

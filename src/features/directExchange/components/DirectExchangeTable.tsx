@@ -127,10 +127,41 @@ const DirectExchangeTable: React.FC<DirectExchangeTableProps> = ({
     // Vérifier les gardes pour chaque période
     ['M', 'AM', 'S'].forEach(period => {
       const key = `${dateStr}-${period}`;
+      
+      // Récupérer les échanges directs pour cette date et période 
+      const userExchange = directExchanges.find(
+        ex => ex.userId === user?.id && 
+             ex.date === dateStr && 
+             standardizePeriod(ex.period) === period
+      );
+      
+      // Vérifier d'abord dans userAssignments (garde principale)
       if (userAssignments && userAssignments[key]) {
-        result[period].assignment = userAssignments[key];
+        // Créer une copie de l'assignment pour pouvoir le modifier
+        const assignment = { ...userAssignments[key] };
         
-        // Ajouter les propositions reçues pour cette garde
+        // Si un échange existe pour cette garde, ajouter ses operationTypes
+        if (userExchange) {
+          assignment.operationTypes = userExchange.operationTypes || 
+                                     (userExchange.operationType ? [userExchange.operationType] : []);
+        }
+        
+        result[period].assignment = assignment;
+      } 
+      // Si la garde n'est pas dans userAssignments mais existe dans un échange
+      else if (userExchange) {
+        // Créer un assignment temporaire à partir de l'échange
+        result[period].assignment = {
+          date: userExchange.date,
+          period: period as any,
+          shiftType: userExchange.shiftType,
+          timeSlot: userExchange.timeSlot,
+          operationTypes: userExchange.operationTypes || []
+        };
+      }
+      
+      // Ajouter les propositions reçues pour cette garde
+      if (result[period].assignment) {
         const proposalsForThisShift = receivedProposals.filter(
           p => {
             const proposalPeriod = standardizePeriod(p.period);

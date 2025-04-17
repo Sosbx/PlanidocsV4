@@ -15,7 +15,7 @@ import PlanningTutorial from "../components/PlanningTutorial";
 import { format } from 'date-fns';
 import type { GeneratedPlanning, ExchangeHistory, ShiftAssignment } from "../types";
 import Toast from "../../../components/Toast";
-import { getDesiderata } from "../../../lib/firebase/desiderata";
+import { getAllDesiderata } from "../../../lib/firebase/desiderata";
 
 // Importation dynamique des fonctions d'export volumineuses
 import { 
@@ -38,14 +38,22 @@ const UserPlanningPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showDesiderata, setShowDesiderata] = useState(false);
+  
+  // Log pour suivre les changements de showDesiderata
+  useEffect(() => {
+    console.log("UserPlanningPage: showDesiderata a changé:", showDesiderata);
+  }, [showDesiderata]);
   const [showTutorial, setShowTutorial] = useState(false);
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' as 'success' | 'error' });
   const [showImportHelp, setShowImportHelp] = useState(false);
   const [desiderata, setDesiderata] = useState<Record<string, 'primary' | 'secondary' | null>>({});
+  const [desiderataForDisplay, setDesiderataForDisplay] = useState<Record<string, { type: 'primary' | 'secondary' | null }>>({});
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [viewMode, setViewMode] = useState<'multiColumn' | 'singleColumn'>('multiColumn');
   const [timeLeft, setTimeLeft] = useState(getTimeRemaining(bagPhaseConfig.submissionDeadline));
+  const [showPastDates, setShowPastDates] = useState<boolean>(true);
+  const [loadedMonths, setLoadedMonths] = useState<number>(0);
   const [receivedShifts, setReceivedShifts] = useState<Record<string, { 
     originalUserId: string; 
     newUserId: string; 
@@ -54,14 +62,77 @@ const UserPlanningPage: React.FC = () => {
     timeSlot: string;
   }>>({});
 
-  // Charger les desiderata pour l'export
+  // Charger les desiderata pour l'export et l'affichage (incluant les desiderata archivés)
   useEffect(() => {
     if (!user) return;
     const loadDesiderata = async () => {
       try {
-        const data = await getDesiderata(user.id);
+        console.log("UserPlanningPage: Chargement des désiderata pour l'utilisateur", user.id);
+        
+        // Récupérer d'abord uniquement les désiderata actifs pour les examiner
+        const activeData = await getAllDesiderata(user.id, false);
+        console.log("UserPlanningPage: Désiderata actifs récupérés:", 
+                    activeData?.selections ? Object.keys(activeData.selections).length : 0);
+        
+        if (activeData?.selections && Object.keys(activeData.selections).length > 0) {
+          const firstKey = Object.keys(activeData.selections)[0];
+          console.log("UserPlanningPage: Exemple de désiderata actif:", 
+                      firstKey, activeData.selections[firstKey]);
+          console.log("UserPlanningPage: Type du premier désiderata actif:", 
+                      typeof activeData.selections[firstKey]);
+        }
+        
+        // Inclure les desiderata archivés pour l'affichage complet
+        const data = await getAllDesiderata(user.id, true);
+        console.log("UserPlanningPage: Total des désiderata (actifs + archivés):", 
+                    data?.selections ? Object.keys(data.selections).length : 0);
+        
         if (data?.selections) {
-          setDesiderata(data.selections);
+          // Convertir les données de type Selections en Record<string, 'primary' | 'secondary' | null>
+          // pour l'export PDF
+          const simplifiedDesiderata: Record<string, 'primary' | 'secondary' | null> = {};
+          
+          // Format attendu par GeneratedPlanningTable
+          const formattedDesiderata: Record<string, { type: 'primary' | 'secondary' | null }> = {};
+          
+          Object.entries(data.selections).forEach(([key, value]) => {
+            // Vérifier le format de chaque désiderata
+            console.log(`UserPlanningPage: Traitement du désiderata ${key}:`, value);
+            
+            if (value && typeof value === 'object' && 'type' in value) {
+              // Si c'est déjà un objet avec une propriété type
+              simplifiedDesiderata[key] = value.type;
+              formattedDesiderata[key] = { type: value.type };
+              console.log(`UserPlanningPage: Désiderata ${key} déjà au bon format:`, value.type);
+            } else if (value === 'primary' || value === 'secondary' || value === null) {
+              // Si c'est directement une chaîne 'primary' ou 'secondary'
+              simplifiedDesiderata[key] = value;
+              formattedDesiderata[key] = { type: value };
+              console.log(`UserPlanningPage: Désiderata ${key} converti de chaîne:`, value);
+            } else {
+              // Format inconnu
+              console.warn(`UserPlanningPage: Format inconnu pour le désiderata ${key}:`, value);
+              simplifiedDesiderata[key] = null;
+              formattedDesiderata[key] = { type: null };
+            }
+          });
+          
+          // Vérifier les désiderata de septembre-octobre 2025
+          const septOctDesiderata = Object.keys(formattedDesiderata).filter(key => 
+            key.startsWith('2025-09') || key.startsWith('2025-10')
+          );
+          console.log("UserPlanningPage: Désiderata de sept-oct 2025 après transformation:", 
+                      septOctDesiderata.length, septOctDesiderata);
+          
+          if (septOctDesiderata.length > 0) {
+            // Vérifier le format d'un exemple
+            const exampleKey = septOctDesiderata[0];
+            console.log(`UserPlanningPage: Exemple de désiderata sept-oct après transformation:`, 
+                        exampleKey, formattedDesiderata[exampleKey]);
+          }
+          
+          setDesiderata(simplifiedDesiderata);
+          setDesiderataForDisplay(formattedDesiderata);
         }
       } catch (error) {
         console.error('Error loading desiderata:', error);
@@ -69,6 +140,7 @@ const UserPlanningPage: React.FC = () => {
     };
     loadDesiderata();
   }, [user]);
+  
   // Update timeLeft every second during submission phase
   useEffect(() => {
     if (bagPhaseConfig.phase !== 'submission') return;
@@ -188,36 +260,90 @@ const UserPlanningPage: React.FC = () => {
         setLoading(false);
         if (doc.exists()) {
           const data = doc.data() as any; // Utiliser any temporairement pour éviter les erreurs de type
-          // Convertir le timestamp Firestore en Date
-          const uploadedAt = data.uploadedAt && typeof data.uploadedAt.toDate === 'function' 
-            ? data.uploadedAt.toDate() 
-            : new Date(data.uploadedAt);
+          console.log("Données reçues de Firebase:", data);
           
-          const periodId = data.periodId || 'current';
-          
-          // Stocker le planning dans la structure par période
-          setPlanningsByPeriod(prev => {
-            const newPlanningsByPeriod = {
-              ...prev,
-              [periodId]: {
-                ...data,
-                uploadedAt
+          // Vérifier si les données sont au nouveau format (avec periods) ou à l'ancien format
+          if (data.periods) {
+            console.log("Format avec périodes détecté");
+            // Nouveau format avec périodes
+            const periodIds = Object.keys(data.periods);
+            console.log("Périodes disponibles:", periodIds);
+            
+            // Pour chaque période, extraire les assignments et les ajouter à planningsByPeriod
+            periodIds.forEach(periodId => {
+              const periodData = data.periods[periodId];
+              console.log(`Période ${periodId}:`, periodData);
+              
+              if (periodData.assignments) {
+                console.log(`Assignments dans la période ${periodId}:`, Object.keys(periodData.assignments).length);
+                console.log(`Exemple d'assignment dans la période ${periodId}:`, Object.entries(periodData.assignments)[0]);
+                
+                // Convertir le timestamp Firestore en Date
+                const uploadedAt = periodData.uploadedAt && typeof periodData.uploadedAt.toDate === 'function' 
+                  ? periodData.uploadedAt.toDate() 
+                  : new Date(periodData.uploadedAt);
+                
+                // Stocker le planning dans la structure par période
+                setPlanningsByPeriod(prev => {
+                  const newPlanningsByPeriod = {
+                    ...prev,
+                    [periodId]: {
+                      ...periodData,
+                      uploadedAt
+                    }
+                  };
+                  
+                  console.log("Plannings par période mis à jour:", Object.keys(newPlanningsByPeriod));
+                  
+                  // Fusionner tous les plannings en un seul pour l'affichage
+                  const mergedAssignments = mergeAllPlannings(newPlanningsByPeriod);
+                  
+                  // Mettre à jour le planning fusionné
+                  setPlanning({
+                    assignments: mergedAssignments,
+                    uploadedAt
+                  } as GeneratedPlanning);
+                  
+                  return newPlanningsByPeriod;
+                });
               }
-            };
+            });
+          } else {
+            // Ancien format sans périodes
+            console.log("Format sans périodes détecté");
+            console.log("Assignments dans les données:", data.assignments ? Object.keys(data.assignments).length : 0);
             
-            console.log("Plannings par période mis à jour:", Object.keys(newPlanningsByPeriod));
+            // Convertir le timestamp Firestore en Date
+            const uploadedAt = data.uploadedAt && typeof data.uploadedAt.toDate === 'function' 
+              ? data.uploadedAt.toDate() 
+              : new Date(data.uploadedAt);
             
-            // Fusionner tous les plannings en un seul pour l'affichage
-            const mergedAssignments = mergeAllPlannings(newPlanningsByPeriod);
-            
-            // Mettre à jour le planning fusionné
-            setPlanning({
-              assignments: mergedAssignments,
-              uploadedAt
-            } as GeneratedPlanning);
-            
-            return newPlanningsByPeriod;
-          });
+            const periodId = data.periodId || 'current';
+          
+            // Stocker le planning dans la structure par période
+            setPlanningsByPeriod(prev => {
+              const newPlanningsByPeriod = {
+                ...prev,
+                [periodId]: {
+                  ...data,
+                  uploadedAt
+                }
+              };
+              
+              console.log("Plannings par période mis à jour:", Object.keys(newPlanningsByPeriod));
+              
+              // Fusionner tous les plannings en un seul pour l'affichage
+              const mergedAssignments = mergeAllPlannings(newPlanningsByPeriod);
+              
+              // Mettre à jour le planning fusionné
+              setPlanning({
+                assignments: mergedAssignments,
+                uploadedAt
+              } as GeneratedPlanning);
+              
+              return newPlanningsByPeriod;
+            });
+          }
         } else {
           setPlanning(null);
         }
@@ -254,63 +380,178 @@ const UserPlanningPage: React.FC = () => {
   // État pour stocker les dates calculées dynamiquement
   const [dynamicDateRange, setDynamicDateRange] = useState<{startDate: Date, endDate: Date} | null>(null);
   
+  // Fonction pour charger les plannings antérieurs mois par mois
+  const loadPreviousMonth = () => {
+    if (!showPastDates) {
+      // Premier chargement des dates antérieures
+      setShowPastDates(true);
+      
+      // Charger 1 mois en arrière à partir d'aujourd'hui
+      const today = new Date();
+      const newStartDate = new Date(today);
+      newStartDate.setMonth(today.getMonth() - 1);
+      newStartDate.setDate(1); // Premier jour du mois précédent
+      
+      setDynamicDateRange(prev => ({
+        startDate: newStartDate,
+        endDate: prev?.endDate || new Date(today.setMonth(today.getMonth() + 6))
+      }));
+      
+      setLoadedMonths(1); // Un mois chargé
+    } else {
+      // Charger 1 mois supplémentaire
+      setDynamicDateRange(prev => {
+        if (!prev) return null;
+        
+        const newStartDate = new Date(prev.startDate);
+        newStartDate.setMonth(newStartDate.getMonth() - 1);
+        
+        return {
+          startDate: newStartDate,
+          endDate: prev.endDate
+        };
+      });
+      
+      setLoadedMonths(prev => prev + 1);
+    }
+  };
+  
+  // Fonction pour charger un mois supplémentaire dans le futur
+  const loadNextMonth = () => {
+    setDynamicDateRange(prev => {
+      if (!prev) return null;
+      
+      const newEndDate = new Date(prev.endDate);
+      newEndDate.setMonth(newEndDate.getMonth() + 1);
+      
+      return {
+        startDate: prev.startDate,
+        endDate: newEndDate
+      };
+    });
+  };
+  
   // Fonction pour fusionner tous les plannings de toutes les périodes en une seule structure
   const mergeAllPlannings = (planningsByPeriod: Record<string, GeneratedPlanning>) => {
     const mergedAssignments: Record<string, ShiftAssignment> = {};
-    const dates: Date[] = [];
+    const allDates: Date[] = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Normaliser à minuit
     
     console.log("Fusion des plannings - Périodes disponibles:", Object.keys(planningsByPeriod));
     
+    // Vérifier si les désiderata de septembre-octobre 2025 sont présents
+    const septOctDesiderata = Object.keys(desiderataForDisplay).filter(key => 
+      key.startsWith('2025-09') || key.startsWith('2025-10')
+    );
+    console.log("UserPlanningPage: Désiderata de sept-oct 2025:", septOctDesiderata.length, septOctDesiderata);
+    
+    // Vérifier si nous avons des périodes archivées
+    const hasArchivedPeriods = Object.keys(planningsByPeriod).some(periodId => {
+      const period = allPeriods.find(p => p.id === periodId);
+      return period && period.status === 'archived';
+    });
+    
+    // Si nous avons des périodes archivées, nous devons toujours afficher les dates passées
+    const shouldShowPastDates = showPastDates || hasArchivedPeriods;
+    
+    if (hasArchivedPeriods) {
+      console.log("UserPlanningPage: Périodes archivées détectées - Affichage forcé des dates passées");
+    }
+    
     // Parcourir toutes les périodes
-    Object.values(planningsByPeriod).forEach(planning => {
+    Object.entries(planningsByPeriod).forEach(([periodId, planning]) => {
       if (!planning || !planning.assignments) {
-        console.log("Planning invalide ou sans assignments");
+        console.log(`Planning invalide ou sans assignments pour la période ${periodId}`);
         return;
       }
       
       const assignmentCount = Object.keys(planning.assignments).length;
-      console.log(`Planning avec ${assignmentCount} assignments`);
+      
+      // Vérifier si cette période est archivée
+      const period = allPeriods.find(p => p.id === periodId);
+      const isArchivedPeriod = period && period.status === 'archived';
+      
+      console.log(`Planning de la période ${periodId} (${isArchivedPeriod ? 'archivée' : 'active'}) avec ${assignmentCount} assignments`);
       
       // Ajouter les assignments de cette période au planning fusionné
       Object.entries(planning.assignments).forEach(([key, assignment]) => {
-        mergedAssignments[key] = assignment;
-        
         // Extraire la date de la clé (format: YYYY-MM-DD-PERIOD)
-        const [dateStr] = key.split('-');
-        console.log(`Clé d'assignment: ${key}, Date extraite: ${dateStr}`);
-        
-        try {
-          const date = new Date(dateStr);
-          if (!isNaN(date.getTime())) {
-            dates.push(date);
-            console.log(`Date valide ajoutée: ${date.toISOString()}`);
-          } else {
-            console.warn(`Date invalide ignorée: ${dateStr}`);
+        const dateParts = key.split('-');
+        if (dateParts.length >= 3) {
+          const dateStr = `${dateParts[0]}-${dateParts[1]}-${dateParts[2]}`;
+          
+          try {
+            const date = new Date(dateStr);
+            if (!isNaN(date.getTime())) {
+              // Inclure toutes les dates pour les périodes archivées
+              // Pour les périodes actives, filtrer selon shouldShowPastDates
+              if (isArchivedPeriod || shouldShowPastDates || date >= today) {
+                mergedAssignments[key] = assignment;
+                allDates.push(date);
+              }
+            }
+          } catch (error) {
+            console.error(`Erreur lors de la conversion de la date ${dateStr}:`, error);
           }
-        } catch (error) {
-          console.error(`Erreur lors de la conversion de la date ${dateStr}:`, error);
         }
       });
     });
     
-    console.log(`Nombre total de dates valides trouvées: ${dates.length}`);
+    console.log(`Nombre total de dates valides trouvées: ${allDates.length}`);
     
     // Calculer les dates min et max si des dates valides ont été trouvées
-    if (dates.length > 0) {
-      const minDate = new Date(Math.min(...dates.map(d => d.getTime())));
-      const maxDate = new Date(Math.max(...dates.map(d => d.getTime())));
+    if (allDates.length > 0) {
+      // Toujours trouver la date minimale réelle pour avoir toutes les gardes
+      const minDate = new Date(Math.min(...allDates.map(d => d.getTime())));
+      const maxDate = new Date(Math.max(...allDates.map(d => d.getTime())));
       
       console.log(`Date min trouvée: ${minDate.toISOString()}`);
       console.log(`Date max trouvée: ${maxDate.toISOString()}`);
       
+      // Créer une copie de minDate pour la manipulation
+      const adjustedMinDate = new Date(minDate);
       // Ajouter une marge de 15 jours avant et après pour une meilleure visualisation
-      minDate.setDate(minDate.getDate() - 15);
-      maxDate.setDate(maxDate.getDate() + 15);
+      adjustedMinDate.setDate(adjustedMinDate.getDate() - 15);
       
-      console.log(`Plage de dates finale: ${minDate.toISOString()} - ${maxDate.toISOString()}`);
+      // Copie de maxDate pour la manipulation
+      const adjustedMaxDate = new Date(maxDate);
+      adjustedMaxDate.setDate(adjustedMaxDate.getDate() + 15);
       
-      // Mettre à jour l'état des dates dynamiques
-      setDynamicDateRange({startDate: minDate, endDate: maxDate});
+      // Vérifier si les désiderata de septembre-octobre 2025 sont présents
+      const septOctDesiderata = Object.keys(desiderataForDisplay).filter(key => 
+        key.startsWith('2025-09') || key.startsWith('2025-10')
+      );
+      
+      // Pour l'affichage initial, utiliser aujourd'hui comme date de début
+      let displayStartDate = today;
+      
+      // Pour l'affichage initial, limiter à 5 mois à partir d'aujourd'hui
+      let displayEndDate = new Date(today);
+      displayEndDate.setMonth(displayEndDate.getMonth() + 5);
+      
+      // Si des désiderata de septembre-octobre 2025 sont présents, étendre la plage de dates
+      if (septOctDesiderata.length > 0) {
+        console.log("UserPlanningPage: Extension de la plage de dates pour inclure les désiderata de sept-oct 2025");
+        
+        // Créer une date pour septembre 2025
+        const sept2025 = new Date(2025, 8, 1); // Mois 8 = septembre (0-indexed)
+        
+        // Créer une date pour octobre 2025
+        const oct2025 = new Date(2025, 9, 31); // Mois 9 = octobre (0-indexed)
+        
+        // Si septembre 2025 est après la date de fin actuelle, étendre la plage
+        if (sept2025 > displayEndDate) {
+          console.log("UserPlanningPage: Extension de la date de fin pour inclure septembre-octobre 2025");
+          displayEndDate = new Date(oct2025);
+        }
+      }
+      
+      console.log(`Plage de données complète: ${adjustedMinDate.toISOString()} - ${adjustedMaxDate.toISOString()}`);
+      console.log(`Plage d'affichage initiale: ${displayStartDate.toISOString()} - ${displayEndDate.toISOString()}`);
+      
+      // Mettre à jour l'état des dates dynamiques avec la date d'affichage initiale
+      setDynamicDateRange({startDate: displayStartDate, endDate: displayEndDate});
     } else {
       console.warn("Aucune date valide trouvée, utilisation des dates de configuration par défaut");
       // Si aucune date valide n'est trouvée, utiliser une plage par défaut (6 mois)
@@ -322,6 +563,7 @@ const UserPlanningPage: React.FC = () => {
       setDynamicDateRange({startDate: defaultStartDate, endDate: defaultEndDate});
     }
     
+    console.log("Assignments fusionnés:", Object.keys(mergedAssignments).length, mergedAssignments);
     return mergedAssignments;
   };
   
@@ -335,19 +577,40 @@ const UserPlanningPage: React.FC = () => {
         });
       }, 500); // Délai pour s'assurer que le composant est rendu
     }
+    
+    // Écouter l'événement personnalisé pour charger le mois précédent
+    const handleLoadPreviousMonth = () => {
+      loadPreviousMonth();
+    };
+    
+    window.addEventListener('loadPreviousMonth', handleLoadPreviousMonth);
+    
+    return () => {
+      window.removeEventListener('loadPreviousMonth', handleLoadPreviousMonth);
+    };
   }, [planning]);
   
   // Fonction pour déterminer si un jour est le premier jour d'une période BAG
   const isFirstDayOfBagPeriod = (date: Date) => {
     // Trouver la période future (BAG)
     const bagPeriod = allPeriods.find(p => p.status === 'future');
-    if (!bagPeriod) return false;
+    if (!bagPeriod) {
+      console.log("Aucune période BAG (future) trouvée");
+      return false;
+    }
     
     // Vérifier si c'est le premier jour de la période BAG
     const dateStr = format(date, 'yyyy-MM-dd');
     const bagStartStr = format(bagPeriod.startDate, 'yyyy-MM-dd');
     
-    return dateStr === bagStartStr;
+    const isBagStart = dateStr === bagStartStr;
+    
+    // Log pour débogage - uniquement si c'est le premier jour
+    if (isBagStart) {
+      console.log(`Jour de début de BAG détecté: ${dateStr}`);
+    }
+    
+    return isBagStart;
   };
 
   if (!user?.roles.isUser) {
@@ -595,25 +858,32 @@ const UserPlanningPage: React.FC = () => {
                 </div>
               )}
             </div>
-            <div data-tutorial="planning-grid">
-              <Suspense fallback={
-                <div className="flex justify-center items-center py-20">
-                  <LoadingSpinner />
-                  <span className="ml-2 text-sm text-gray-500">Chargement du planning...</span>
-                </div>
-              }>
-                <GeneratedPlanningTable
-                  startDate={dynamicDateRange ? dynamicDateRange.startDate : config.startDate}
-                  endDate={dynamicDateRange ? dynamicDateRange.endDate : config.endDate}
-                  assignments={planning.assignments}
-                  userId={user?.id}
-                  showDesiderata={showDesiderata}
-                  receivedShifts={receivedShifts}
-                  viewMode={viewMode}
-                  todayRef={todayRef}
-                  isFirstDayOfBagPeriod={isFirstDayOfBagPeriod}
-                />
-              </Suspense>
+            <div data-tutorial="planning-grid" className="w-full overflow-hidden">
+              
+              <div className="w-full">
+                <Suspense fallback={
+                  <div className="flex justify-center items-center py-20">
+                    <LoadingSpinner />
+                    <span className="ml-2 text-sm text-gray-500">Chargement du planning...</span>
+                  </div>
+                }>
+                  <GeneratedPlanningTable
+                    startDate={dynamicDateRange ? dynamicDateRange.startDate : config.startDate}
+                    endDate={dynamicDateRange ? dynamicDateRange.endDate : config.endDate}
+                    assignments={planning.assignments}
+                    userId={user?.id}
+                    showDesiderata={showDesiderata}
+                    desiderata={desiderataForDisplay}
+                    receivedShifts={receivedShifts}
+                    viewMode={viewMode}
+                    todayRef={todayRef}
+                    isFirstDayOfBagPeriod={isFirstDayOfBagPeriod}
+                    isAdminView={false}
+                    onLoadPreviousMonth={loadPreviousMonth}
+                    onLoadNextMonth={loadNextMonth}
+                  />
+                </Suspense>
+              </div>
             </div>
           </>
         ) : (

@@ -30,7 +30,7 @@ interface GroupedShiftExchangeListProps {
   }>;
   isInteractionDisabled: boolean;
   bagPhaseConfig: BagPhaseConfig;
-  onToggleInterest: (exchange: ShiftExchange) => void;
+  onToggleInterest: (exchange: ShiftExchange) => Promise<void> | void;
   onSelectDate: (date: string) => void;
   selectedDate?: string; // Date actuellement sélectionnée
   filterPeriod?: 'all' | ShiftPeriod; // Filtrage par période
@@ -82,8 +82,8 @@ const GroupedShiftExchangeList: React.FC<GroupedShiftExchangeListProps> = ({
     handleRemoveFromExchange 
   } = useReplacementManagement();
 
-  // Récupérer les désidératas
-  const { selections, isLoading: isLoadingDesiderata } = useDesiderataState();
+  // Récupérer les désidératas (incluant les archivés)
+  const { selections, isLoading: isLoadingDesiderata } = useDesiderataState(true);
   
   // Regrouper les échanges par date - optimisé avec useMemo
   // Utiliser directement les exchanges qui sont déjà filtrés par useShiftExchangeData

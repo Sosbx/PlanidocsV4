@@ -1,13 +1,13 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { format, getDaysInMonth } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { getMonthsInRange, isGrayedOut } from '../../../utils/dateUtils';
 import type { ShiftAssignment, Selections, ShiftReplacement } from '../types';
 import type { ShiftExchange } from '../../../types/exchange';
-import { getDesiderata } from '../../../lib/firebase/desiderata';
+import { getAllDesiderata } from '../../../lib/firebase/desiderata';
 import { useBagPhase } from '../../../features/shiftExchange/hooks';
 import { usePlanningPeriod } from '../../../context/planning';
-import { addShiftExchange, removeShiftExchange, subscribeToShiftExchanges } from '../../../lib/firebase/shifts';
+import { addShiftExchange, removeShiftExchange, subscribeToShiftExchanges } from '../../../lib/firebase/exchange';
 import { getReplacementsForUser } from '../../../lib/firebase/replacements';
 import { CommentModal } from '../../../components/modals';
 import { Portal } from '../../../components';
@@ -17,6 +17,8 @@ import { useDirectExchange } from '../../../features/directExchange/hooks';
 import Toast from '../../../components/common/Toast';
 import { Badge } from '../../../components/common';
 import { OperationType } from '../../../types/exchange';
+import VirtualizedMonthList from '../../../components/VirtualizedMonthList';
+import useConsolidatedExchanges from '../../../hooks/useConsolidatedExchanges';
 
 interface GeneratedPlanningTableProps {
   startDate: Date;
@@ -36,6 +38,8 @@ interface GeneratedPlanningTableProps {
   viewMode?: 'multiColumn' | 'singleColumn';
   todayRef?: React.RefObject<HTMLDivElement>;
   isFirstDayOfBagPeriod?: (date: Date) => boolean;
+  onLoadPreviousMonth?: () => void;
+  onLoadNextMonth?: () => void;
 }
 
 const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
@@ -49,12 +53,14 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
   isAdminView = false,
   viewMode = 'multiColumn',
   todayRef,
-  isFirstDayOfBagPeriod
+  isFirstDayOfBagPeriod,
+  onLoadPreviousMonth,
+  onLoadNextMonth
 }) => {
   const months = getMonthsInRange(startDate, endDate);
   const { user } = useAuth();
   const { config: bagPhaseConfig } = useBagPhase();
-  const { isInCurrentPeriod } = usePlanningPeriod();
+  const { isInCurrentPeriod, allPeriods } = usePlanningPeriod();
   const [selectedCell, setSelectedCell] = useState<{
     key: string;
     position: { x: number; y: number };
@@ -83,6 +89,43 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
     message: '', 
     type: 'success' 
   });
+
+  // Fonction pour trouver la date de début de la bourse aux gardes
+  const findBagStartDate = useCallback(() => {
+    // Chercher la période future (BAG)
+    const bagPeriod = allPeriods.find(p => p.status === 'future');
+    if (!bagPeriod) {
+      console.log("Aucune période BAG (future) trouvée");
+      // Par défaut, utiliser la date actuelle si aucune période future n'est trouvée
+      return new Date();
+    }
+    
+    // Retourner la date de début de la période BAG
+    return bagPeriod.startDate;
+  }, [allPeriods]);
+
+  // Fonction pour déterminer si un jour est le premier jour d'une période BAG
+  const isFirstDayOfBagPeriodInternal = useCallback((date: Date) => {
+    // Trouver la période future (BAG)
+    const bagPeriod = allPeriods.find(p => p.status === 'future');
+    if (!bagPeriod) {
+      console.log("Aucune période BAG (future) trouvée");
+      return false;
+    }
+    
+    // Vérifier si c'est le premier jour de la période BAG
+    const dateStr = format(date, 'yyyy-MM-dd');
+    const bagStartStr = format(bagPeriod.startDate, 'yyyy-MM-dd');
+    
+    const isBagStart = dateStr === bagStartStr;
+    
+    // Log pour débogage - uniquement si c'est le premier jour
+    if (isBagStart) {
+      console.log(`Jour de début de BAG détecté: ${dateStr}`);
+    }
+    
+    return isBagStart;
+  }, [allPeriods]);
 
   // Fonction pour convertir les échanges en un objet avec les clés au format "YYYY-MM-DD-PERIOD"
   const convertExchangesToMap = useCallback((exchanges: ShiftExchange[]) => {
@@ -250,8 +293,27 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
     const formattedDate = `${year}-${month}-${day}`;
     const dateObj = new Date(`${year}-${month}-${day}`);
     
+    // Vérifier si la date est dans le passé
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const isPastDate = dateObj < today;
+    
+    // Si la date est dans le passé, désactiver l'interaction
+    if (isPastDate) {
+      setToast({
+        visible: true,
+        message: 'Les gardes passées ne peuvent pas être modifiées.',
+        type: 'info'
+      });
+      return;
+    }
+    
     // Vérifier si la date est dans la période courante
     const isCurrentPeriodDate = isInCurrentPeriod(dateObj);
+    
+    // Vérifier si la date est après le début de la bourse aux gardes (en utilisant isFirstDayOfBagPeriod)
+    // Si isFirstDayOfBagPeriod n'est pas fourni, considérer que toutes les dates sont après la bourse
+    const isAfterBagStart = isFirstDayOfBagPeriod ? dateObj >= findBagStartDate() : true;
     
     // En Phase 2 (distribution) - désactiver les interactions pour les utilisateurs
     if (bagPhaseConfig.phase === 'distribution' && !isAdminView) {
@@ -328,7 +390,61 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
       return;
     }
     
-    // En Phase 1 (submission) ou en mode admin, permettre l'ouverture du modal
+    // En Phase 1 (submission)
+    if (bagPhaseConfig.phase === 'submission' && !isAdminView) {
+      if (isAfterBagStart) {
+        // Pour les dates après le début de la bourse aux gardes, ouvrir la modale de la bourse
+        setSelectedCell({
+          key: cellKey,
+          position: { x: event.clientX, y: event.clientY },
+          assignment: {
+            ...assignment,
+            date: formattedDate,
+            period: period as 'M' | 'AM' | 'S'
+          }
+        });
+      } else {
+        // Pour les dates avant le début de la bourse aux gardes, ouvrir la modale d'échange direct
+        refreshDirectExchanges().then(() => {
+          // Vérifier si cette garde a déjà des types d'opérations existants
+          const existingDirectExchange = Object.values(directExchanges).find(ex => 
+            ex.userId === user?.id && 
+            ex.date === formattedDate && 
+            ex.period === period
+          );
+          
+          // Récupérer les types d'opérations existants
+          const operationTypes = existingDirectExchange?.operationTypes || [];
+          
+          // Vérifier le remplacement
+          const existingReplacement = Object.values(replacements).find(rep => 
+            rep.originalUserId === user?.id && 
+            rep.date === formattedDate && 
+            rep.period === period
+          );
+          
+          // Ajouter replacement si applicable
+          if (existingReplacement && !operationTypes.includes('replacement')) {
+            operationTypes.push('replacement');
+          }
+          
+          setSelectedDirectExchangeCell({
+            key: cellKey,
+            position: { x: event.clientX, y: event.clientY },
+            assignment: {
+              ...assignment,
+              date: formattedDate,
+              period: period as 'M' | 'AM' | 'S'
+            },
+            operationTypes: operationTypes,
+            existingExchangeId: existingDirectExchange?.id
+          });
+        });
+      }
+      return;
+    }
+    
+    // En mode admin ou autre cas, permettre l'ouverture du modal standard
     setSelectedCell({
       key: cellKey,
       position: { x: event.clientX, y: event.clientY },
@@ -338,7 +454,7 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
         period: period as 'M' | 'AM' | 'S'
       }
     });
-  }, [bagPhaseConfig.phase, isAdminView, isInCurrentPeriod, user, directExchanges, exchanges, replacements, setToast, setSelectedDirectExchangeCell, setSelectedCell]);
+  }, [bagPhaseConfig.phase, isAdminView, isInCurrentPeriod, user, directExchanges, exchanges, replacements, setToast, setSelectedDirectExchangeCell, setSelectedCell, findBagStartDate]);
   
   // Fonction pour gérer la soumission d'un échange direct
   const handleDirectExchangeSubmit = useCallback(async (comment: string, operationTypes: OperationType[]) => {
@@ -508,9 +624,24 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
 
     const loadDesiderata = async () => {
       try {
-        const data = await getDesiderata(user.id);
+        console.log("GeneratedPlanningTable: Chargement des désidératas pour l'affichage...");
+        
+        // Spécifier explicitement includeArchived=true pour s'assurer d'obtenir 
+        // à la fois les désidératas archivés et les désidératas actifs
+        const data = await getAllDesiderata(user.id, true);
         if (data?.selections) {
+          console.log("GeneratedPlanningTable: Désidératas chargés pour l'affichage:", Object.keys(data.selections).length);
+          console.log("GeneratedPlanningTable: Clés des désidératas:", Object.keys(data.selections));
+          
+          // Vérifier si les désidératas ont le bon format
+          const firstKey = Object.keys(data.selections)[0];
+          if (firstKey) {
+            console.log("GeneratedPlanningTable: Exemple de désidérata:", firstKey, data.selections[firstKey]);
+          }
+          
           setDesiderataState(data.selections);
+        } else {
+          console.log("GeneratedPlanningTable: Aucun désidérata trouvé pour l'utilisateur", user.id);
         }
       } catch (error) {
         console.error('Error loading desiderata:', error);
@@ -519,6 +650,40 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
 
     loadDesiderata();
   }, [user, showDesiderata, desiderataProps]);
+  
+  // Log pour vérifier la plage de dates et les désiderata
+  useEffect(() => {
+    console.log("GeneratedPlanningTable: Plage de dates:", startDate.toISOString(), "-", endDate.toISOString());
+    
+    if (showDesiderata) {
+      console.log("GeneratedPlanningTable: showDesiderata est activé");
+      
+      // Vérifier si les désiderata sont fournis en props
+      if (desiderataProps) {
+        console.log("GeneratedPlanningTable: Désidératas fournis en props:", Object.keys(desiderataProps).length);
+        
+        // Filtrer les désiderata pour septembre-octobre 2025
+        const septOctDesiderata = Object.keys(desiderataProps).filter(key => 
+          key.startsWith('2025-09') || key.startsWith('2025-10')
+        );
+        
+        console.log("GeneratedPlanningTable: Désidératas de sept-oct 2025:", septOctDesiderata.length, septOctDesiderata);
+      } else if (Object.keys(desiderataState).length > 0) {
+        console.log("GeneratedPlanningTable: Désidératas chargés localement:", Object.keys(desiderataState).length);
+        
+        // Filtrer les désiderata pour septembre-octobre 2025
+        const septOctDesiderata = Object.keys(desiderataState).filter(key => 
+          key.startsWith('2025-09') || key.startsWith('2025-10')
+        );
+        
+        console.log("GeneratedPlanningTable: Désidératas de sept-oct 2025:", septOctDesiderata.length, septOctDesiderata);
+      } else {
+        console.log("GeneratedPlanningTable: Aucun désidérata disponible");
+      }
+    } else {
+      console.log("GeneratedPlanningTable: showDesiderata est désactivé");
+    }
+  }, [startDate, endDate, showDesiderata, desiderataProps, desiderataState]);
 
   const handleAddToExchange = useCallback(async (comment: string) => {
     if (!user || !selectedCell) return;
@@ -674,15 +839,15 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
               return (
                 <tr key={dateStr}>
                   <td className={`border px-2 py-1 text-[11px] ${grayedOut ? 'text-gray-400 bg-gray-50/50' : 'text-gray-500 bg-gray-50/30'}`}>
-                    {/* Ligne rouge pour marquer le début de la période BAG */}
+                    {/* Indicateur pour le début de la période BAG */}
                     {isFirstDayOfBagPeriod && isFirstDayOfBagPeriod(day) && (
-                      <div className="absolute top-0 left-0 right-0 h-1 bg-red-500 z-10" 
+                      <div className="absolute right-0 top-0 w-2 h-2 bg-yellow-500 rounded-full" 
                            title="Début de la période Bourse aux Gardes">
                       </div>
                     )}
-                    {/* Référence pour le scroll vers la date actuelle */}
+                    {/* Référence pour le scroll vers la date actuelle - sans bordure visible */}
                     {new Date().toDateString() === day.toDateString() && (
-                      <div ref={todayRef} className="absolute top-0 left-0 right-0 bottom-0 border-2 border-indigo-500 z-5 pointer-events-none"></div>
+                      <div ref={todayRef} className="absolute top-0 left-0 right-0 bottom-0 z-5 pointer-events-none"></div>
                     )}
                     <div className="flex justify-start items-center">
                       <span>{format(day, 'd', { locale: fr })}</span>
@@ -784,30 +949,63 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
                     }
                     
                     // Construire les classes de fond
-                    const bgClasses = [
-                      // En phase completed, utiliser les couleurs des échanges directs
-                      directExchangeBgClass,
-                      // Afficher les couleurs des desiderata indépendamment de la phase
-                      showDesiderata && desideratum?.type ? 
-                        desideratum.type === 'primary' ? 
-                          grayedOut ? 'bg-red-200' : 'bg-red-100'
-                          : grayedOut ? 'bg-blue-200' : 'bg-blue-100'
-                        : '',
-                      !desideratum?.type && grayedOut ? 'bg-gray-100' : '',
-                      !desideratum?.type && isReceivedShift && bagPhaseConfig.phase !== 'completed' ? 
-                        isReceivedPermutation ? 'bg-emerald-100' : 'bg-green-100' 
-                        : '',
-                      // Fond basé sur le(s) type(s) d'opération
-                      bagPhaseConfig.phase !== 'completed' && hasProposedGuard && !isReceivedShift ? 
-                        hasBoth ? 'bg-purple-100 shadow-sm' :
-                        hasExchangeOp ? 'bg-yellow-100 shadow-sm' :
-                        hasGiveOp ? 'bg-blue-100 shadow-sm' : ''
-                        : '',
-                      // Ne plus afficher le fond ambre pour les gardes proposées aux remplaçants
-                      cellAssignment ? 'hover:bg-opacity-75' : '',
-                      // Ajouter une classe de transition pour les animations
-                      'cell-transition'
-                    ].filter(Boolean).join(' ');
+                        // Déterminer les classes en fonction des différentes conditions
+                        const classes = [];
+                        
+                        // Priorité 1: Gardes proposées (même pour les week-ends)
+                        if (bagPhaseConfig.phase !== 'completed' && hasProposedGuard && !isReceivedShift) {
+                          if (hasBoth) {
+                            classes.push('bg-purple-100 shadow-sm');
+                          } else if (hasExchangeOp) {
+                            classes.push('bg-yellow-100 shadow-sm');
+                          } else if (hasGiveOp) {
+                            classes.push('bg-blue-100 shadow-sm');
+                          }
+                        }
+                        // Priorité 2: Cellule grisée (weekend, jour férié, pont) si pas de garde proposée
+                        else if (grayedOut) {
+                          // Si c'est un desideratum, appliquer une couleur plus foncée
+                          if (showDesiderata && desideratum?.type) {
+                            if (desideratum.type === 'primary') {
+                              classes.push('bg-red-200');
+                            } else {
+                              classes.push('bg-blue-200');
+                            }
+                          } else {
+                            // Sinon, appliquer le gris standard
+                            classes.push('bg-gray-100');
+                          }
+                        } 
+                        // Priorité 3: Si pas grisé mais a un desideratum
+                        else if (showDesiderata && desideratum?.type) {
+                          if (desideratum.type === 'primary') {
+                            classes.push('bg-red-100');
+                          } else {
+                            classes.push('bg-blue-100');
+                          }
+                        }
+                        // Priorité 4: En phase completed, utiliser les couleurs des échanges directs
+                        else if (directExchangeBgClass) {
+                          classes.push(directExchangeBgClass);
+                        }
+                        // Priorité 5: Gardes reçues
+                        else if (!desideratum?.type && isReceivedShift && bagPhaseConfig.phase !== 'completed') {
+                          if (isReceivedPermutation) {
+                            classes.push('bg-emerald-100');
+                          } else {
+                            classes.push('bg-green-100');
+                          }
+                        }
+                        
+                        // Ajouter les classes communes
+                        if (cellAssignment) {
+                          classes.push('hover:bg-opacity-75');
+                        }
+                        
+                        // Ajouter une classe de transition pour les animations
+                        classes.push('cell-transition');
+                        
+                        const bgClasses = classes.filter(Boolean).join(' ');
 
                     return (
                       <td
@@ -897,21 +1095,31 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
                               return null;
                             }
                             
-                            // Pour les autres phases, conserver le comportement existant
-                            if ((hasProposedGuard || isProposedToReplacements) && operationTypes.length + (isProposedToReplacements ? 1 : 0) > 0) {
-                              return (
-                                <span className="badge-appear absolute top-0 right-0 -mt-1 -mr-1" style={{ zIndex: 40 }}>
-                                  <Badge 
-                                    type="operation-types" 
-                                    size="sm" 
-                                    operationTypes={[
-                                      ...(hasProposedGuard ? operationTypes : []),
-                                      ...(isProposedToReplacements ? ['replacement'] : [])
-                                    ]}
-                                  />
-                                </span>
-                              );
-                            }
+                                // Pour les autres phases, conserver le comportement existant mais sans pastille E pour la bourse aux gardes
+                                if ((hasProposedGuard || isProposedToReplacements) && operationTypes.length + (isProposedToReplacements ? 1 : 0) > 0) {
+                                  // Si c'est un échange de la bourse aux gardes (type 'bag'), ne pas afficher la pastille E
+                                  const filteredOperationTypes = hasProposedGuard && exchange?.exchangeType === 'bag' 
+                                    ? operationTypes.filter(type => type !== 'exchange')
+                                    : [...(hasProposedGuard ? operationTypes : [])];
+                                  
+                                  // Ajouter le type 'replacement' si nécessaire
+                                  if (isProposedToReplacements) {
+                                    filteredOperationTypes.push('replacement');
+                                  }
+                                  
+                                  // N'afficher le badge que s'il reste des types d'opérations après filtrage
+                                  if (filteredOperationTypes.length > 0) {
+                                    return (
+                                      <span className="badge-appear absolute top-0 right-0 -mt-1 -mr-1" style={{ zIndex: 40 }}>
+                                        <Badge 
+                                          type="operation-types" 
+                                          size="sm" 
+                                          operationTypes={filteredOperationTypes}
+                                        />
+                                      </span>
+                                    );
+                                  }
+                                }
                             
                             return null;
                           })()}
@@ -934,11 +1142,27 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
 
   const renderSingleColumnView = () => (
     <div className="overflow-y-auto overflow-x-hidden whitespace-normal">
-      {months.map((month) => (
+      {months.map((month, index) => (
         <div key={month.getTime()} className="mb-8">
-          <h3 className="text-lg font-medium text-gray-700 mb-2">
-            {format(month, 'MMMM', { locale: fr }).charAt(0).toUpperCase() + format(month, 'MMMM', { locale: fr }).slice(1) + ' ' + format(month, 'yyyy')}
-          </h3>
+          <div className="flex items-center mb-2">
+            {/* Bouton flèche minimaliste pour charger les mois antérieurs */}
+            {index === 0 && onLoadPreviousMonth && (
+              <button 
+                onClick={onLoadPreviousMonth}
+                className="p-1 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 mr-2"
+                title="Afficher les mois antérieurs"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+              </button>
+            )}
+            
+            {/* Titre du mois */}
+            <h3 className="text-lg font-medium text-gray-700">
+              {format(month, 'MMMM', { locale: fr }).charAt(0).toUpperCase() + format(month, 'MMMM', { locale: fr }).slice(1) + ' ' + format(month, 'yyyy')}
+            </h3>
+          </div>
           <table className="w-full border border-gray-200 bg-white">
             <thead>
               <tr className="bg-gray-50/70">
@@ -968,24 +1192,33 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
                 .map(day => {
                   const dateStr = format(day, 'yyyy-MM-dd');
                   const grayedOut = isGrayedOut(day);
+                  // Déterminer si ce jour est le premier jour de la période BAG
+                  const isBagPeriodStart = isFirstDayOfBagPeriod && isFirstDayOfBagPeriod(day);
+                  
                   return (
-                    <tr key={dateStr}>
-                      <td className={`border px-2 py-1 text-xs ${grayedOut ? 'text-gray-400 bg-gray-50/50' : 'text-gray-500 bg-gray-50/30'}`}>
+<tr 
+  key={dateStr}
+  className={`${isBagPeriodStart && bagPhaseConfig.phase !== 'completed' ? 'relative bg-red-50/30' : ''}`}
+>
+                      <td className={`border px-2 py-1 text-xs ${grayedOut ? 'text-gray-400 bg-gray-50/50' : 'text-gray-500 bg-gray-50/30'} ${isBagPeriodStart && bagPhaseConfig.phase !== 'completed' ? 'border-t-2 border-t-red-400' : ''}`}>
                         {/* Ligne rouge pour marquer le début de la période BAG */}
                         {isFirstDayOfBagPeriod && isFirstDayOfBagPeriod(day) && (
-                          <div className="absolute top-0 left-0 right-0 h-1 bg-red-500 z-10" 
+                          <div className="absolute right-0 top-0 w-2 h-2 bg-yellow-500 rounded-full" 
                                title="Début de la période Bourse aux Gardes">
                           </div>
                         )}
-                        {/* Référence pour le scroll vers la date actuelle */}
+                        {/* Référence pour le scroll vers la date actuelle - sans bordure visible */}
                         {new Date().toDateString() === day.toDateString() && (
-                          <div ref={todayRef} className="absolute top-0 left-0 right-0 bottom-0 border-2 border-indigo-500 z-5 pointer-events-none"></div>
+                          <div ref={todayRef} className="absolute top-0 left-0 right-0 bottom-0 z-5 pointer-events-none"></div>
                         )}
                         <div className="flex justify-start items-center">
                           <span>{format(day, 'd', { locale: fr })}</span>
                           <span className="text-gray-400 text-[10px] ml-1">
                             {format(day, 'EEEE', { locale: fr }).substring(0, 1).toUpperCase() + format(day, 'EEEE', { locale: fr }).substring(1, 3).toLowerCase()}
                           </span>
+                          {isBagPeriodStart && bagPhaseConfig.phase !== 'completed' && (
+                            <span className="text-red-500/50 text-[10px] ml-auto font-medium">BàG</span>
+                          )}
                         </div>
                       </td>
                       {['M', 'AM', 'S'].map(period => {
@@ -1072,24 +1305,66 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
                           }
                         }
                         
-                        const bgClasses = [
-                          // En phase completed, utiliser les couleurs des échanges directs
-                          directExchangeBgClass,
-                          // Afficher les couleurs des desiderata indépendamment de la phase
-                          showDesiderata && desideratum?.type ? 
-                            desideratum.type === 'primary' ? 
-                              grayedOut ? 'bg-red-200' : 'bg-red-100'
-                              : grayedOut ? 'bg-blue-200' : 'bg-blue-100'
-                            : '',
-                          !desideratum?.type && grayedOut ? 'bg-gray-100' : '',
-                          !desideratum?.type && isReceivedShift && bagPhaseConfig.phase !== 'completed' ? 
-                            isReceivedPermutation ? 'bg-emerald-100' : 'bg-green-100' 
-                            : '',
-                          // Ne pas afficher le fond jaune pour les gardes proposées en phase completed
-                          bagPhaseConfig.phase !== 'completed' && hasProposedGuard && !isReceivedShift ? 'bg-yellow-100' : '',
-                          // Ne plus afficher le fond ambre pour les gardes proposées aux remplaçants
-                          cellAssignment ? 'hover:bg-opacity-75' : ''
-                        ].filter(Boolean).join(' ');
+                        // Définir la classe de base pour les cellules grisées
+                        const grayedOutBaseClass = grayedOut ? 'bg-gray-100' : '';
+                        
+                        // Déterminer les classes en fonction des différentes conditions
+                        const classes = [];
+                        
+                        // Priorité 1: Cellule grisée (weekend, jour férié, pont)
+                        if (grayedOut) {
+                          // Si c'est un desideratum, appliquer une couleur plus foncée
+                          if (showDesiderata && desideratum?.type) {
+                            if (desideratum.type === 'primary') {
+                              classes.push('bg-red-200');
+                            } else {
+                              classes.push('bg-blue-200');
+                            }
+                          } else {
+                            // Sinon, appliquer le gris standard
+                            classes.push('bg-gray-100');
+                          }
+                        } 
+                        // Priorité 2: Si pas grisé mais a un desideratum
+                        else if (showDesiderata && desideratum?.type) {
+                          if (desideratum.type === 'primary') {
+                            classes.push('bg-red-100');
+                          } else {
+                            classes.push('bg-blue-100');
+                          }
+                        }
+                        // Priorité 3: En phase completed, utiliser les couleurs des échanges directs
+                        else if (directExchangeBgClass) {
+                          classes.push(directExchangeBgClass);
+                        }
+                        // Priorité 4: Gardes reçues
+                        else if (!desideratum?.type && isReceivedShift && bagPhaseConfig.phase !== 'completed') {
+                          if (isReceivedPermutation) {
+                            classes.push('bg-emerald-100');
+                          } else {
+                            classes.push('bg-green-100');
+                          }
+                        }
+                        // Priorité 5: Gardes proposées
+                        else if (bagPhaseConfig.phase !== 'completed' && hasProposedGuard && !isReceivedShift) {
+                          if (hasBoth) {
+                            classes.push('bg-purple-100 shadow-sm');
+                          } else if (hasExchangeOp) {
+                            classes.push('bg-yellow-100 shadow-sm');
+                          } else if (hasGiveOp) {
+                            classes.push('bg-blue-100 shadow-sm');
+                          }
+                        }
+                        
+                        // Ajouter les classes communes
+                        if (cellAssignment) {
+                          classes.push('hover:bg-opacity-75');
+                        }
+                        
+                        // Ajouter une classe de transition pour les animations
+                        classes.push('cell-transition');
+                        
+                        const bgClasses = classes.filter(Boolean).join(' ');
 
                         return (
                           <td
@@ -1180,20 +1455,30 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
                                   return null;
                                 }
                                 
-                                // Pour les autres phases, conserver le comportement existant
+                                // Pour les autres phases, conserver le comportement existant mais sans pastille E pour la bourse aux gardes
                                 if ((hasProposedGuard || isProposedToReplacements) && operationTypes.length + (isProposedToReplacements ? 1 : 0) > 0) {
-                                  return (
-                                    <span className="badge-appear absolute top-0 right-0 -mt-1 -mr-1" style={{ zIndex: 40 }}>
-                                      <Badge 
-                                        type="operation-types" 
-                                        size="sm" 
-                                        operationTypes={[
-                                          ...(hasProposedGuard ? operationTypes : []),
-                                          ...(isProposedToReplacements ? ['replacement'] : [])
-                                        ]}
-                                      />
-                                    </span>
-                                  );
+                                  // Si c'est un échange de la bourse aux gardes (type 'bag'), ne pas afficher la pastille E
+                                  const filteredOperationTypes = hasProposedGuard && exchange?.exchangeType === 'bag' 
+                                    ? operationTypes.filter(type => type !== 'exchange')
+                                    : [...(hasProposedGuard ? operationTypes : [])];
+                                  
+                                  // Ajouter le type 'replacement' si nécessaire
+                                  if (isProposedToReplacements) {
+                                    filteredOperationTypes.push('replacement');
+                                  }
+                                  
+                                  // N'afficher le badge que s'il reste des types d'opérations après filtrage
+                                  if (filteredOperationTypes.length > 0) {
+                                    return (
+                                      <span className="badge-appear absolute top-0 right-0 -mt-1 -mr-1" style={{ zIndex: 40 }}>
+                                        <Badge 
+                                          type="operation-types" 
+                                          size="sm" 
+                                          operationTypes={filteredOperationTypes}
+                                        />
+                                      </span>
+                                    );
+                                  }
                                 }
                                 
                                 return null;
@@ -1215,11 +1500,63 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
     </div>
   );
 
+  // Utiliser le hook useConsolidatedExchanges pour optimiser les souscriptions
+  const consolidatedExchanges = useConsolidatedExchanges();
+  
+  // Mémoïser les données consolidées pour éviter les re-rendus inutiles
+  const consolidatedData = useMemo(() => {
+    // Si les données consolidées sont disponibles, les utiliser
+    if (!consolidatedExchanges.loading && !consolidatedExchanges.error) {
+      return {
+        exchanges: consolidatedExchanges.exchanges,
+        directExchanges: consolidatedExchanges.directExchanges,
+        replacements: consolidatedExchanges.replacements
+      };
+    }
+    
+    // Sinon, utiliser les données locales
+    return {
+      exchanges,
+      directExchanges,
+      replacements
+    };
+  }, [consolidatedExchanges, exchanges, directExchanges, replacements]);
+
   return (
     <>
       {viewMode === 'multiColumn' ? (
-        <div className="overflow-x-auto whitespace-nowrap">
-          {months.map(renderMonthTable)}
+        <div 
+          className="overflow-x-auto whitespace-nowrap" 
+          style={{ 
+            border: 'none',
+            outline: 'none',
+            boxShadow: 'none',
+            width: '100%',
+            maxWidth: '100%',
+            position: 'relative'
+          }}
+        >
+          <VirtualizedMonthList
+            startDate={startDate}
+            endDate={endDate}
+            assignments={assignments}
+            exchanges={consolidatedData.exchanges}
+            directExchanges={consolidatedData.directExchanges}
+            replacements={consolidatedData.replacements}
+            desiderata={desiderata}
+            receivedShifts={receivedShifts}
+            userId={userId}
+            isAdminView={isAdminView}
+            showDesiderata={showDesiderata}
+            bagPhaseConfig={bagPhaseConfig}
+            todayRef={todayRef}
+            isFirstDayOfBagPeriod={isFirstDayOfBagPeriod}
+            onCellClick={handleCellClick}
+            height={600}
+            width="100%"
+            onLoadPreviousMonth={onLoadPreviousMonth}
+            onLoadNextMonth={onLoadNextMonth}
+          />
         </div>
       ) : (
         renderSingleColumnView()

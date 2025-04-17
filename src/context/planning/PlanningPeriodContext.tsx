@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { doc, onSnapshot, collection } from 'firebase/firestore';
+import { doc, onSnapshot, collection, setDoc } from 'firebase/firestore';
 import { db } from "../../lib/firebase/config";
 import { useBagPhase } from '../shiftExchange';
 import { 
@@ -96,6 +96,45 @@ export const PlanningPeriodProvider: React.FC<{ children: React.ReactNode }> = (
     return () => unsubscribe();
   }, []);
 
+  /**
+   * Crée une période par défaut si aucune période n'existe
+   * @returns ID de la période créée ou null en cas d'erreur
+   */
+  const createDefaultPeriod = async (): Promise<string | null> => {
+    try {
+      const today = new Date();
+      const endDate = new Date(today);
+      endDate.setMonth(today.getMonth() + 3); // 3 mois dans le futur
+      
+      const defaultPeriod: Omit<PlanningPeriodType, 'id'> = {
+        name: 'Période par défaut',
+        startDate: today,
+        endDate: endDate,
+        status: 'active',
+        bagPhase: 'completed',
+        isValidated: true,
+        validatedAt: today
+      };
+      
+      // Créer la période dans Firebase
+      const periodId = await createPlanningPeriod(defaultPeriod);
+      
+      // Mettre à jour la configuration globale
+      await setDoc(doc(db, 'config', 'planning_periods'), {
+        currentPeriod: {
+          startDate: today,
+          endDate: endDate
+        },
+        futurePeriod: null
+      });
+      
+      return periodId;
+    } catch (error) {
+      console.error('Erreur lors de la création de la période par défaut:', error);
+      return null;
+    }
+  };
+
   // Charger toutes les périodes
   useEffect(() => {
     const loadPeriods = async () => {
@@ -103,9 +142,12 @@ export const PlanningPeriodProvider: React.FC<{ children: React.ReactNode }> = (
       try {
         const periods = await getPlanningPeriods();
         setAllPeriods(periods);
+        
+        // La création automatique de période par défaut a été supprimée
       } catch (error) {
         console.error('Error loading planning periods:', error);
       } finally {
+        // Toujours terminer l'état de chargement, même en cas d'erreur
         setIsLoading(false);
       }
     };

@@ -1,0 +1,97 @@
+/* Styles pour l'affichage des plannings */
+
+.planning-months-container {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(156, 163, 175, 0.5) rgba(229, 231, 235, 0.5);
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.planning-months-container::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+.planning-months-container::-webkit-scrollbar-track {
+  background: rgba(229, 231, 235, 0.5);
+  border-radius: 4px;
+  border: none;
+}
+
+.planning-months-container::-webkit-scrollbar-thumb {
+  background-color: rgba(156, 163, 175, 0.5);
+  border-radius: 4px;
+  border: none;
+}
+
+.planning-months-container::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(107, 114, 128, 0.7);
+}
+
+/* Supprimer toute bordure bleue potentielle */
+.planning-months-container * {
+  outline: none !important;
+}
+
+.month-table-wrapper {
+  display: inline-block;
+  vertical-align: top;
+  transition: transform 0.2s ease;
+}
+
+.month-table-wrapper:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* Animation pour les cellules du planning */
+@keyframes highlight-cell {
+  0% {
+    box-shadow: 0 0 0 2px rgba(79, 70, 229, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.5);
+  }
+  100% {
+    box-shadow: 0 0 0 2px rgba(79, 70, 229, 0);
+  }
+}
+
+.planning-cell-highlight {
+  animation: highlight-cell 1s ease-in-out;
+}
+
+/* Styles pour les badges */
+.badge-appear {
+  animation: badge-appear 0.3s ease-out forwards;
+}
+
+@keyframes badge-appear {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Styles pour les transitions de cellules */
+.cell-transition {
+  transition: background-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* Style spécifique pour améliorer la visibilité des barres de désiderata */
+.desiderata-bar {
+  z-index: 50 !important;
+  position: absolute !important;
+  height: 3px !important;
+  width: 100% !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  border-radius: 1px !important;
+  opacity: 0.9 !important;
+}

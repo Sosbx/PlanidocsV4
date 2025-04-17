@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Calendar, Clock, Repeat, Trash2 } from 'lucide-react';
-import { removeShiftExchange, getShiftExchanges, subscribeToShiftExchanges } from '../../lib/firebase/shifts';
+import { removeShiftExchange, getShiftExchanges, subscribeToShiftExchanges } from '../../lib/firebase/exchange';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useAuth } from '../../features/auth';
@@ -73,7 +73,7 @@ const CommentModal: React.FC<CommentModalProps> = ({
     
     // S'abonner aux changements en temps réel des échanges
     const unsubscribe = subscribeToShiftExchanges((exchangeData) => {
-      setExchanges(exchangeData);
+      setExchanges(exchangeData as any);
       
       // Vérifier si la garde est dans la bourse aux gardes
       const isExchanged = exchangeData.some(e => 

@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { toggleInterest, getShiftExchanges } from '../../../lib/firebase/shifts';
+import { toggleInterest, getShiftExchanges } from '../../../lib/firebase/exchange';
 import { useAuth } from '../../../features/auth/hooks';
 import { useConflictCheck } from './';
 import type { ShiftExchange } from '../types';
@@ -131,7 +131,34 @@ export const useShiftInteraction = (
       return;
     }
 
-    const { hasConflict, conflictDetails } = await checkForConflict(exchange);
+    // Vérifier s'il y a un conflit en utilisant la méthode de useShiftExchangeData
+    const { getGeneratedPlanning } = await import('../../../lib/firebase/planning');
+    const planning = await getGeneratedPlanning(user.id);
+    
+    const assignmentKey = `${exchange.date}-${exchange.period}`;
+    
+    // Vérifier dans la nouvelle structure avec périodes
+    let hasConflict = false;
+    let conflictShiftType = '';
+    
+    if (planning && planning.periods) {
+      for (const periodId in planning.periods) {
+        const periodData = planning.periods[periodId];
+        if (periodData && periodData.assignments && periodData.assignments[assignmentKey]) {
+          hasConflict = true;
+          conflictShiftType = periodData.assignments[assignmentKey].shiftType;
+          break;
+        }
+      }
+    }
+    
+    const conflictDetails = hasConflict ? {
+      date: exchange.date,
+      period: exchange.period,
+      shiftType: conflictShiftType
+    } : undefined;
+    
+    console.log("Vérification de conflit pour", exchange.date, exchange.period, ":", hasConflict, conflictDetails);
     const isAlreadyInterested = exchange.interestedUsers?.includes(user.id);
 
     // Si l'utilisateur a déjà manifesté son intérêt, permettre de retirer l'intérêt même en cas de conflit

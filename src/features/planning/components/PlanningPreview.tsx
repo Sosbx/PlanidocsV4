@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { calculatePercentages } from '../utils/planningUtils';
+import { calculatePercentages } from '../../../utils/planningUtils';
 import DesktopTable from './DesktopTable';
 import CommentModal from './CommentModal';
 import Portal from './Portal';
@@ -35,7 +35,23 @@ const PlanningPreview: React.FC<PlanningPreviewProps> = ({
     position: { x: number; y: number };
   } | null>(null);
   
-  const percentages = calculatePercentages(selections, startDate, endDate);
+  // Force currentPeriodOnly=false pour afficher les désidératas même s'ils correspondent
+  // à des dates en dehors de la plage startDate-endDate (utile après un archivage)
+  const percentages = calculatePercentages(selections, startDate, endDate, false);
+  
+  // Logs détaillés pour comprendre ce qui se passe
+  console.log('PlanningPreview: sélections reçues:', Object.keys(selections).length, 'clés:', Object.keys(selections));
+  console.log('PlanningPreview: dates:', startDate.toISOString(), '-', endDate.toISOString());
+  console.log('PlanningPreview: pourcentages calculés:', percentages);
+  console.log('PlanningPreview: validatedAt:', validatedAt);
+  
+  // Examiner le contenu exact des sélections pour comprendre le problème
+  console.log('PlanningPreview: contenu des sélections:', selections);
+  if (Object.keys(selections).length > 0) {
+    const firstKey = Object.keys(selections)[0];
+    console.log('PlanningPreview: exemple de sélection:', firstKey, selections[firstKey]);
+    console.log('PlanningPreview: type de la première sélection:', selections[firstKey]?.type);
+  }
 
   const handleCellClick = (key: string) => {
     const selection = selections[key];

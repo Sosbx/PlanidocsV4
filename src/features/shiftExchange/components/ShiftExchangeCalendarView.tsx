@@ -85,8 +85,8 @@ const ShiftExchangeCalendarView: React.FC<ShiftExchangeCalendarViewProps> = ({
     });
   };
   
-  // Récupérer les données de désiderata pour l'utilisateur
-  const { selections, isLoading: isLoadingDesiderata } = useDesiderataState();
+  // Récupérer les données de désiderata pour l'utilisateur (incluant les archivés)
+  const { selections, isLoading: isLoadingDesiderata } = useDesiderataState(true);
   
   // Debug - afficher les sélections au chargement du composant
   useEffect(() => {

@@ -1,8 +1,11 @@
 import { useCallback, useState, useEffect, useRef } from 'react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from "../../../lib/firebase/config";
-import type { ShiftExchange } from '../types';
-import type { GeneratedPlanning, ShiftAssignment } from '../../../types/planning';
+import type { ShiftExchange as FeatureShiftExchange } from '../types';
+import type { GeneratedPlanning, ShiftAssignment, ShiftExchange as PlanningShiftExchange } from '../../../types/planning';
+
+// Type union pour accepter les deux types de ShiftExchange
+type ShiftExchange = FeatureShiftExchange | PlanningShiftExchange;
 import { useAuth } from '../../../features/auth/hooks';
 
 interface ConflictResult {
@@ -28,18 +31,24 @@ export default function useConflictCheck(exchanges: ShiftExchange[] = []) {
 
         const planning = planningDoc.data() as GeneratedPlanning;
         const assignmentKey = `${exchange.date}-${exchange.period}`;
-
-        const conflictAssignment = planning.assignments[assignmentKey];
-
-        if (conflictAssignment) {
-          return {
-            hasConflict: true,
-            conflictDetails: {
-              date: exchange.date,
-              period: exchange.period,
-              shiftType: conflictAssignment.shiftType,
-            },
-          };
+        
+        // Chercher l'assignment dans toutes les périodes
+        if (planning.periods) {
+          for (const periodId in planning.periods) {
+            const periodData = planning.periods[periodId];
+            if (periodData && periodData.assignments && periodData.assignments[assignmentKey]) {
+              const conflictAssignment = periodData.assignments[assignmentKey];
+              
+              return {
+                hasConflict: true,
+                conflictDetails: {
+                  date: exchange.date,
+                  period: exchange.period,
+                  shiftType: conflictAssignment.shiftType,
+                },
+              };
+            }
+          }
         }
 
         return { hasConflict: false };
@@ -53,6 +62,40 @@ export default function useConflictCheck(exchanges: ShiftExchange[] = []) {
   
   // Générer un état pour chaque échange et utilisateur intéressé
   const [conflictStates, setConflictStates] = useState<Record<string, Record<string, boolean>>>({});
+  
+  // Fonction pour vérifier manuellement les conflits pour un utilisateur spécifique
+  const checkUserConflict = useCallback(async (userId: string, exchange: ShiftExchange): Promise<{
+    hasConflict: boolean;
+    shiftType?: string;
+  }> => {
+    try {
+      const { getGeneratedPlanning } = await import('../../../lib/firebase/planning');
+      const planning = await getGeneratedPlanning(userId);
+      
+      if (!planning) return { hasConflict: false };
+      
+      const assignmentKey = `${exchange.date}-${exchange.period}`;
+      
+      // Chercher l'assignment dans toutes les périodes
+      if (planning.periods) {
+        for (const periodId in planning.periods) {
+          const periodData = planning.periods[periodId];
+          if (periodData && periodData.assignments && periodData.assignments[assignmentKey]) {
+            const assignment = periodData.assignments[assignmentKey];
+            return { 
+              hasConflict: true, 
+              shiftType: assignment.shiftType 
+            };
+          }
+        }
+      }
+      
+      return { hasConflict: false };
+    } catch (error) {
+      console.error(`Error checking conflict for user ${userId}:`, error);
+      return { hasConflict: false };
+    }
+  }, []);
   const [loading, setLoading] = useState<boolean>(true);
 
   // Référence aux derniers échanges traités pour éviter les boucles infinies
@@ -99,34 +142,37 @@ export default function useConflictCheck(exchanges: ShiftExchange[] = []) {
           
           // Charger les plannings de tous les utilisateurs intéressés
           const interestedUsersPromises = exchange.interestedUsers.map(async (userId) => {
-            const planningDoc = await getDoc(doc(db, 'generated_plannings', userId));
-            if (!planningDoc.exists()) return { userId, hasConflict: false };
-            
-            const planning = planningDoc.data() as GeneratedPlanning;
-            const assignmentKey = `${exchange.date}-${exchange.period}`;
-            // Vérifier si l'utilisateur a une garde à cette date et période
-            const assignment = planning.assignments[assignmentKey];
-            const hasAssignment = assignment !== undefined;
-            
-            // Vérification approfondie: un conflit existe seulement si l'utilisateur a une garde valide avec shiftType
-            const hasConflict = Boolean(
-              hasAssignment && assignment && 
-              typeof assignment === 'object' && 
-              assignment.shiftType && 
-              typeof assignment.shiftType === 'string'
-            );
-            
-            // Log désactivé pour éviter de spammer la console
-            /*
-            if (hasConflict) {
-              console.log(`📊 Conflit détecté pour ${userId} sur ${exchange.date}-${exchange.period}:`, {
-                assignmentType: assignment ? typeof assignment : 'undefined',
-                shiftType: assignment?.shiftType
-              });
+            try {
+              const planningDoc = await getDoc(doc(db, 'generated_plannings', userId));
+              if (!planningDoc.exists()) return { userId, hasConflict: false };
+              
+              const planning = planningDoc.data() as GeneratedPlanning;
+              const assignmentKey = `${exchange.date}-${exchange.period}`;
+              
+              // Vérifier dans la nouvelle structure avec périodes
+              let hasConflict = false;
+              
+              if (planning.periods) {
+                for (const periodId in planning.periods) {
+                  const periodData = planning.periods[periodId];
+                  if (periodData && periodData.assignments && periodData.assignments[assignmentKey]) {
+                    const assignment = periodData.assignments[assignmentKey];
+                    if (assignment && 
+                        typeof assignment === 'object' && 
+                        assignment.shiftType && 
+                        typeof assignment.shiftType === 'string') {
+                      hasConflict = true;
+                      break;
+                    }
+                  }
+                }
+              }
+              
+              return { userId, hasConflict };
+            } catch (error) {
+              console.error(`Error checking conflict for user ${userId}:`, error);
+              return { userId, hasConflict: false };
             }
-            */
-            
-            return { userId, hasConflict };
           });
           
           const results = await Promise.all(interestedUsersPromises);
@@ -150,5 +196,5 @@ export default function useConflictCheck(exchanges: ShiftExchange[] = []) {
     checkAllConflicts();
   }, [exchanges, user]);
 
-  return { checkForConflict, conflictStates, loading };
-};
+  return { checkForConflict, checkUserConflict, conflictStates, loading };
+}
