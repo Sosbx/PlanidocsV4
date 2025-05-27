@@ -8,8 +8,8 @@ import { useSelections } from '../hooks/useSelections';
 import { useAuth } from '../features/auth/hooks';
 import { usePlanningConfig } from '../context/planning/PlanningContext';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
-import type { Selections } from '../types/planning';
 import LoadingSpinner from './common/LoadingSpinner';
+import { useAssociation } from '../context/association/AssociationContext';
 
 interface PlanningTableProps {
   startDate: Date;
@@ -46,6 +46,7 @@ const PlanningTable = forwardRef<PlanningTableRef, PlanningTableProps>(({
   } | null>(null);
   const { user } = useAuth();
   const { config } = usePlanningConfig();
+  const { currentAssociation } = useAssociation();
 
   const handleLimitExceeded = useCallback((message: string) => {
     setToast({ visible: true, message, type: 'error' });
@@ -162,7 +163,9 @@ const PlanningTable = forwardRef<PlanningTableRef, PlanningTableProps>(({
             </div>
             <div className="ml-3">
               <h3 className="text-sm font-medium text-yellow-800">
-                Conformément à la décision en AGE de juin 2022 :
+                {currentAssociation === 'RD' 
+                  ? 'Conformément à la décision en AGE de juin 2022 :' 
+                  : 'Restriction des desidérata pour les fêtes'}
               </h3>
               <div className="mt-2 text-sm text-yellow-700">
                 <p>

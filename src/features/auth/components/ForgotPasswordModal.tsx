@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, AlertCircle, Send } from 'lucide-react';
-import { resetPassword } from '../../../lib/firebase/auth/session';
+import { resetPassword } from '../utils/session';
 
 interface ForgotPasswordModalProps {
   isOpen: boolean;

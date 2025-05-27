@@ -81,7 +81,7 @@ const PlanningSelectionCell: React.FC<PlanningSelectionCellProps> = ({
 
   const getCellClasses = () => {
     // Classes de base qui s'appliquent à toutes les cellules
-    const baseClasses = `${selection.comment ? 'border-2 border-black' : 'border'} px-2 py-1 text-center select-none transition-colors`;
+    const baseClasses = `${selection.comment ? 'border-2 border-black' : 'border'} px-2 text-center select-none transition-colors`;
     const cursorClasses = readOnly || isBlocked ? 'cursor-not-allowed' : 'cursor-pointer';
     const commentCursor = selection?.type !== null ? 'context-menu' : 'default';
     const hasComment = Boolean(selection.comment);
@@ -95,9 +95,11 @@ const PlanningSelectionCell: React.FC<PlanningSelectionCellProps> = ({
     // 0. Si la date est bloquée, appliquer un style spécial
     if (isBlocked) {
       if (!selection?.type) {
-        classes.push('relative bg-orange-100');
+        // Cellule bloquée sans sélection - même couleur que la bannière
+        classes.push('relative bg-yellow-50 border-yellow-200');
       } else {
-        classes.push('opacity-70');
+        // Cellule bloquée avec sélection - garder la couleur mais plus pâle
+        classes.push('opacity-60');
       }
     }
     
@@ -160,23 +162,87 @@ const PlanningSelectionCell: React.FC<PlanningSelectionCellProps> = ({
         className={getCellClasses()}
         title={readOnly ? selection.comment : isBlocked ? 'Cette date est bloquée' : undefined}
       >
-        <span className="relative inline-block w-full">
-          <span className="font-medium">
-            {selection?.type === 'primary' && 'P'}
-            {selection?.type === 'secondary' && 'S'}
-          </span>
-          {selection.comment && (
-            <MessageSquare className="absolute -top-1 -right-1 h-3 w-3 text-yellow-600" />
+        <div className="relative flex items-center justify-center w-full py-1">
+          {/* Contenu normal de la cellule */}
+          {!isBlocked && (
+            <span className="font-medium">
+              {selection?.type === 'primary' && 'P'}
+              {selection?.type === 'secondary' && 'S'}
+            </span>
           )}
+          
+          {/* Icône de commentaire */}
+          {selection.comment && !isBlocked && (
+            <MessageSquare className="absolute -top-2 -right-1 h-3 w-3 text-yellow-600" />
+          )}
+          
+          {/* Symbole de blocage - centrage parfait */}
           {isBlocked && !selection?.type && (
-            <div className="absolute inset-0 bg-orange-100 flex items-center justify-center">
-              <svg width="16" height="16" viewBox="0 0 16 16" className="text-orange-500">
-                <circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" strokeWidth="1" />
-                <line x1="4" y1="8" x2="12" y2="8" stroke="currentColor" strokeWidth="1.5" />
-              </svg>
-            </div>
+            <svg 
+              width="16" 
+              height="16" 
+              viewBox="0 0 16 16" 
+              className="text-yellow-600 block"
+            >
+              <circle 
+                cx="8" 
+                cy="8" 
+                r="7" 
+                fill="none" 
+                stroke="currentColor" 
+                strokeWidth="1.5" 
+              />
+              <line 
+                x1="3.5" 
+                y1="8" 
+                x2="12.5" 
+                y2="8" 
+                stroke="currentColor" 
+                strokeWidth="2" 
+                transform="rotate(-45 8 8)"
+              />
+            </svg>
           )}
-        </span>
+          
+          {/* Si bloqué avec sélection, afficher les deux */}
+          {isBlocked && selection?.type && (
+            <>
+              <span className="font-medium opacity-50">
+                {selection?.type === 'primary' && 'P'}
+                {selection?.type === 'secondary' && 'S'}
+              </span>
+              <svg 
+                width="18" 
+                height="18" 
+                viewBox="0 0 18 18" 
+                className="text-yellow-600 opacity-70 absolute"
+              >
+                <circle 
+                  cx="9" 
+                  cy="9" 
+                  r="7.5" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  strokeWidth="2" 
+                />
+                <line 
+                  x1="3.5" 
+                  y1="9" 
+                  x2="14.5" 
+                  y2="9" 
+                  stroke="currentColor" 
+                  strokeWidth="2.5" 
+                  transform="rotate(-45 9 9)"
+                />
+              </svg>
+            </>
+          )}
+          
+          {/* Icône de commentaire pour les cellules bloquées avec sélection */}
+          {selection.comment && isBlocked && selection?.type && (
+            <MessageSquare className="absolute -top-2 -right-1 h-3 w-3 text-yellow-600 z-10" />
+          )}
+        </div>
       </td>
 
       {isModalOpen && (

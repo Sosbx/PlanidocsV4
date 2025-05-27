@@ -5,12 +5,13 @@ import { usePlanningConfig } from '../context/planning/PlanningContext';
 import ConfigurationDisplay from '../components/ConfigurationDisplay';
 import ConfirmationModal from '../components/ConfirmationModal';
 import UserStatusList from '../features/users/components/UserStatusList';
-import { useUsers } from '../features/auth/hooks';
+import { useUsers } from '../features/auth/hooks/useUsers';
 import { UserExtended, User } from '../features/users/types';
 import { UserRole, UserStatus } from '../features/auth/types';
 import { ShiftAssignment } from '../types/planning';
 import { loadPdfExporter } from '../utils/lazyExporters';
 import { getDesiderata, getAllDesiderata } from '../lib/firebase/desiderata';
+import { removeBlockedDatesDesiderata } from '../lib/firebase/desiderataBlockCleanup';
 import Toast from '../components/Toast';
 import PlanningPreview from '../features/planning/components/PlanningPreview';
 import LoadingSpinner from '../components/common/LoadingSpinner';
@@ -393,22 +394,66 @@ const AdminPage: React.FC = () => {
     try {
       // S'assurer que les deux propriétés sont toujours définies comme des booléens
       const currentUserBlocks = config.holidayBlocks?.[userId] || { blockChristmas: false, blockNewYear: false };
+      const newUserBlocks = {
+        blockChristmas: blockType === 'blockChristmas' ? value : Boolean(currentUserBlocks.blockChristmas),
+        blockNewYear: blockType === 'blockNewYear' ? value : Boolean(currentUserBlocks.blockNewYear)
+      };
+      
       const updatedHolidayBlocks = {
         ...config.holidayBlocks,
-        [userId]: {
-          blockChristmas: blockType === 'blockChristmas' ? value : Boolean(currentUserBlocks.blockChristmas),
-          blockNewYear: blockType === 'blockNewYear' ? value : Boolean(currentUserBlocks.blockNewYear)
-        }
+        [userId]: newUserBlocks
       };
 
+      // Variables pour stocker les résultats de la suppression
+      let removedCount = 0;
+      let hasErrors = false;
+
+      // Si on active un blocage, supprimer automatiquement les desiderata de ces dates
+      if (value) {
+        setToast({
+          visible: true,
+          message: 'Suppression des desiderata bloqués en cours...',
+          type: 'success'
+        });
+
+        // Supprimer les desiderata des dates bloquées
+        const { removed, errors } = await removeBlockedDatesDesiderata(
+          userId, 
+          newUserBlocks,
+          currentAssociation
+        );
+
+        removedCount = removed.length;
+        hasErrors = errors.length > 0;
+
+        if (removed.length > 0) {
+          console.log(`Desiderata supprimés pour ${userId}:`, removed);
+        }
+
+        if (errors.length > 0) {
+          console.error('Erreurs lors de la suppression des desiderata:', errors);
+        }
+      }
+
+      // Mettre à jour la configuration
       await updateConfig({
         ...config,
         holidayBlocks: updatedHolidayBlocks
       });
 
+      // Message de confirmation approprié
+      const blockName = blockType === 'blockChristmas' ? 'Noël' : 'Nouvel An';
+      const action = value ? 'bloqué' : 'débloqué';
+      let message = `${blockName} ${action} avec succès`;
+      
+      // Ajouter le nombre de suppressions au message si applicable
+      if (value && removedCount > 0) {
+        message += ` (${removedCount} desiderata supprimé${removedCount > 1 ? 's' : ''})`;
+      }
+
       setToast({
         visible: true,
-        message: 'Blocage mis à jour avec succès',
+        message,
         type: 'success'
       });
     } catch (error) {

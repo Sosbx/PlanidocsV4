@@ -11,7 +11,7 @@ import {
   XCircle
 } from 'lucide-react';
 import { useAuth } from '../features/auth/hooks';
-import { resetPassword } from '../lib/firebase/auth/session';
+import { resetPassword } from '../features/auth/utils/session';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import { NotificationType } from '../lib/firebase/notifications';
 

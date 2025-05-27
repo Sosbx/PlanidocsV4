@@ -9,7 +9,7 @@ import {
   signInUser, 
   signOutUser, 
   resetPassword
-} from '../../lib/firebase/auth/session';
+} from '../../features/auth/utils/session';
 
 // Ré-export des fonctions avec des noms plus standards
 export const signIn = signInUser;
