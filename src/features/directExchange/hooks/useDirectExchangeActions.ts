@@ -67,6 +67,25 @@ export const useDirectExchangeActions = (options?: UseDirectExchangeActionsOptio
       
       console.log('Assignation normalisée:', normalizedAssignment);
       
+      // Essayer de récupérer l'utilisateur directement du contexte d'authentification
+      let userId = normalizedAssignment.userId;
+      
+      // Si l'utilisateur n'est pas disponible dans l'assignation, utiliser une autre approche
+      if (!userId) {
+        try {
+          // Importer firebase auth directement
+          const { getAuth } = await import('firebase/auth');
+          userId = getAuth().currentUser?.uid;
+          console.log("Utilisateur récupéré depuis Firebase Auth:", userId);
+        } catch (authError) {
+          console.error("Erreur lors de la récupération de l'utilisateur:", authError);
+        }
+      }
+      
+      if (!userId) {
+        throw new Error("Impossible de déterminer l'utilisateur courant. Veuillez vous reconnecter.");
+      }
+      
       // Récupérer l'échange existant s'il y en a un
       const existingExchange = selectedCell.existingExchanges && selectedCell.existingExchanges.length > 0
         ? selectedCell.existingExchanges[0]
@@ -75,15 +94,18 @@ export const useDirectExchangeActions = (options?: UseDirectExchangeActionsOptio
       // Préparer les données pour la fonction unifiée
       const exchangeData = {
         exchangeId: existingExchange?.id,
-        userId: normalizedAssignment.userId,
+        // Assurer que userId est toujours défini avec la valeur récupérée
+        userId: userId,
         date: normalizedAssignment.date,
         period: normalizedAssignment.period,
-        shiftType: normalizedAssignment.shiftType,
-        timeSlot: normalizedAssignment.timeSlot,
+        shiftType: normalizedAssignment.shiftType || 'regular',
+        timeSlot: normalizedAssignment.timeSlot || 'Full Day',
         comment: comment,
         operationType: existingExchange?.operationType,
         operationTypes: existingExchange?.operationTypes || selectedCell.operationTypes
       };
+      
+      console.log('Données pour création d\'échange:', exchangeData);
       
       // Appeler la fonction unifiée
       const result = await submitDirectExchange(

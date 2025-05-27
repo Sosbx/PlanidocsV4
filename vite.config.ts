@@ -4,67 +4,65 @@ import { resolve } from 'path';
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react({
+      // Force le mode classic JSX transform pour éviter les problèmes de runtime
+      jsxRuntime: 'automatic'
+    })
+  ],
   resolve: {
     alias: {
       '@': resolve(__dirname, './src'),
     },
   },
+  // Optimisation des dépendances
   optimizeDeps: {
-    include: ['react', 'react-dom', 'react-router-dom'],
+    // Force l'inclusion de toutes les dépendances React
+    include: [
+      'react',
+      'react-dom',
+      'react-dom/client',
+      'react/jsx-runtime',
+      'react/jsx-dev-runtime',
+      'react-router-dom',
+      '@remix-run/router'
+    ],
+    // Force le pre-bundling
+    force: true
   },
   build: {
-    chunkSizeWarningLimit: 1000, // Augmenter la limite pour éviter les avertissements mineurs
-    reportCompressedSize: true,
+    // Augmenter la limite pour éviter les warnings
+    chunkSizeWarningLimit: 1000,
+    // Désactiver le source map en production
+    sourcemap: false,
+    // Configuration Rollup
     rollupOptions: {
       output: {
-        // Ensure React is loaded before any chunks that depend on it
-        manualChunks(id) {
-          // Vérifier si le chemin contient node_modules
-          const isNodeModule = id.includes('node_modules/');
-          
-          // Tous les packages React et dépendants
-          if (id.includes('node_modules/react') || 
-              id.includes('node_modules/react-dom') || 
-              id.includes('node_modules/react-router') ||
-              id.includes('node_modules/@babel/runtime') ||
-              id.includes('node_modules/scheduler') ||
-              id.includes('node_modules/prop-types') ||
-              id.includes('node_modules/lucide-react') ||
-              id.includes('node_modules/@remix-run')) {
-            return 'vendor-react';
-          }
-          
-          // Context et components React - toujours inclure dans le vendor-react
-          if (!isNodeModule && (
-              id.includes('/src/context/') || 
-              id.includes('/src/components/'))) {
-            return 'vendor-react';
-          }
-          
-          // Firebase
-          if (id.includes('node_modules/firebase')) {
-            return 'vendor-firebase';
-          }
-          
-          // Date-fns
-          if (id.includes('node_modules/date-fns')) {
-            return 'vendor-date';
-          }
-          
-          // PDF et exports
-          if (id.includes('node_modules/jspdf') || 
-              id.includes('node_modules/jszip') || 
-              id.includes('node_modules/html2canvas') ||
-              id.includes('node_modules/xlsx')) {
-            return 'vendor-export';
-          }
-          
-          // Désactiver la séparation en chunks pour les pages pour éviter les problèmes JSX
-          // Nous allons plutôt utiliser React.lazy et Suspense dans l'application
-          // pour le code splitting au niveau des routes
-        }
+        // Stratégie simple: un seul vendor chunk pour toutes les dépendances
+        manualChunks: {
+          // Un seul chunk vendor avec TOUTES les dépendances
+          vendor: [
+            'react',
+            'react-dom',
+            'react-dom/client',
+            'react/jsx-runtime',
+            'react/jsx-dev-runtime',
+            'react-router-dom',
+            '@remix-run/router'
+          ]
+        },
+        // Assurer que les imports sont corrects
+        entryFileNames: 'assets/[name].[hash].js',
+        chunkFileNames: 'assets/[name].[hash].js',
+        assetFileNames: 'assets/[name].[hash].[ext]'
       }
-    }
+    },
+    // Compatibilité navigateur
+    target: 'es2015'
+  },
+  // Server config pour le développement
+  server: {
+    port: 5173,
+    host: true
   }
 });

@@ -1,10 +1,10 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import type { User, ManagementUser } from '../../features/users/types';
-import { collection, doc, getDocs, getDoc, setDoc, updateDoc, deleteDoc, query, where, onSnapshot } from 'firebase/firestore';
+import type { User } from '../../features/users/types';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from "../../lib/firebase/config";
-import { deleteUser as deleteAuthUser, signInWithEmailAndPassword } from 'firebase/auth';
-import { getUsers, updateUser, deleteUser } from '../../lib/firebase/users';
-import { createUser } from '../../lib/firebase/auth/userCreation';
+import { updateUser, deleteUser, createUser as createUserInFirestore, getCollectionName } from '../../lib/firebase/users';
+import { useAssociation } from '../association/AssociationContext';
+import { useAuth } from '../../features/auth/hooks';
 
 /**
  * Type pour le contexte utilisateur
@@ -28,39 +28,101 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { currentAssociation } = useAssociation();
+  const { user: currentUser } = useAuth();
 
   useEffect(() => {
-    // Écouter les changements dans la collection users
-    const unsubscribe = onSnapshot(
-      collection(db, 'users'),
-      (snapshot) => {
-        const updatedUsers = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        } as User));
-        setUsers(updatedUsers);
-        setLoading(false);
-        setError(null);
-      },
-      (error) => {
-        console.error('Error listening to users:', error);
-        setError('Erreur lors du chargement des utilisateurs');
-        setLoading(false);
+    // Fonction pour charger les utilisateurs d'une association spécifique
+    const loadUsersForAssociation = (associationId: string) => {
+      console.log(`UserContext: Chargement des utilisateurs pour l'association ${associationId}`);
+
+      // Obtenir le nom de la collection en fonction de l'association
+      const usersCollection = getCollectionName('users', associationId);
+      console.log(`UserContext: Utilisation de la collection ${usersCollection}`);
+
+      // Pour Rive Droite, nous devons inclure les utilisateurs sans associationId
+      if (associationId === 'RD') {
+        // Écouter les changements dans la collection users (Rive Droite)
+        // Inclure les utilisateurs avec associationId=RD OU sans associationId
+        return onSnapshot(
+          collection(db, usersCollection),
+          (snapshot) => {
+            const updatedUsers = snapshot.docs
+              .map(doc => ({
+                id: doc.id,
+                ...doc.data()
+              } as User))
+              // Filtrer pour inclure les utilisateurs avec associationId=RD OU sans associationId
+              .filter(user => !user.associationId || user.associationId === 'RD');
+            
+            console.log(`UserContext: ${updatedUsers.length} utilisateurs chargés pour l'association ${associationId}`);
+            setUsers(updatedUsers);
+            setLoading(false);
+            setError(null);
+          },
+          (error) => {
+            console.error(`Error listening to users for association ${associationId}:`, error);
+            setError('Erreur lors du chargement des utilisateurs');
+            setLoading(false);
+          }
+        );
+      } else {
+        // Pour les autres associations (comme RG), filtrer strictement par associationId
+        return onSnapshot(
+          query(collection(db, usersCollection), where("associationId", "==", associationId)),
+          (snapshot) => {
+            const updatedUsers = snapshot.docs.map(doc => ({
+              id: doc.id,
+              ...doc.data()
+            } as User));
+            console.log(`UserContext: ${updatedUsers.length} utilisateurs chargés pour l'association ${associationId}`);
+            setUsers(updatedUsers);
+            setLoading(false);
+            setError(null);
+          },
+          (error) => {
+            console.error(`Error listening to users for association ${associationId}:`, error);
+            setError('Erreur lors du chargement des utilisateurs');
+            setLoading(false);
+          }
+        );
       }
-    );
+    };
+
+    // Par défaut, charger les utilisateurs de Rive Droite
+    let unsubscribe = loadUsersForAssociation('RD');
+
+    // Si l'utilisateur est connecté, charger les utilisateurs de son association
+    if (currentUser && currentUser.associationId) {
+      // Annuler l'abonnement précédent
+      unsubscribe();
+      // Charger les utilisateurs de l'association de l'utilisateur connecté
+      unsubscribe = loadUsersForAssociation(currentUser.associationId);
+    }
 
     return () => unsubscribe();
-  }, []);
+  }, [currentUser, currentAssociation]);
 
   const contextValue: UserContextType = {
     users,
     loading,
     error,
     addUser: async (userData) => {
+      // Déterminer l'association à utiliser
+      const associationId = currentUser?.associationId || 'RD';
+
       setLoading(true);
       setError(null);
       try {
-        const newUser = await createUser(userData);
+        // Ajouter l'associationId et hasValidatedPlanning aux données utilisateur
+        const userDataWithAssociation = {
+          ...userData,
+          associationId: associationId,
+          hasValidatedPlanning: false
+        };
+
+        // Créer l'utilisateur dans Firestore avec la bonne association
+        const newUser = await createUserInFirestore(userDataWithAssociation, associationId);
         setUsers(prev => [...prev, newUser]);
       } catch (error: any) {
         console.error('Error adding user:', error);
@@ -71,9 +133,13 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     },
     updateUser: async (id, userData) => {
+      // Déterminer l'association à utiliser
+      const associationId = currentUser?.associationId || 'RD';
+
       setError(null);
       try {
-        await updateUser(id, userData);
+        // Mettre à jour l'utilisateur dans Firestore avec la bonne association
+        await updateUser(id, userData, associationId);
         setUsers(prev => prev.map(user => 
           user.id === id ? { ...user, ...userData } : user
         ));
@@ -84,9 +150,13 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     },
     deleteUser: async (id) => {
+      // Déterminer l'association à utiliser
+      const associationId = currentUser?.associationId || 'RD';
+
       setError(null);
       try {
-        await deleteUser(id);
+        // Supprimer l'utilisateur dans Firestore avec la bonne association
+        await deleteUser(id, associationId);
         setUsers(prev => prev.filter(user => user.id !== id));
       } catch (error: any) {
         console.error('Error deleting user:', error);

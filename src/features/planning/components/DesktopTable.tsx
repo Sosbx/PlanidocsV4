@@ -16,6 +16,7 @@ interface DesktopTableProps {
   activeModal: { cellKey: string; position: { x: number; y: number } } | null;
   onCloseModal: () => void;
   readOnly?: boolean;
+  isDateBlocked?: (date: Date) => boolean;
 }
 
 const DesktopTable: React.FC<DesktopTableProps> = ({
@@ -28,7 +29,8 @@ const DesktopTable: React.FC<DesktopTableProps> = ({
   onOpenModal,
   activeModal,
   onCloseModal,
-  readOnly = false
+  readOnly = false,
+  isDateBlocked
 }) => {
   const months = getMonthsInRange(startDate, endDate);
 
@@ -85,6 +87,7 @@ const DesktopTable: React.FC<DesktopTableProps> = ({
                   </td>
                   {['M', 'AM', 'S'].map(period => {
                     const cellKey = `${dateStr}-${period}`;
+                    const isBlocked = isDateBlocked ? isDateBlocked(day) : false;
                     return (
                       <PlanningSelectionCell
                         key={cellKey}
@@ -98,6 +101,7 @@ const DesktopTable: React.FC<DesktopTableProps> = ({
                         onCloseModal={onCloseModal}
                         isGrayedOut={grayedOut}
                         readOnly={readOnly}
+                        isBlocked={isBlocked}
                       />
                     );
                   })}

@@ -59,8 +59,14 @@ export const useDirectProposalActions = (
     onComplete?: () => void
   ) => {
     try {
-      // Accepter la proposition
+      console.log("🔄 Acceptation de la proposition d'échange:", proposalId);
+      console.log("📋 Échange associé:", exchange);
+      
+      // Accepter la proposition - cette fonction déclenchera le TransactionService
+      // qui mettra à jour les plannings des médecins dans COLLECTIONS.PLANNINGS
+      console.log("🔄 Appel de acceptProposal pour déclencher le TransactionService");
       await acceptProposal(proposalId);
+      console.log("✅ Transaction terminée avec succès");
       
       setToast({
         visible: true,
@@ -625,13 +631,26 @@ export const useDirectProposalActions = (
         // 1. Accepter la proposition avec la garde sélectionnée
         const proposalRef = doc(db, DIRECT_EXCHANGE_PROPOSALS, proposalDocId);
         
-        // Mettre à jour la proposition pour n'inclure que la garde sélectionnée
-        // Convertir la période en ShiftPeriod
-        transaction.update(proposalRef, {
-          proposedShifts: [shiftWithCorrectPeriodType],
-          status: 'accepted',
-          lastModified: serverTimestamp()
-        });
+      // Mettre à jour la proposition pour n'inclure que la garde sélectionnée
+      // S'assurer que proposalType est défini
+      const proposalType = targetProposal.proposalType || 'exchange';
+      
+      console.log('Mise à jour de la proposition avec les données:', {
+        proposedShifts: [shiftWithCorrectPeriodType],
+        status: 'accepted',
+        proposalType: proposalType,
+      });
+      
+      // Mise à jour manuelle de la proposition pour conserver seulement la garde sélectionnée
+      transaction.update(proposalRef, {
+        proposedShifts: [shiftWithCorrectPeriodType],
+        proposalType: proposalType, // Ajouter le champ proposalType pour éviter undefined
+        lastModified: serverTimestamp()
+      });
+      
+      // IMPORTANT: Le statut ne doit PAS être mis à jour ici manuellement
+      // Il sera mis à jour via la transaction service dans acceptProposal
+      // qui effectuera aussi les transferts de planning
         
         // 2. Si d'autres gardes existent, créer une nouvelle proposition pour elles
         if (otherShifts.length > 0) {
@@ -650,20 +669,39 @@ export const useDirectProposalActions = (
             period: stringToPeriod(targetProposal.targetShift.period)
           };
           
+          // S'assurer que tous les champs requis sont définis
+          const proposalType = targetProposal.proposalType || 'exchange';
+          const comment = targetProposal.comment || '';
+          
+          console.log('Création d\'une nouvelle proposition pour les gardes restantes:', {
+            targetExchangeId: targetProposal.targetExchangeId,
+            targetUserId: targetProposal.targetUserId,
+            proposingUserId: targetProposal.proposingUserId,
+            proposalType: proposalType,
+            comment: comment,
+            shiftsCount: normalizedOtherShifts.length
+          });
+          
           transaction.set(newProposalRef, {
             targetExchangeId: targetProposal.targetExchangeId,
             targetUserId: targetProposal.targetUserId,
             proposingUserId: targetProposal.proposingUserId,
-            proposalType: targetProposal.proposalType,
+            proposalType: proposalType, // Utiliser la valeur par défaut si undefined
             targetShift: normalizedTargetShift,
             proposedShifts: normalizedOtherShifts,
-            comment: targetProposal.comment,
+            comment: comment, // Utiliser une chaîne vide si undefined
             status: 'pending',
             createdAt: serverTimestamp(),
             lastModified: serverTimestamp()
           });
         }
       });
+      
+      // ÉTAPE CRUCIALE : Appeler acceptProposal pour déclencher la transaction de transfert de planning
+      console.log("🔄 Appel de la fonction acceptProposal pour déclencher le TransactionService");
+      const { acceptProposal } = await import('../../../lib/firebase/directExchange/directProposalOperations');
+      await acceptProposal(proposalId);
+      console.log("✅ Fonction acceptProposal exécutée avec succès");
       
       setToast({
         visible: true,

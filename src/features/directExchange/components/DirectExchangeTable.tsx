@@ -59,6 +59,7 @@ const DirectExchangeTable: React.FC<DirectExchangeTableProps> = ({
   const [dates, setDates] = useState<Date[]>([]);
   // État pour forcer le rafraîchissement du composant
   const [refreshKey, setRefreshKey] = useState<number>(0);
+  const [isLegendExpanded, setIsLegendExpanded] = useState(true); // État pour la légende rétractable
   
   // Référence pour suivre les valeurs précédentes des props
   const prevPropsRef = useRef<{
@@ -288,26 +289,26 @@ const DirectExchangeTable: React.FC<DirectExchangeTableProps> = ({
     let badgeClass = '';
     
     if (hasExchange && hasGive && hasReplacement) {
-      badgeLabel = 'CER';
-      badgeClass = 'bg-amber-100 text-amber-700';
+      badgeLabel = 'CER'; // Changé de ECR à CER pour être cohérent
+      badgeClass = 'bg-amber-100 text-amber-700'; // Couleur harmonisée
     } else if (hasExchange && hasGive) {
-      badgeLabel = 'CE';
-      badgeClass = 'bg-orange-100 text-orange-700';
+      badgeLabel = 'CE'; // CE est correct, garde l'ordre
+      badgeClass = 'bg-orange-100 text-orange-700'; // Couleur harmonisée
     } else if (hasExchange && hasReplacement) {
-      badgeLabel = 'ER';
-      badgeClass = 'bg-lime-100 text-lime-700';
+      badgeLabel = 'ER'; // ER est correct, garde l'ordre
+      badgeClass = 'bg-lime-100 text-lime-700'; // Couleur harmonisée
     } else if (hasGive && hasReplacement) {
-      badgeLabel = 'CR';
-      badgeClass = 'bg-amber-100 text-amber-700';
+      badgeLabel = 'CR'; // CR est correct, garde l'ordre
+      badgeClass = 'bg-amber-100 text-amber-700'; // Couleur harmonisée
     } else if (hasExchange) {
-      badgeLabel = 'E';
-      badgeClass = 'bg-green-100 text-green-700';
+      badgeLabel = 'E'; // E est correct, garde l'ordre
+      badgeClass = 'bg-green-100 text-green-700'; // Couleur cohérente
     } else if (hasGive) {
-      badgeLabel = 'C';
-      badgeClass = 'bg-yellow-100 text-yellow-700';
+      badgeLabel = 'C'; // C est correct, garde l'ordre
+      badgeClass = 'bg-yellow-100 text-yellow-700'; // Couleur cohérente
     } else if (hasReplacement) {
-      badgeLabel = 'R';
-      badgeClass = 'bg-amber-100 text-amber-700';
+      badgeLabel = 'R'; // R est correct, garde l'ordre
+      badgeClass = 'bg-amber-100 text-amber-700'; // Couleur cohérente
     }
     
     // Badge pour les gardes de l'utilisateur
@@ -320,17 +321,34 @@ const DirectExchangeTable: React.FC<DirectExchangeTableProps> = ({
         
         {/* Badge pour les propositions reçues */}
         {hasProposals && (
-          <div className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 rounded-full border border-white shadow-sm"></div>
+          <div 
+            className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 rounded-full border border-white shadow-sm" 
+            title="Vous avez reçu des propositions pour cette garde"
+          ></div>
         )}
         
         {/* Badge pour les propositions entrantes */}
         {hasIncomingProposals && (
-          <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border border-white shadow-sm animate-pulse"></div>
+          <div 
+            className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border border-white shadow-sm animate-pulse" 
+            title="Vous avez des propositions en attente de validation pour cette garde"
+          ></div>
         )}
         
         {/* Badge pour les types d'opération */}
         {badgeLabel && (
-          <div className={`absolute -top-1 -left-1 w-4 h-4 ${badgeClass} rounded-full border border-white shadow-sm flex items-center justify-center`}>
+          <div 
+            className={`absolute -top-1 -left-1 w-4 h-4 ${badgeClass} rounded-full border border-white shadow-sm flex items-center justify-center`}
+            title={
+              badgeLabel === 'ECR' ? 'Échange, Cession et Remplacement - Garde proposée avec toutes les options' :
+              badgeLabel === 'EC' ? 'Échange et Cession - Vous proposez cette garde avec ces deux options' :
+              badgeLabel === 'ER' ? 'Échange et Remplacement - Garde proposée pour échange ou aux remplaçants' :
+              badgeLabel === 'CR' ? 'Cession et Remplacement - Garde proposée en cession ou aux remplaçants' :
+              badgeLabel === 'E' ? 'Échange - Vous proposez de permuter cette garde contre une autre' :
+              badgeLabel === 'C' ? 'Cession - Vous proposez cette garde sans en récupérer une autre' :
+              badgeLabel === 'R' ? 'Remplacement - Vous proposez cette garde aux remplaçants' : ''
+            }
+          >
             <span className="text-[8px] font-bold">{badgeLabel}</span>
           </div>
         )}
@@ -342,10 +360,33 @@ const DirectExchangeTable: React.FC<DirectExchangeTableProps> = ({
   const renderProposedShiftBadges = (exchanges: ShiftExchange[], date: Date) => {
     if (exchanges.length === 0) return null;
     
+    // Filtrer pour exclure :
+    // 1. Les gardes de l'utilisateur actuel
+    // 2. Les gardes proposées uniquement aux remplaçants (si l'utilisateur n'est pas remplaçant)
+    const filteredExchanges = exchanges.filter(exchange => {
+      if (!user) return false;
+      
+      // Vérifier si cette garde est destinée uniquement aux remplaçants
+      const isReplacementOnly = exchange.operationTypes && 
+                              exchange.operationTypes.length === 1 && 
+                              exchange.operationTypes[0] === 'replacement';
+      
+      // Vérifier si l'utilisateur est un remplaçant
+      const isUserReplacement = user.roles?.isReplacement === true;
+      
+      return (
+        exchange.userId !== user.id &&
+        // N'afficher les gardes de remplacement que si l'utilisateur est un remplaçant
+        (!isReplacementOnly || (isReplacementOnly && isUserReplacement))
+      );
+    });
+    
+    if (filteredExchanges.length === 0) return null;
+    
     // Regrouper les échanges par utilisateur, date et période pour éviter les doublons
     const groupedExchanges: Record<string, ShiftExchange[]> = {};
     
-    exchanges.forEach(exchange => {
+    filteredExchanges.forEach(exchange => {
       const key = `${exchange.userId}-${exchange.date}-${exchange.period}`;
       if (!groupedExchanges[key]) {
         groupedExchanges[key] = [];
@@ -412,28 +453,28 @@ const DirectExchangeTable: React.FC<DirectExchangeTableProps> = ({
           let badgeLabel = '';
           let badgeClass = '';
           
-          // Déterminer les badges à afficher selon toutes les combinaisons possibles
+          // Utiliser exactement les mêmes couleurs et ordres de lettres que pour Mes Gardes
           if (hasExchange && hasGive && hasReplacement) {
-            badgeLabel = 'CER';
-            badgeClass = 'bg-amber-100 text-amber-700';
+            badgeLabel = 'CER'; // CER est l'ordre standard
+            badgeClass = 'bg-amber-100 text-amber-700'; // Couleur harmonisée
           } else if (hasExchange && hasGive) {
-            badgeLabel = 'CE';
-            badgeClass = 'bg-orange-100 text-orange-700';
+            badgeLabel = 'CE'; // CE est l'ordre standard
+            badgeClass = 'bg-orange-100 text-orange-700'; // Couleur harmonisée
           } else if (hasExchange && hasReplacement) {
-            badgeLabel = 'ER';
-            badgeClass = 'bg-lime-100 text-lime-700';
+            badgeLabel = 'ER'; // ER est l'ordre standard
+            badgeClass = 'bg-lime-100 text-lime-700'; // Couleur harmonisée  
           } else if (hasGive && hasReplacement) {
-            badgeLabel = 'CR';
-            badgeClass = 'bg-amber-100 text-amber-700';
+            badgeLabel = 'CR'; // CR est l'ordre standard
+            badgeClass = 'bg-amber-100 text-amber-700'; // Couleur harmonisée
           } else if (hasExchange) {
-            badgeLabel = 'E';
-            badgeClass = 'bg-green-100 text-green-700';
+            badgeLabel = 'E'; // Simple E
+            badgeClass = 'bg-green-100 text-green-700'; // Couleur standard
           } else if (hasGive) {
-            badgeLabel = 'C';
-            badgeClass = 'bg-yellow-100 text-yellow-700';
+            badgeLabel = 'C'; // Simple C
+            badgeClass = 'bg-yellow-100 text-yellow-700'; // Couleur standard
           } else if (hasReplacement) {
-            badgeLabel = 'R';
-            badgeClass = 'bg-amber-100 text-amber-700';
+            badgeLabel = 'R'; // Simple R
+            badgeClass = 'bg-amber-100 text-amber-700'; // Couleur standard
           }
           
           // Trouver l'utilisateur qui propose l'échange
@@ -448,23 +489,34 @@ const DirectExchangeTable: React.FC<DirectExchangeTableProps> = ({
               className={`px-1.5 py-1 ${periodClass} rounded cursor-pointer hover:shadow-md transition-all duration-200 relative ${hasUserProposal ? 'ring-1 ring-blue-500' : ''}`}
               onClick={(e) => onProposedShiftClick(e, exchange)}
             >
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-center">
                 <div className="text-xs font-medium">{exchange.shiftType}</div>
-                <div className="text-[10px] text-gray-500 bg-gray-100 rounded-full w-4 h-4 flex items-center justify-center" title={`${proposingUser?.firstName || ''} ${proposingUser?.lastName || ''}`}>
-                  {userInitials}
-                </div>
               </div>
               
               {/* Badge pour le type d'opération */}
               {badgeLabel && (
-                <div className={`absolute -top-1 -right-1 w-4 h-4 ${badgeClass} rounded-full border border-white shadow-sm flex items-center justify-center`}>
+                <div 
+                  className={`absolute -top-1 -right-1 w-4 h-4 ${badgeClass} rounded-full border border-white shadow-sm flex items-center justify-center`}
+                  title={
+                    badgeLabel === 'CER' ? 'Échange, Cession et Remplacement - Garde proposée avec toutes les options' :
+                    badgeLabel === 'CE' ? 'Échange et Cession - Garde proposée avec ces deux options' :
+                    badgeLabel === 'ER' ? 'Échange et Remplacement - Garde proposée pour échange ou aux remplaçants' :
+                    badgeLabel === 'CR' ? 'Cession et Remplacement - Garde proposée en cession ou aux remplaçants' :
+                    badgeLabel === 'E' ? 'Échange - Le médecin propose uniquement un échange pour cette garde' :
+                    badgeLabel === 'C' ? 'Cession - Le médecin souhaite céder cette garde sans en récupérer une autre' :
+                    badgeLabel === 'R' ? 'Remplacement - Garde proposée uniquement aux remplaçants' : ''
+                  }
+                >
                   <span className="text-[8px] font-bold">{badgeLabel}</span>
                 </div>
               )}
               
               {/* Badge pour indiquer que l'utilisateur a déjà fait une proposition */}
               {hasUserProposal && (
-                <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-blue-500 rounded-full border border-white shadow-sm"></div>
+                <div 
+                  className="absolute -bottom-1 -right-1 w-3 h-3 bg-blue-500 rounded-full border border-white shadow-sm"
+                  title="Vous avez déjà fait une proposition pour cette garde"
+                ></div>
               )}
             </div>
           );
@@ -476,33 +528,106 @@ const DirectExchangeTable: React.FC<DirectExchangeTableProps> = ({
   return (
     <div className="overflow-x-auto">
       {/* Légende des badges */}
-      <div className="flex flex-wrap gap-2 mb-4 text-xs text-gray-600 bg-gray-50 p-2 rounded-md">
-        <div className="flex items-center">
-          <div className="w-4 h-4 bg-yellow-100 text-yellow-700 rounded-full border border-white flex items-center justify-center mr-1">
-            <span className="text-[8px] font-bold">C</span>
+      <div className="mb-4 text-xs text-gray-600 bg-gray-50 p-3 rounded-md">
+        {/* En-tête cliquable */}
+        <div 
+          className="flex items-center font-medium text-gray-700 cursor-pointer hover:text-gray-900 transition-colors"
+          onClick={() => setIsLegendExpanded(!isLegendExpanded)}
+          title={isLegendExpanded ? "Réduire la légende" : "Afficher la légende"}
+        >
+          <svg 
+            xmlns="http://www.w3.org/2000/svg" 
+            width="16" 
+            height="16" 
+            viewBox="0 0 24 24" 
+            fill="none" 
+            stroke="currentColor" 
+            strokeWidth="2" 
+            strokeLinecap="round" 
+            strokeLinejoin="round" 
+            className="mr-1"
+          >
+            {isLegendExpanded ? (
+              <polyline points="6 9 12 15 18 9"></polyline>
+            ) : (
+              <polyline points="9 18 15 12 9 6"></polyline>
+            )}
+          </svg>
+          Légende
+        </div>
+        
+        {/* Contenu de la légende - conditionnellement affiché */}
+        {isLegendExpanded && (
+          <div className="flex flex-wrap gap-x-4 gap-y-2 mt-2">
+            <div className="flex flex-col">
+              <span className="font-medium text-gray-700 mb-1">Types d'opérations</span>
+              <div className="flex flex-wrap gap-x-4 gap-y-1">
+                <div className="flex items-center">
+                  <div className="w-4 h-4 bg-yellow-100 text-yellow-700 rounded-full border border-white flex items-center justify-center mr-1" title="Cession - Vous proposez votre garde sans en récupérer une autre">
+                    <span className="text-[8px] font-bold">C</span>
+                  </div>
+                  <span>Cession</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-4 h-4 bg-green-100 text-green-700 rounded-full border border-white flex items-center justify-center mr-1" title="Échange - Vous proposez de permuter votre garde contre une autre">
+                    <span className="text-[8px] font-bold">E</span>
+                  </div>
+                  <span>Échange</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-4 h-4 bg-amber-100 text-amber-700 rounded-full border border-white flex items-center justify-center mr-1" title="Remplacement - Vous proposez votre garde aux remplaçants">
+                    <span className="text-[8px] font-bold">R</span>
+                  </div>
+                  <span>Remplacement</span>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex flex-col">
+              <span className="font-medium text-gray-700 mb-1">Combinaisons</span>
+              <div className="flex flex-wrap gap-x-4 gap-y-1">
+                <div className="flex items-center">
+                  <div className="w-4 h-4 bg-orange-100 text-orange-700 rounded-full border border-white flex items-center justify-center mr-1" title="Cession et Échange - Vous proposez votre garde avec ces deux options">
+                    <span className="text-[8px] font-bold">CE</span>
+                  </div>
+                  <span>Cession + Échange</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-4 h-4 bg-lime-100 text-lime-700 rounded-full border border-white flex items-center justify-center mr-1" title="Échange et Remplacement - Garde proposée pour échange ou aux remplaçants">
+                    <span className="text-[8px] font-bold">ER</span>
+                  </div>
+                  <span>Échange + Remplacement</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-4 h-4 bg-amber-100 text-amber-700 rounded-full border border-white flex items-center justify-center mr-1" title="Cession et Remplacement - Garde proposée en cession ou aux remplaçants">
+                    <span className="text-[8px] font-bold">CR</span>
+                  </div>
+                  <span>Cession + Remplacement</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-4 h-4 bg-amber-100 text-amber-700 rounded-full border border-white flex items-center justify-center mr-1" title="Cession, Échange et Remplacement - Garde proposée avec toutes les options">
+                    <span className="text-[8px] font-bold">CER</span>
+                  </div>
+                  <span>Toutes les options</span>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex flex-col">
+              <span className="font-medium text-gray-700 mb-1">Notifications</span>
+              <div className="flex flex-wrap gap-x-4 gap-y-1">
+                <div className="flex items-center">
+                  <div className="w-3 h-3 bg-red-500 rounded-full border border-white mr-1" title="Vous avez reçu une ou plusieurs propositions pour cette garde"></div>
+                  <span>Propositions reçues</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-3 h-3 bg-blue-500 rounded-full border border-white mr-1" title="Vous avez envoyé une proposition pour cette garde"></div>
+                  <span>Proposition envoyée</span>
+                </div>
+              </div>
+            </div>
           </div>
-          <span>Cession</span>
-        </div>
-        <div className="flex items-center">
-          <div className="w-4 h-4 bg-green-100 text-green-700 rounded-full border border-white flex items-center justify-center mr-1">
-            <span className="text-[8px] font-bold">E</span>
-          </div>
-          <span>Échange</span>
-        </div>
-        <div className="flex items-center">
-          <div className="w-4 h-4 bg-amber-100 text-amber-700 rounded-full border border-white flex items-center justify-center mr-1">
-            <span className="text-[8px] font-bold">R</span>
-          </div>
-          <span>Remplacement</span>
-        </div>
-        <div className="flex items-center ml-4">
-          <div className="w-3 h-3 bg-red-500 rounded-full border border-white mr-1"></div>
-          <span>Propositions reçues</span>
-        </div>
-        <div className="flex items-center">
-          <div className="w-3 h-3 bg-blue-500 rounded-full border border-white mr-1"></div>
-          <span>Proposition envoyée</span>
-        </div>
+        )}
       </div>
       
       {/* Utiliser refreshKey comme clé pour forcer le re-rendu complet de la table */}
@@ -522,13 +647,13 @@ const DirectExchangeTable: React.FC<DirectExchangeTableProps> = ({
           <tr className="bg-gray-50">
             <th className="border px-2 py-1 text-left text-xs font-medium text-gray-500"></th>
             {/* Sous-en-têtes pour Mes Gardes */}
-            <th className="border px-2 py-1 text-center text-xs font-medium text-gray-500 w-16 header-morning">M</th>
-            <th className="border px-2 py-1 text-center text-xs font-medium text-gray-500 w-16 header-afternoon">AM</th>
-            <th className="border px-2 py-1 text-center text-xs font-medium text-gray-500 w-16 header-evening">S</th>
+            <th className="border px-2 py-1 text-center text-xs font-medium text-gray-500 w-16 header-morning" title="Matin - Vos gardes du matin pour cette journée">M</th>
+            <th className="border px-2 py-1 text-center text-xs font-medium text-gray-500 w-16 header-afternoon" title="Après-midi - Vos gardes d'après-midi pour cette journée">AM</th>
+            <th className="border px-2 py-1 text-center text-xs font-medium text-gray-500 w-16 header-evening" title="Soir - Vos gardes du soir pour cette journée">S</th>
             {/* Sous-en-têtes pour Gardes Proposées */}
-            <th className="border px-2 py-1 text-center text-xs font-medium text-gray-500 w-16 header-morning">M</th>
-            <th className="border px-2 py-1 text-center text-xs font-medium text-gray-500 w-16 header-afternoon">AM</th>
-            <th className="border px-2 py-1 text-center text-xs font-medium text-gray-500 w-16 header-evening">S</th>
+            <th className="border px-2 py-1 text-center text-xs font-medium text-gray-500 w-16 header-morning" title="Matin - Gardes du matin proposées par vos collègues pour cette journée">M</th>
+            <th className="border px-2 py-1 text-center text-xs font-medium text-gray-500 w-16 header-afternoon" title="Après-midi - Gardes d'après-midi proposées par vos collègues pour cette journée">AM</th>
+            <th className="border px-2 py-1 text-center text-xs font-medium text-gray-500 w-16 header-evening" title="Soir - Gardes du soir proposées par vos collègues pour cette journée">S</th>
           </tr>
         </thead>
         <tbody>

@@ -9,13 +9,17 @@ import { PlanningPreview } from '../components';
 import type { Selections, PeriodSelection } from '../types';
 import { LoadingSpinner } from '../../../components/common';
 import { usePlanningConfig } from '../../../context/planning/PlanningContext';
+import { useAssociation } from '../../../context/association/AssociationContext';
 import type { User } from '../../../features/users/types';
+import { getCollectionName } from '../../../lib/firebase/users';
+import { ASSOCIATIONS } from '../../../constants/associations';
 
 const PlanningPreviewPage: React.FC = () => {
   const { userId } = useParams();
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
   const { config } = usePlanningConfig();
+  const { currentAssociation } = useAssociation();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [planningData, setPlanningData] = useState<{
@@ -29,15 +33,32 @@ const PlanningPreviewPage: React.FC = () => {
       if (!userId) return;
       
       try {
-        // Récupérer les données de l'utilisateur directement depuis Firestore
-        const userDoc = await getDoc(doc(db, 'users', userId));
+        // Récupérer les données de l'utilisateur directement depuis Firestore en utilisant la collection appropriée pour l'association
+        const usersCollection = getCollectionName('users', currentAssociation);
+        console.log(`Recherche de l'utilisateur ${userId} dans la collection ${usersCollection}`);
+        
+        const userDoc = await getDoc(doc(db, usersCollection, userId));
         if (!userDoc.exists()) {
-          throw new Error('Utilisateur non trouvé');
+          // Si l'utilisateur n'est pas trouvé dans la collection de l'association actuelle, essayons de le trouver dans la collection par défaut
+          if (currentAssociation !== ASSOCIATIONS.RIVE_DROITE) {
+            console.log(`Utilisateur non trouvé dans ${usersCollection}, recherche dans users`);
+            const defaultUserDoc = await getDoc(doc(db, 'users', userId));
+            if (!defaultUserDoc.exists()) {
+              throw new Error(`Utilisateur non trouvé dans les collections ${usersCollection} et users`);
+            }
+            // Utilisateur trouvé dans la collection par défaut
+            const userData = defaultUserDoc.data() as User;
+            console.log(`Utilisateur trouvé dans la collection users`);
+            return userData;
+          } else {
+            throw new Error(`Utilisateur non trouvé dans la collection ${usersCollection}`);
+          }
         }
         const userData = userDoc.data() as User;
 
-        // Récupérer les desiderata
-        const desiderataData = await getDesiderata(userId);
+        // Récupérer les desiderata avec l'association courante
+        console.log(`Récupération des désiderata pour l'utilisateur ${userId} de l'association ${currentAssociation}`);
+        const desiderataData = await getDesiderata(userId, currentAssociation);
         if (!desiderataData || !desiderataData.validatedAt) {
           throw new Error('Planning non trouvé ou non validé');
         }
@@ -71,7 +92,7 @@ const PlanningPreviewPage: React.FC = () => {
     };
 
     loadPlanning();
-  }, [userId]);
+  }, [userId, currentAssociation]); // Ajouter currentAssociation comme dépendance pour recharger les desiderata quand l'association change
 
   if (!currentUser?.roles.isAdmin) {
     return (

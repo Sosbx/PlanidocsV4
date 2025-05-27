@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../../auth/hooks';
 import { useDirectExchangeData } from './useDirectExchangeData';
 import type { User } from '../../users/types';
-import { getGeneratedPlanning } from '../../../lib/firebase/planning';
+import { getGeneratedPlanning, subscribeToUserPlanning } from '../../../lib/firebase/planning';
 import { usePlanningPeriod } from '../../../context/planning/PlanningPeriodContext';
 import { useBagPhase } from '../../../context/shiftExchange';
 
@@ -39,52 +39,64 @@ export const useComposableExchangeData = (
     loading
   } = useDirectExchangeData(userAssignments);
 
-  // Charger les assignations utilisateur
+  // Référence pour la fonction d'annulation de souscription
+  const unsubscribePlanningRef = useRef<(() => void) | null>(null);
+  
+  // Charger les assignations utilisateur et s'abonner aux mises à jour en temps réel
   useEffect(() => {
     if (!user) return;
     
-    const loadUserAssignments = async () => {
-      try {
-        // Récupérer le planning généré de l'utilisateur
-        const planning = await getGeneratedPlanning(user.id);
+    console.log('Mise en place de la souscription au planning de l\'utilisateur:', user.id);
+    
+    // Nettoyer la souscription existante
+    if (unsubscribePlanningRef.current) {
+      unsubscribePlanningRef.current();
+      unsubscribePlanningRef.current = null;
+    }
+    
+    // Souscrire au planning de l'utilisateur en temps réel
+    const unsubscribe = subscribeToUserPlanning(user.id, (assignments) => {
+      console.log('Mise à jour en temps réel des assignations utilisateur reçue');
+      
+      // Filtrer les gardes pour exclure celles qui font partie d'une BaG en cours
+      const filteredAssignments = Object.entries(assignments).reduce((acc, [key, assignment]) => {
+        // Extraire la date de la clé (format: "YYYY-MM-DD-PERIOD")
+        const dateStr = key.split('-').slice(0, 3).join('-');
+        const date = new Date(dateStr);
         
-        if (planning && planning.assignments) {
-          // Filtrer les gardes pour exclure celles qui font partie d'une BaG en cours
-          const filteredAssignments = Object.entries(planning.assignments).reduce((acc, [key, assignment]) => {
-            // Extraire la date de la clé (format: "YYYY-MM-DD-PERIOD")
-            const dateStr = key.split('-').slice(0, 3).join('-');
-            const date = new Date(dateStr);
-            
-            // Vérifier si cette garde fait partie d'une période future (BaG en cours)
-            const isFuturePeriod = allPeriods.some(period => 
-              period.status === 'future' && 
-              period.bagPhase !== 'completed' &&
-              date >= period.startDate && 
-              date <= period.endDate
-            );
-            
-            // Si la BaG est active et que la date est dans une période future avec BaG non complétée,
-            // ne pas inclure cette garde dans les échanges directs
-            if (isBagActive && isFuturePeriod) {
-              return acc;
-            }
-            
-            // Sinon, inclure la garde
-            acc[key] = assignment;
-            return acc;
-          }, {} as Record<string, any>);
-          
-          setUserAssignments(filteredAssignments);
-        } else {
-          setUserAssignments({});
+        // Vérifier si cette garde fait partie d'une période future (BaG en cours)
+        const isFuturePeriod = allPeriods.some(period => 
+          period.status === 'future' && 
+          period.bagPhase !== 'completed' &&
+          date >= period.startDate && 
+          date <= period.endDate
+        );
+        
+        // Si la BaG est active et que la date est dans une période future avec BaG non complétée,
+        // ne pas inclure cette garde dans les échanges directs
+        if (isBagActive && isFuturePeriod) {
+          return acc;
         }
-      } catch (error) {
-        console.error('Erreur lors du chargement des assignations utilisateur:', error);
-        setUserAssignments({});
+        
+        // Sinon, inclure la garde
+        acc[key] = assignment;
+        return acc;
+      }, {} as Record<string, any>);
+      
+      setUserAssignments(filteredAssignments);
+    });
+    
+    // Stocker la fonction d'annulation
+    unsubscribePlanningRef.current = unsubscribe;
+    
+    // Nettoyer la souscription lors du démontage
+    return () => {
+      if (unsubscribePlanningRef.current) {
+        console.log('Nettoyage de la souscription au planning');
+        unsubscribePlanningRef.current();
+        unsubscribePlanningRef.current = null;
       }
     };
-    
-    loadUserAssignments();
   }, [user, isBagActive, allPeriods]);
 
   // Calculer les états de conflit

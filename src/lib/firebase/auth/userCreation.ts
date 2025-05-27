@@ -3,8 +3,10 @@ import { doc, setDoc } from 'firebase/firestore';
 import { userCreationAuth, db } from '../config';
 import { getAuthErrorMessage } from './errors';
 import type { User } from '../../../types/users';
+import { getCollectionName } from '../users';
+import { ASSOCIATIONS } from '../../../constants/associations';
 
-export const createUser = async (userData: Omit<User, 'id' | 'hasValidatedPlanning'>): Promise<User> => {
+export const createUser = async (userData: Omit<User, 'id' | 'hasValidatedPlanning'>, associationId: string = ASSOCIATIONS.RIVE_DROITE): Promise<User> => {
   try {
     // S'assurer qu'aucun utilisateur n'est connecté sur l'instance de création
     await userCreationAuth.signOut();
@@ -20,14 +22,24 @@ export const createUser = async (userData: Omit<User, 'id' | 'hasValidatedPlanni
       ...userData,
       id: firebaseUser.uid,
       hasValidatedPlanning: false,
+      associationId: associationId, // Assurer que l'associationId est définie
       roles: {
         isAdmin: userData.roles?.isAdmin || false,
-        isUser: userData.roles?.isUser || true
+        isUser: userData.roles?.isUser || true,
+        isManager: userData.roles?.isManager || false,
+        isPartTime: userData.roles?.isPartTime || false,
+        isCAT: userData.roles?.isCAT || false,
+        isReplacement: userData.roles?.isReplacement || false,
+        isSuperAdmin: userData.roles?.isSuperAdmin || false
       }
     };
 
-    // Sauvegarder dans Firestore
-    await setDoc(doc(db, 'users', newUser.id), newUser);
+    // Déterminer la collection en fonction de l'association
+    const collectionName = getCollectionName('users', associationId);
+    console.log(`Création d'un utilisateur dans la collection ${collectionName}`);
+    
+    // Sauvegarder dans Firestore avec la bonne collection
+    await setDoc(doc(db, collectionName, newUser.id), newUser);
 
     // Déconnecter l'utilisateur créé de l'instance de création
     await userCreationAuth.signOut();

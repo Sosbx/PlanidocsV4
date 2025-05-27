@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, Percent, Save, RotateCcw, Users, CheckSquare, Settings, ChevronDown, ChevronLeft, ChevronRight, Archive } from 'lucide-react';
+import { Calendar, Percent, Save, RotateCcw, Users, CheckSquare, Settings, ChevronDown, ChevronLeft, ChevronRight, Archive } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
-import { usePlanningConfig, ArchivedPeriod } from '../context/planning/PlanningContext';
+import { usePlanningConfig } from '../context/planning/PlanningContext';
 import ConfigurationDisplay from '../components/ConfigurationDisplay';
 import ConfirmationModal from '../components/ConfirmationModal';
 import UserStatusList from '../features/users/components/UserStatusList';
@@ -17,6 +15,7 @@ import Toast from '../components/Toast';
 import PlanningPreview from '../features/planning/components/PlanningPreview';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import ArchivedPeriodDetails from '../features/planning/components/ArchivedPeriodDetails';
+import { useAssociation } from '../context/association/AssociationContext';
 
 type TabType = 'configuration' | 'validated-plannings' | 'users' | 'archived-periods';
 
@@ -25,6 +24,7 @@ const AdminPage: React.FC = () => {
   const location = useLocation();
   const { config, updateConfig, resetConfig, archivePlanningPeriod, archivedPeriods, loadArchivedPeriods } = usePlanningConfig();
   const { users } = useUsers();
+  const { currentAssociation } = useAssociation();
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' as 'success' | 'error' });
   const [formData, setFormData] = useState({
     startDate: '',
@@ -42,9 +42,10 @@ const AdminPage: React.FC = () => {
   });
   
   // État pour gérer les onglets
-  const [activeTab, setActiveTab] = useState<TabType>('configuration');
+  // Si une configuration est validée, on affiche l'onglet "users" (État des réponses) par défaut
+  const [activeTab, setActiveTab] = useState<TabType>(config.isConfigured ? 'users' : 'configuration');
   
-  // États pour la partie plannings validés
+  // États pour la partie désidérata validés
   const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [planningData, setPlanningData] = useState<{
     selections: Record<string, { type: 'primary' | 'secondary' | null; comment?: string }>;
@@ -54,15 +55,28 @@ const AdminPage: React.FC = () => {
   
   // États pour la partie périodes archivées
   const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(null);
+  
+  // Adapter les utilisateurs pour les composants
 
   // Déterminer l'onglet actif à partir de l'URL lors du chargement initial
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     const tab = searchParams.get('tab');
-    if (tab === 'validated-plannings' || tab === 'users' || tab === 'archived-periods') {
+    if (tab === 'validated-plannings' || tab === 'users' || tab === 'archived-periods' || tab === 'configuration') {
       setActiveTab(tab as TabType);
+      
+      // Si on accède directement à l'onglet "Désidérata validés", sélectionner automatiquement le premier utilisateur
+      if (tab === 'validated-plannings') {
+        const validatedUsersList = users.filter(user => user.hasValidatedPlanning);
+        if (validatedUsersList.length > 0 && !selectedUserId) {
+          setSelectedUserId(validatedUsersList[0].id);
+        }
+      }
+    } else if (config.isConfigured && !tab) {
+      // Si une configuration est validée et aucun onglet n'est spécifié dans l'URL, afficher l'onglet "users"
+      setActiveTab('users');
     }
-  }, [location]);
+  }, [location, config.isConfigured, users, selectedUserId]);
 
   useEffect(() => {
     if (config.isConfigured) {
@@ -97,38 +111,48 @@ const AdminPage: React.FC = () => {
     }
   }, [config]);
 
-  // Filtrer uniquement les utilisateurs ayant validé leur planning
+  // Filtrer uniquement les utilisateurs ayant validé leurs désidérata
   const validatedUsers = users.filter(user => user.hasValidatedPlanning);
   const currentUser = validatedUsers.find(user => user.id === selectedUserId);
 
   // Fonction d'adaptation pour convertir ManagementUser en UserExtended
   const adaptManagementUserToUserExtended = (user: User): UserExtended => {
+    // Déterminer le rôle de l'utilisateur avec des vérifications de sécurité
+    let role = UserRole.USER; // Rôle par défaut
+    
+    if (user && user.roles) {
+      if (user.roles.isAdmin === true) {
+        role = UserRole.ADMIN;
+      } else if (user.roles.isManager === true) {
+        role = UserRole.MANAGER;
+      }
+    }
+    
     return {
       id: user.id,
       email: user.email,
       displayName: `${user.firstName} ${user.lastName}`,
       firstName: user.firstName,
       lastName: user.lastName,
-      role: user.roles.isAdmin ? UserRole.ADMIN : user.roles.isManager ? UserRole.MANAGER : UserRole.USER,
+      role: role,
       status: user.hasValidatedPlanning ? UserStatus.ACTIVE : UserStatus.PENDING,
       // Autres propriétés optionnelles
       metadata: {}
     };
   };
 
-  // Filtrer et convertir les utilisateurs
-  const usersList = users
-    .filter(user => user.roles.isUser)
-    .map(adaptManagementUserToUserExtended);
+  // Filtrer les utilisateurs ayant le rôle utilisateur (pour référence future)
+  // const filteredUsers = users
+  //  .filter(user => user && user.roles && user.roles.isUser === true);
     
-  // Sélectionner automatiquement le premier utilisateur au chargement pour l'onglet plannings validés
+  // Sélectionner automatiquement le premier utilisateur au chargement pour l'onglet désidérata validés
   useEffect(() => {
     if (validatedUsers.length > 0 && !selectedUserId && activeTab === 'validated-plannings') {
       setSelectedUserId(validatedUsers[0].id);
     }
   }, [validatedUsers, selectedUserId, activeTab]);
 
-  // Charger les données du planning validé
+  // Charger les données des désidérata validés
   useEffect(() => {
     const loadPlanning = async () => {
       if (!currentUser || activeTab !== 'validated-plannings') {
@@ -138,17 +162,18 @@ const AdminPage: React.FC = () => {
         return;
       }
 
-      console.log('Début chargement du planning validé pour utilisateur:', currentUser.id);
+      console.log('Début chargement des désidérata validés pour utilisateur:', currentUser.id);
       setLoadingPlanning(true);
       
       try {
         // Debug: d'abord voir toutes les données désidératas disponibles (comme dans l'oeil)
-        const allDesiderata = await getAllDesiderata(currentUser.id, true);
+        console.log(`Chargement des désidératas pour l'utilisateur ${currentUser.id} de l'association ${currentAssociation}`);
+        const allDesiderata = await getAllDesiderata(currentUser.id, true, false, currentAssociation);
         console.log('TOUTES les données désidératas (comme oeil):', currentUser.id, 'total:', Object.keys(allDesiderata.selections).length);
         console.log('validatedAt présent?', !!allDesiderata.validatedAt);
         
         // Utiliser getDesiderata directement pour obtenir les données validées
-        const directDesiderata = await getDesiderata(currentUser.id);
+        const directDesiderata = await getDesiderata(currentUser.id, currentAssociation);
         console.log('Données directement depuis getDesiderata:', currentUser.id, 'total:', directDesiderata ? Object.keys(directDesiderata.selections || {}).length : 0);
         console.log('validatedAt de getDesiderata:', directDesiderata?.validatedAt);
         
@@ -200,7 +225,7 @@ const AdminPage: React.FC = () => {
         // Fallback 2: essayer sans filtrage par période
         else {
           // Tester sans le paramètre currentPeriodOnly
-          const dataWithoutFilter = await getAllDesiderata(currentUser.id, false, false);
+          const dataWithoutFilter = await getAllDesiderata(currentUser.id, false, false, currentAssociation);
           console.log('Données sans filtre currentPeriodOnly:', Object.keys(dataWithoutFilter.selections).length);
           
           if (dataWithoutFilter?.validatedAt) {
@@ -211,7 +236,7 @@ const AdminPage: React.FC = () => {
             });
           } else {
             // Dernier essai avec filtrage par période courante
-            const data = await getAllDesiderata(currentUser.id, false, true);
+            const data = await getAllDesiderata(currentUser.id, false, true, currentAssociation);
             console.log('Données ACTUELLES des désidératas pour', currentUser.id, 'total:', Object.keys(data.selections).length);
             console.log('Clés des désidératas actuels:', Object.keys(data.selections));
             
@@ -222,7 +247,7 @@ const AdminPage: React.FC = () => {
                 validatedAt: data.validatedAt
               });
             } else {
-              console.log('⚠️ Aucun planning validé trouvé pour', currentUser.id);
+              console.log('⚠️ Aucun désidérata validé trouvé pour', currentUser.id);
               console.log('Statut validé dans user object:', currentUser.hasValidatedPlanning);
             }
           }
@@ -237,7 +262,7 @@ const AdminPage: React.FC = () => {
     loadPlanning();
   }, [currentUser, activeTab]);
 
-  // Fonctions pour la navigation entre utilisateurs dans l'onglet plannings validés
+  // Fonctions pour la navigation entre utilisateurs dans l'onglet désidérata validés
   const handleUserChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedUserId(event.target.value);
   };
@@ -254,7 +279,7 @@ const AdminPage: React.FC = () => {
     setSelectedUserId(validatedUsers[newIndex].id);
   };
 
-  const handleDownloadPlanning = async (userId: string, format: 'pdf') => {
+  const handleDownloadPlanning = async (userId: string, _format: 'pdf') => {
     try {
       setToast({
         visible: true,
@@ -272,11 +297,23 @@ const AdminPage: React.FC = () => {
         return;
       }
 
-      const desiderata = await getDesiderata(userId);
+      console.log(`Récupération des désidérata pour l'utilisateur ${userId} de l'association ${currentAssociation}`);
+      const desiderata = await getDesiderata(userId, currentAssociation);
       if (!desiderata?.selections || !config.isConfigured) {
+        console.error(`Aucune donnée disponible pour les désidérata de l'utilisateur ${userId} dans l'association ${currentAssociation}`);
+        // Si nous sommes dans l'association RG, essayons de récupérer les désidérata depuis l'association RD (collection par défaut)
+        if (currentAssociation !== 'RD') {
+          console.log(`Tentative de récupération des désidérata depuis l'association RD pour l'utilisateur ${userId}`);
+          const defaultDesiderata = await getDesiderata(userId, 'RD');
+          if (defaultDesiderata?.selections) {
+            console.log(`Désidérata trouvés dans l'association RD pour l'utilisateur ${userId}`);
+            return defaultDesiderata;
+          }
+        }
+        
         setToast({
           visible: true,
-          message: 'Aucune donnée disponible pour ce planning',
+          message: `Aucune donnée disponible pour ces désidérata dans l'association ${currentAssociation}`,
           type: 'error'
         });
         return;
@@ -323,6 +360,8 @@ const AdminPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      console.log(`Mise à jour de la configuration pour l'association ${currentAssociation}`);
+      
       await updateConfig({
         startDate: new Date(formData.startDate),
         endDate: new Date(formData.endDate),
@@ -330,16 +369,53 @@ const AdminPage: React.FC = () => {
         primaryDesiderataLimit: formData.primaryDesiderataLimit,
         secondaryDesiderataLimit: formData.secondaryDesiderataLimit,
         isConfigured: true,
+        associationId: currentAssociation, // Ajouter l'association courante
+        holidayBlocks: config.holidayBlocks // Conserver les blocages existants
       });
+      
       setToast({
         visible: true,
-        message: 'Configuration enregistrée avec succès',
+        message: `Configuration pour ${currentAssociation === 'RD' ? 'Rive Droite' : 'Rive Gauche'} enregistrée avec succès`,
         type: 'success'
       });
     } catch (error) {
+      console.error(`Erreur lors de la mise à jour de la configuration pour ${currentAssociation}:`, error);
+      
       setToast({
         visible: true,
         message: 'Erreur lors de l\'enregistrement de la configuration',
+        type: 'error'
+      });
+    }
+  };
+
+  const handleHolidayBlockChange = async (userId: string, blockType: 'blockChristmas' | 'blockNewYear', value: boolean) => {
+    try {
+      // S'assurer que les deux propriétés sont toujours définies comme des booléens
+      const currentUserBlocks = config.holidayBlocks?.[userId] || { blockChristmas: false, blockNewYear: false };
+      const updatedHolidayBlocks = {
+        ...config.holidayBlocks,
+        [userId]: {
+          blockChristmas: blockType === 'blockChristmas' ? value : Boolean(currentUserBlocks.blockChristmas),
+          blockNewYear: blockType === 'blockNewYear' ? value : Boolean(currentUserBlocks.blockNewYear)
+        }
+      };
+
+      await updateConfig({
+        ...config,
+        holidayBlocks: updatedHolidayBlocks
+      });
+
+      setToast({
+        visible: true,
+        message: 'Blocage mis à jour avec succès',
+        type: 'success'
+      });
+    } catch (error) {
+      console.error('Erreur lors de la mise à jour du blocage:', error);
+      setToast({
+        visible: true,
+        message: 'Erreur lors de la mise à jour du blocage',
         type: 'error'
       });
     }
@@ -352,7 +428,11 @@ const AdminPage: React.FC = () => {
     }
     
     try {
+      console.log(`Réinitialisation de la configuration pour l'association ${currentAssociation}`);
+      
+      // resetConfig utilise déjà l'association courante depuis le contexte
       await resetConfig();
+      
       setFormData({
         startDate: '',
         endDate: '',
@@ -360,13 +440,16 @@ const AdminPage: React.FC = () => {
         primaryDesiderataLimit: 0,
         secondaryDesiderataLimit: 0,
       });
+      
       setToast({
         visible: true,
-        message: 'Configuration réinitialisée avec succès',
+        message: `Configuration pour ${currentAssociation === 'RD' ? 'Rive Droite' : 'Rive Gauche'} réinitialisée avec succès`,
         type: 'success'
       });
+      
       setShowResetConfirmation(false);
     } catch (error) {
+      console.error(`Erreur lors de la réinitialisation de la configuration pour ${currentAssociation}:`, error);
       setToast({
         visible: true,
         message: 'Erreur lors de la réinitialisation',
@@ -382,11 +465,13 @@ const AdminPage: React.FC = () => {
     }
     
     try {
-      // Vérifier si des utilisateurs ont validé leur planning
+      console.log(`Archivage de la période pour l'association ${currentAssociation}`);
+      
+      // Vérifier si des utilisateurs ont validé leurs désidérata
       if (validatedUsers.length === 0) {
         setToast({
           visible: true,
-          message: 'Aucun utilisateur n\'a validé son planning. Impossible d\'archiver.',
+          message: `Aucun utilisateur de ${currentAssociation === 'RD' ? 'Rive Droite' : 'Rive Gauche'} n'a validé ses désidérata. Impossible d'archiver.`,
           type: 'error'
         });
         setShowArchiveConfirmation(false);
@@ -400,16 +485,20 @@ const AdminPage: React.FC = () => {
         deadline: new Date(newPeriodData.deadline),
         primaryDesiderataLimit: formData.primaryDesiderataLimit,
         secondaryDesiderataLimit: formData.secondaryDesiderataLimit,
+        associationId: currentAssociation // Ajouter l'association courante
       };
       
       // Archiver la période actuelle et créer une nouvelle
+      // archivePlanningPeriod utilise déjà l'association courante depuis le contexte
       await archivePlanningPeriod(newConfig);
       
       setToast({
         visible: true,
-        message: 'Période archivée et nouvelle période créée avec succès',
+        message: `Période pour ${currentAssociation === 'RD' ? 'Rive Droite' : 'Rive Gauche'} archivée et nouvelle période créée avec succès`,
         type: 'success'
       });
+      
+      console.log(`Période archivée avec succès pour l'association ${currentAssociation}`);
       
       // Recharger les périodes archivées
       await loadArchivedPeriods();
@@ -432,6 +521,7 @@ const AdminPage: React.FC = () => {
   // Fonction pour changer d'onglet
   const changeTab = (tab: TabType) => {
     setActiveTab(tab);
+    
     // Mettre à jour l'URL sans recharger la page
     const searchParams = new URLSearchParams(location.search);
     searchParams.set('tab', tab);
@@ -440,20 +530,26 @@ const AdminPage: React.FC = () => {
       search: searchParams.toString()
     }, { replace: true });
     
-    // Si on passe à l'onglet des périodes archivées, sélectionner la première période
-    if (tab === 'archived-periods' && archivedPeriods.length > 0 && !selectedPeriodId) {
-      setSelectedPeriodId(archivedPeriods[0].id);
+    // Réinitialiser les états spécifiques à chaque onglet si nécessaire
+    if (tab === 'validated-plannings') {
+      // Sélectionner automatiquement le premier utilisateur ayant validé ses désidérata
+      const validatedUsersList = users.filter(user => user.hasValidatedPlanning);
+      if (validatedUsersList.length > 0) {
+        setSelectedUserId(validatedUsersList[0].id);
+      } else {
+        setSelectedUserId('');
+      }
     }
   };
 
-  // Rendu conditionnel du contenu de l'onglet Plannings validés
+  // Rendu conditionnel du contenu de l'onglet Désidérata validés
   const renderValidatedPlanningsTab = () => {
     if (!config.isConfigured) {
       return (
         <div className="bg-yellow-50 p-6 rounded-lg shadow-md">
-          <h2 className="text-xl font-semibold text-yellow-800 mb-2">Planning non configuré</h2>
+          <h2 className="text-xl font-semibold text-yellow-800 mb-2">Désidérata non configurés</h2>
           <p className="text-yellow-700">
-            Le planning doit être configuré avant de pouvoir visualiser les desiderata.
+            Les désidérata doivent être configurés avant de pouvoir les visualiser.
           </p>
         </div>
       );
@@ -462,9 +558,9 @@ const AdminPage: React.FC = () => {
     if (validatedUsers.length === 0) {
       return (
         <div className="bg-yellow-50 p-6 rounded-lg shadow-md">
-          <h2 className="text-xl font-semibold text-yellow-800 mb-2">Aucun planning validé</h2>
+          <h2 className="text-xl font-semibold text-yellow-800 mb-2">Aucun désidérata validé</h2>
           <p className="text-yellow-700">
-            Aucun utilisateur n'a encore validé son planning.
+            Aucun utilisateur n'a encore validé ses désidérata.
           </p>
         </div>
       );
@@ -473,7 +569,7 @@ const AdminPage: React.FC = () => {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-gray-900">Plannings Validés</h2>
+          <h2 className="text-2xl font-bold text-gray-900">Désidérata Validés</h2>
           <div className="flex items-center">
             <div className="inline-flex items-center">
               <button
@@ -531,9 +627,9 @@ const AdminPage: React.FC = () => {
   // Rendu conditionnel du contenu de l'onglet Configuration
   const renderConfigurationTab = () => (
     <>
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">Paramètres du Planning</h2>
-        <div className="flex space-x-3">
+      <div className="border-b border-gray-200">
+        <h2 className="text-2xl font-bold text-gray-900 mb-4">Configuration des désidérata</h2>
+        <nav className="-mb-px flex space-x-2 md:space-x-8 overflow-x-auto pb-1 hide-scrollbar" aria-label="Tabs">
           <button
             onClick={() => handleArchive(false)}
             className="inline-flex items-center px-4 py-2 border border-green-300 text-sm font-medium rounded-md text-green-700 bg-white hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors"
@@ -550,125 +646,238 @@ const AdminPage: React.FC = () => {
             <RotateCcw className="h-4 w-4 mr-2" />
             Réinitialiser
           </button>
-        </div>
+        </nav>
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="flex items-center mb-4">
-              <Calendar className="h-6 w-6 text-indigo-600 mr-2" />
-              <h2 className="text-xl font-semibold">Paramètres</h2>
-            </div>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Période</label>
-                <div className="mt-1 grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Début</label>
-                    <input
-                      type="date"
-                      value={formData.startDate}
-                      onChange={(e) => setFormData(prev => ({ ...prev, startDate: e.target.value }))}
-                      className="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Fin</label>
-                    <input
-                      type="date"
-                      value={formData.endDate}
-                      onChange={(e) => setFormData(prev => ({ ...prev, endDate: e.target.value }))}
-                      className="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
-                      required
-                    />
+      <div className="space-y-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="bg-white p-6 rounded-lg shadow-md">
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="flex items-center mb-4">
+                <Calendar className="h-6 w-6 text-indigo-600 mr-2" />
+                <h2 className="text-xl font-semibold">Paramètres</h2>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Période</label>
+                  <div className="mt-1 grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Début</label>
+                      <input
+                        type="date"
+                        value={formData.startDate}
+                        onChange={(e) => setFormData(prev => ({ ...prev, startDate: e.target.value }))}
+                        className="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Fin</label>
+                      <input
+                        type="date"
+                        value={formData.endDate}
+                        onChange={(e) => setFormData(prev => ({ ...prev, endDate: e.target.value }))}
+                        className="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                        required
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Date limite de réponse
-                </label>
-                <input
-                  type="datetime-local"
-                  value={formData.deadline}
-                  onChange={(e) => setFormData(prev => ({ ...prev, deadline: e.target.value }))}
-                  className="mt-1 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Pourcentage Desiderata Primaires ({formData.primaryDesiderataLimit}%)
-                </label>
-                <div className="flex items-center gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Date limite de réponse
+                  </label>
                   <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={formData.primaryDesiderataLimit}
-                    onChange={(e) => setFormData(prev => ({ ...prev, primaryDesiderataLimit: Number(e.target.value) }))}
-                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-red-600"
+                    type="datetime-local"
+                    value={formData.deadline}
+                    onChange={(e) => setFormData(prev => ({ ...prev, deadline: e.target.value }))}
+                    className="mt-1 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                    required
                   />
-                  <div className="flex items-center gap-2 min-w-[4rem] px-2 py-1 bg-red-50 rounded-md">
-                    <Percent className="h-4 w-4 text-red-600" />
-                    <span className="text-sm font-medium text-red-700">{formData.primaryDesiderataLimit}</span>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Pourcentage Desiderata Primaires ({formData.primaryDesiderataLimit}%)
+                  </label>
+                  <div className="flex items-center gap-4">
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={formData.primaryDesiderataLimit}
+                      onChange={(e) => setFormData(prev => ({ ...prev, primaryDesiderataLimit: Number(e.target.value) }))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-red-600"
+                    />
+                    <div className="flex items-center gap-2 min-w-[4rem] px-2 py-1 bg-red-50 rounded-md">
+                      <Percent className="h-4 w-4 text-red-600" />
+                      <span className="text-sm font-medium text-red-700">{formData.primaryDesiderataLimit}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Pourcentage Desiderata Secondaires ({formData.secondaryDesiderataLimit}%)
-                </label>
-                <div className="flex items-center gap-4">
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={formData.secondaryDesiderataLimit}
-                    onChange={(e) => setFormData(prev => ({ ...prev, secondaryDesiderataLimit: Number(e.target.value) }))}
-                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-                  />
-                  <div className="flex items-center gap-2 min-w-[4rem] px-2 py-1 bg-blue-50 rounded-md">
-                    <Percent className="h-4 w-4 text-blue-600" />
-                    <span className="text-sm font-medium text-blue-700">{formData.secondaryDesiderataLimit}</span>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Pourcentage Desiderata Secondaires ({formData.secondaryDesiderataLimit}%)
+                  </label>
+                  <div className="flex items-center gap-4">
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={formData.secondaryDesiderataLimit}
+                      onChange={(e) => setFormData(prev => ({ ...prev, secondaryDesiderataLimit: Number(e.target.value) }))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    />
+                    <div className="flex items-center gap-2 min-w-[4rem] px-2 py-1 bg-blue-50 rounded-md">
+                      <Percent className="h-4 w-4 text-blue-600" />
+                      <span className="text-sm font-medium text-blue-700">{formData.secondaryDesiderataLimit}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <button
-                type="submit"
-                className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
-              >
-                <Save className="h-4 w-4 mr-2" />
-                Valider la configuration
-              </button>
-            </div>
-          </form>
+                <button
+                  type="submit"
+                  className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
+                >
+                  <Save className="h-4 w-4 mr-2" />
+                  Valider la configuration
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <ConfigurationDisplay config={config} />
         </div>
 
-        <ConfigurationDisplay config={config} />
+        {/* Section Blocage des fêtes par utilisateur */}
+        <div className="bg-white p-6 rounded-lg shadow-md">
+          <div className="flex items-center mb-6">
+            <Users className="h-6 w-6 text-indigo-600 mr-2" />
+            <h2 className="text-xl font-semibold">Blocage des fêtes par utilisateur</h2>
+          </div>
+          
+          <div className="mb-4 flex items-center justify-center space-x-8">
+            <div className="text-center">
+              <span className="text-sm font-medium">Noël: 24-25 décembre</span>
+            </div>
+            <div className="text-center">
+              <span className="text-sm font-medium">Nouvel An: 31 décembre</span>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {users
+              .filter(user => 
+                user.roles?.isUser || user.roles?.isManager
+              )
+              .map(user => (
+                <div key={user.id} className="bg-gray-50 p-3 rounded-lg">
+                  <div className="flex justify-between items-center">
+                    <div className="font-medium text-sm truncate mr-2">
+                      {user.lastName} {user.firstName}
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => handleHolidayBlockChange(
+                          user.id, 
+                          'blockChristmas', 
+                          !config.holidayBlocks?.[user.id]?.blockChristmas
+                        )}
+                        className={`w-8 h-8 rounded-md flex items-center justify-center transition-colors ${config.holidayBlocks?.[user.id]?.blockChristmas ? 'bg-orange-100' : 'bg-gray-100 hover:bg-gray-200'}`}
+                        title={config.holidayBlocks?.[user.id]?.blockChristmas ? "Débloquer Noël" : "Bloquer Noël"}
+                      >
+                        <div className="relative">
+                          <span className={`text-xs ${config.holidayBlocks?.[user.id]?.blockChristmas ? 'text-orange-700' : 'text-gray-400'}`}>Noël</span>
+                          {config.holidayBlocks?.[user.id]?.blockChristmas && (
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <div className="w-5 h-5 relative">
+                                <div className="w-5 h-5 rounded-full border border-orange-500 absolute inset-0"></div>
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <div className="w-5 h-0.5 bg-orange-500 rotate-45 rounded-full"></div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                      
+                      <button
+                        onClick={() => handleHolidayBlockChange(
+                          user.id, 
+                          'blockNewYear', 
+                          !config.holidayBlocks?.[user.id]?.blockNewYear
+                        )}
+                        className={`w-8 h-8 rounded-md flex items-center justify-center transition-colors ${config.holidayBlocks?.[user.id]?.blockNewYear ? 'bg-orange-100' : 'bg-gray-100 hover:bg-gray-200'}`}
+                        title={config.holidayBlocks?.[user.id]?.blockNewYear ? "Débloquer Nouvel An" : "Bloquer Nouvel An"}
+                      >
+                        <div className="relative">
+                          <span className={`text-xs ${config.holidayBlocks?.[user.id]?.blockNewYear ? 'text-orange-700' : 'text-gray-400'}`}>N.An</span>
+                          {config.holidayBlocks?.[user.id]?.blockNewYear && (
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <div className="w-5 h-5 relative">
+                                <div className="w-5 h-5 rounded-full border border-orange-500 absolute inset-0"></div>
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <div className="w-5 h-0.5 bg-orange-500 rotate-45 rounded-full"></div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
       </div>
     </>
   );
 
-  // Rendu conditionnel du contenu de l'onglet Utilisateurs
-  const renderUsersTab = () => (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900">Liste des Utilisateurs</h2>
-      <UserStatusList
-        users={usersList}
-        onDownloadPlanning={handleDownloadPlanning}
-        onPreviewPlanning={(userId) => navigate(`/planning/${userId}`)}
-      />
-    </div>
-  );
-  
+  // Rendu conditionnel du contenu de l'onglet État des réponses
+  const renderUsersTab = () => {
+    // Adapter les utilisateurs au format attendu par UserStatusList
+    const adaptedUsers = users.map(adaptManagementUserToUserExtended);
+    
+    // Filtrer les utilisateurs qui sont uniquement administrateurs ou uniquement remplaçants
+    const filteredUsers = adaptedUsers.filter(user => {
+      // Récupérer l'utilisateur original pour vérifier les rôles
+      const originalUser = users.find(u => u.id === user.id);
+      
+      if (!originalUser || !originalUser.roles) return true; // Garder l'utilisateur en cas de doute
+      
+      // Exclure les utilisateurs qui sont uniquement administrateurs
+      if (originalUser.roles.isAdmin && !originalUser.roles.isUser && !originalUser.roles.isManager) {
+        return false;
+      }
+      
+      // Exclure les utilisateurs qui sont uniquement remplaçants
+      if (originalUser.roles.isReplacement && !originalUser.roles.isUser && !originalUser.roles.isManager) {
+        return false;
+      }
+      
+      // Inclure tous les autres utilisateurs
+      return true;
+    });
+    
+    return (
+      <div className="bg-white shadow overflow-hidden sm:rounded-lg">
+        <div className="px-4 py-5 sm:px-6">
+          <h3 className="text-lg leading-6 font-medium text-gray-900">État des réponses</h3>
+          <p className="mt-1 max-w-2xl text-sm text-gray-500">Suivi des réponses des utilisateurs pour la période en cours.</p>
+        </div>
+        <UserStatusList 
+          users={filteredUsers} 
+          onDownloadPlanning={handleDownloadPlanning}
+          onPreviewPlanning={(userId) => navigate(`/planning/${userId}`)}
+        />
+      </div>
+    );
+  };
+
   // Rendu conditionnel du contenu de l'onglet Périodes archivées
   const renderArchivedPeriodsTab = () => {
     if (archivedPeriods.length === 0) {
@@ -704,7 +913,7 @@ const AdminPage: React.FC = () => {
                 >
                   <div className="font-medium">{period.name}</div>
                   <div className="text-sm text-gray-500">
-                    {format(period.archivedAt, 'dd/MM/yyyy', { locale: fr })} • 
+                    {new Date(period.archivedAt).toLocaleDateString('fr-FR')} • 
                     {period.validatedDesiderataCount} réponses
                   </div>
                 </button>
@@ -745,7 +954,7 @@ const AdminPage: React.FC = () => {
       />
 
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-gray-900">Administration du Planning</h1>
+        <h1 className="text-3xl font-bold text-gray-900">Gestion des désidérata</h1>
       </div>
       
       {/* Onglets de navigation */}
@@ -771,7 +980,7 @@ const AdminPage: React.FC = () => {
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
           >
             <CheckSquare className="h-5 w-5 mr-2" />
-            Plannings Validés
+            Désidérata Validés
           </button>
           <button
             onClick={() => changeTab('archived-periods')}
@@ -793,7 +1002,7 @@ const AdminPage: React.FC = () => {
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
           >
             <Users className="h-5 w-5 mr-2" />
-            Utilisateurs
+            État des réponses
           </button>
         </nav>
       </div>

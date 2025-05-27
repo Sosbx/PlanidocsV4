@@ -90,4 +90,26 @@
   --combined-text: #7719C2; /* text-purple-700 ajusté pour moins de vivacité */
   --combined-border: #E9D5FF; /* border-purple-300 */
   --combined-hover: #F3E8FF; /* bg-purple-200 */
+  
+  /* Couleurs pour les arrière-plans des cellules selon les types d'opérations */
+  --operation-exchange-bg: #DCFCE7; /* bg-green-100 - pour échange (E) */
+  --operation-exchange-bg-light: #F0FDF4; /* bg-green-50 - pour échange (E) en phase completed */
+  
+  --operation-give-bg: #FEF9C3; /* bg-yellow-100 - pour cession (C) */
+  --operation-give-bg-light: #FEFCE8; /* bg-yellow-50 - pour cession (C) en phase completed */
+  
+  --operation-replacement-bg: #FEF3C7; /* bg-amber-100 - pour remplaçant (R) */
+  --operation-replacement-bg-light: #FFFBEB; /* bg-amber-50 - pour remplaçant (R) en phase completed */
+  
+  --operation-exchange-give-bg: #FED7AA; /* bg-orange-100 - pour E+C */
+  --operation-exchange-give-bg-light: #FFF7ED; /* bg-orange-50 - pour E+C en phase completed */
+  
+  --operation-exchange-replacement-bg: #D9F99D; /* bg-lime-100 - pour E+R */
+  --operation-exchange-replacement-bg-light: #F7FEE7; /* bg-lime-50 - pour E+R en phase completed */
+  
+  --operation-give-replacement-bg: #FEF3C7; /* bg-amber-100 - pour C+R */
+  --operation-give-replacement-bg-light: #FFFBEB; /* bg-amber-50 - pour C+R en phase completed */
+  
+  --operation-all-bg: #FEF3C7; /* bg-amber-100 - pour E+C+R */
+  --operation-all-bg-light: #FFFBEB; /* bg-amber-50 - pour E+C+R en phase completed */
 }

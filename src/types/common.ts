@@ -8,6 +8,7 @@ import { Timestamp } from 'firebase/firestore';
  * Rôles utilisateur
  */
 export enum UserRole {
+  SUPER_ADMIN = 'super_admin',
   ADMIN = 'admin',
   MANAGER = 'manager',
   USER = 'user'
@@ -31,17 +32,20 @@ export interface BaseUser {
   email: string;
   firstName?: string;
   lastName?: string;
+  associationId: string; // 'RD' pour Rive Droite, 'RG' pour Rive Gauche
 }
 
 /**
  * Type pour les rôles utilisateur (flags)
  */
 export type UserRoleFlags = {
+  isSuperAdmin: boolean;
   isAdmin: boolean;
   isUser: boolean;
   isManager: boolean;
   isPartTime: boolean;  // mi-temps
   isCAT: boolean;       // CAT
+  isReplacement: boolean; // remplaçant
 };
 
 /**
@@ -53,11 +57,13 @@ export type UserRoleFlags = {
  */
 export function roleToFlags(role: UserRole): UserRoleFlags {
   return {
+    isSuperAdmin: role === UserRole.SUPER_ADMIN,
     isAdmin: role === UserRole.ADMIN,
     isManager: role === UserRole.MANAGER,
     isUser: role === UserRole.USER,
     isPartTime: false,
-    isCAT: false
+    isCAT: false,
+    isReplacement: false
   };
 }
 
@@ -65,6 +71,7 @@ export function roleToFlags(role: UserRole): UserRoleFlags {
  * Convertit un UserRoleFlags en UserRole
  */
 export function flagsToRole(flags: UserRoleFlags): UserRole {
+  if (flags.isSuperAdmin) return UserRole.SUPER_ADMIN;
   if (flags.isAdmin) return UserRole.ADMIN;
   if (flags.isManager) return UserRole.MANAGER;
   return UserRole.USER;

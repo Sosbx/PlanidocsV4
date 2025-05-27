@@ -11,7 +11,7 @@ interface ToastProps {
 const Toast: React.FC<ToastProps> = ({ message, isVisible, type = 'error', onClose }) => {
   useEffect(() => {
     if (isVisible) {
-      const timer = setTimeout(onClose, 3000);
+      const timer = setTimeout(onClose, 1500);
       return () => clearTimeout(timer);
     }
   }, [isVisible, onClose]);
@@ -44,7 +44,7 @@ const Toast: React.FC<ToastProps> = ({ message, isVisible, type = 'error', onClo
   const { bg, text, icon, iconComponent: Icon } = styles[safeType];
 
   return (
-    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 animate-fade-in">
+    <div className="fixed top-16 md:top-4 left-1/2 -translate-x-1/2 z-50 animate-fade-in">
       <div className={`${bg} ${text} px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 min-w-[300px] justify-center`}>
         <Icon className={`h-5 w-5 ${icon}`} />
         <p className="text-sm font-medium">{message}</p>

@@ -6,7 +6,7 @@ interface EditUserModalProps {
   user: User | null;
   isOpen: boolean;
   onClose: () => void;
-  onSave: (userId: string, roles: { isAdmin: boolean; isUser: boolean; isManager: boolean; isPartTime: boolean; isCAT: boolean }) => void;
+  onSave: (userId: string, roles: { isAdmin: boolean; isUser: boolean; isManager: boolean; isPartTime: boolean; isCAT: boolean; isReplacement: boolean }) => void;
 }
 
 export const EditUserModal: React.FC<EditUserModalProps> = ({ user, isOpen, onClose, onSave }) => {
@@ -20,7 +20,8 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({ user, isOpen, onCl
         isUser: user.roles.isUser || false,
         isManager: user.roles.isManager || false,
         isPartTime: user.roles.isPartTime || false,
-        isCAT: user.roles.isCAT || false
+        isCAT: user.roles.isCAT || false,
+        isReplacement: user.roles.isReplacement || false
       });
     } else {
       setRoles(null);
@@ -116,6 +117,16 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({ user, isOpen, onCl
                   disabled={isSubmitting}
                 />
                 <span className="ml-2 text-sm text-gray-700">CAT</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={roles.isReplacement}
+                  onChange={(e) => setRoles(prev => ({ ...prev!, isReplacement: e.target.checked }) as UserRoleFlags)}
+                  className="rounded border-gray-300 text-amber-600 focus:ring-amber-500 h-4 w-4"
+                  disabled={isSubmitting}
+                />
+                <span className="ml-2 text-sm text-gray-700">Remplaçant</span>
               </label>
             </div>
           </div>

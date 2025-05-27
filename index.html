@@ -1,21 +1,57 @@
 <!doctype html>
-<html lang="en">
+<html lang="fr">
   <head>
-    <script src="http://localhost:8097"></script>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="/src/assets/images/Logo.png" />
-    <link rel="apple-touch-icon" href="/src/assets/images/Logo.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    
+    <!-- Favicons -->
+    <link rel="icon" type="image/png" href="/Logo.png" />
+    <link rel="apple-touch-icon" href="/Logo.png" />
+    
+    <!-- Meta tags pour PWA -->
     <meta name="theme-color" content="#2563eb" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="PlaniDocs" />
     <meta name="application-name" content="PlaniDocs" />
-    <meta name="description" content="Application de planification des desiderata" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>PlaniDocs</title>
+    
+    <!-- Description et SEO -->
+    <meta name="description" content="Application de planification des desiderata et gestion des plannings médicaux" />
+    <meta name="keywords" content="planning, médecin, desiderata, garde, échange" />
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://planidocs.com/" />
+    <meta property="og:title" content="PlaniDocs" />
+    <meta property="og:description" content="Application de planification des desiderata et gestion des plannings médicaux" />
+    <meta property="og:image" content="/Logo.png" />
+    
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://planidocs.com/" />
+    <meta property="twitter:title" content="PlaniDocs" />
+    <meta property="twitter:description" content="Application de planification des desiderata et gestion des plannings médicaux" />
+    <meta property="twitter:image" content="/Logo.png" />
+    
+    <title>PlaniDocs - Gestion des plannings médicaux</title>
+    
+    <!-- Preconnect to external domains -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://firebaseapp.com" />
+    <link rel="preconnect" href="https://firebaseio.com" />
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    
+    <!-- Fallback pour les navigateurs sans support des modules ES -->
+    <script nomodule>
+      document.getElementById('root').innerHTML = 
+        '<div style="text-align: center; padding: 50px; font-family: sans-serif;">' +
+        '<h1>Navigateur non supporté</h1>' +
+        '<p>Veuillez utiliser un navigateur moderne pour accéder à PlaniDocs.</p>' +
+        '</div>';
+    </script>
   </body>
 </html>

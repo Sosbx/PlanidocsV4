@@ -1,7 +1,7 @@
 import React from 'react';
 import { Mail, Trash2, Settings } from 'lucide-react';
 import type { User } from '../types';
-import { SYSTEM_ADMIN_EMAIL } from '../../../lib/firebase/config';
+import { isSystemAdminEmail } from '../../../lib/firebase/config';
 
 interface UsersListProps {
   users: User[];
@@ -10,10 +10,10 @@ interface UsersListProps {
 }
 
 export const UsersList: React.FC<UsersListProps> = ({ users, onDelete, onEdit }) => {
-  // Séparer l'admin système des autres utilisateurs et trier les autres par nom
-  const adminUser = users.find(user => user.email === SYSTEM_ADMIN_EMAIL);
+  // Séparer les admins système des autres utilisateurs et trier les autres par nom
+  const adminUsers = users.filter(user => isSystemAdminEmail(user.email));
   const otherUsers = users
-    .filter(user => user.email !== SYSTEM_ADMIN_EMAIL)
+    .filter(user => !isSystemAdminEmail(user.email))
     .sort((a, b) => {
       const nameA = `${a.lastName} ${a.firstName}`.toLowerCase();
       const nameB = `${b.lastName} ${b.firstName}`.toLowerCase();
@@ -21,17 +21,22 @@ export const UsersList: React.FC<UsersListProps> = ({ users, onDelete, onEdit })
     });
 
   const getRoleBadges = (user: User) => {
-    const badges = [];
+    const badges: React.ReactNode[] = [];
     
-    if (user.roles.isAdmin) {
+    // Vérifier que user.roles existe avant d'accéder à ses propriétés
+    if (!user || !user.roles) {
+      return badges;
+    }
+    
+    if (user.roles.isAdmin === true) {
       badges.push(
         <span key="admin" className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 mr-1">
           Administrateur
         </span>
       );
     }
-    
-    if (user.roles.isUser) {
+     
+    if (user.roles.isUser === true) {
       badges.push(
         <span key="user" className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
           Associé
@@ -39,7 +44,7 @@ export const UsersList: React.FC<UsersListProps> = ({ users, onDelete, onEdit })
       );
     }
     
-    if (user.roles.isManager) {
+    if (user.roles.isManager === true) {
       badges.push(
         <span key="manager" className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 ml-1">
           Gérant
@@ -47,7 +52,7 @@ export const UsersList: React.FC<UsersListProps> = ({ users, onDelete, onEdit })
       );
     }
     
-    if (user.roles.isPartTime) {
+    if (user.roles.isPartTime === true) {
       badges.push(
         <span key="part-time" className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 ml-1">
           Mi-temps
@@ -55,10 +60,18 @@ export const UsersList: React.FC<UsersListProps> = ({ users, onDelete, onEdit })
       );
     }
     
-    if (user.roles.isCAT) {
+    if (user.roles.isCAT === true) {
       badges.push(
         <span key="cat" className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 ml-1">
           CAT
+        </span>
+      );
+    }
+    
+    if (user.roles.isReplacement === true) {
+      badges.push(
+        <span key="replacement" className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 ml-1">
+          Remplaçant
         </span>
       );
     }
@@ -69,7 +82,7 @@ export const UsersList: React.FC<UsersListProps> = ({ users, onDelete, onEdit })
   const renderUserRow = (user: User, index?: number) => (
     <tr key={user.id} className="hover:bg-gray-50">
       <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
-        {user.email === SYSTEM_ADMIN_EMAIL ? '' : index}
+        {isSystemAdminEmail(user.email) ? '' : index}
       </td>
       <td className="px-3 py-4">
         <div className="text-sm font-medium text-gray-900">
@@ -96,17 +109,17 @@ export const UsersList: React.FC<UsersListProps> = ({ users, onDelete, onEdit })
             onClick={() => onEdit(user)}
             className="text-indigo-600 hover:text-indigo-900 p-1 rounded-full hover:bg-indigo-50"
             title="Modifier les rôles"
-            disabled={user.email === SYSTEM_ADMIN_EMAIL}
+            disabled={isSystemAdminEmail(user.email)}
           >
-            <Settings className={`h-4 w-4 ${user.email === SYSTEM_ADMIN_EMAIL ? 'opacity-50 cursor-not-allowed' : ''}`} />
+            <Settings className={`h-4 w-4 ${isSystemAdminEmail(user.email) ? 'opacity-50 cursor-not-allowed' : ''}`} />
           </button>
           <button
             onClick={() => onDelete(user.id)}
             className="text-red-600 hover:text-red-900 p-1 rounded-full hover:bg-red-50"
             title="Supprimer"
-            disabled={user.email === SYSTEM_ADMIN_EMAIL}
+            disabled={isSystemAdminEmail(user.email)}
           >
-            <Trash2 className={`h-4 w-4 ${user.email === SYSTEM_ADMIN_EMAIL ? 'opacity-50 cursor-not-allowed' : ''}`} />
+            <Trash2 className={`h-4 w-4 ${isSystemAdminEmail(user.email) ? 'opacity-50 cursor-not-allowed' : ''}`} />
           </button>
         </div>
       </td>
@@ -136,7 +149,7 @@ export const UsersList: React.FC<UsersListProps> = ({ users, onDelete, onEdit })
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
-          {adminUser && renderUserRow(adminUser)}
+          {adminUsers.map(adminUser => renderUserRow(adminUser))}
           {otherUsers.map((user, index) => renderUserRow(user, index + 1))}
         </tbody>
       </table>

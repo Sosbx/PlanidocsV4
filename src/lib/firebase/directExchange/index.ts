@@ -246,9 +246,31 @@ export const submitDirectExchange = async (
             existingExchangeCollection = getCollectionByOperationType(data.operationType || 'exchange');
           }
           
+          // Si la collection n'est pas déterminée, utiliser DIRECT_EXCHANGES par défaut
+          if (!existingExchangeCollection) {
+            console.log("Collection non déterminée, utilisation de DIRECT_EXCHANGES par défaut");
+            existingExchangeCollection = COLLECTIONS.DIRECT_EXCHANGES;
+          }
+          
+          console.log(`Vérification du document dans la collection ${existingExchangeCollection}:`, existingExchangeId);
+          
           // Vérifier que le document existe réellement
-          const exchangeRef = doc(db, existingExchangeCollection, existingExchangeId);
-          const exchangeDoc = await getDoc(exchangeRef);
+          let exchangeRef;
+          let exchangeDoc;
+          
+          try {
+            exchangeRef = doc(db, existingExchangeCollection, existingExchangeId);
+            exchangeDoc = await getDoc(exchangeRef);
+          } catch (error) {
+            console.error("Erreur lors de la création de la référence au document:", error);
+            console.error("Détails:", { existingExchangeCollection, existingExchangeId });
+            
+            // Utiliser une collection par défaut en cas d'erreur
+            console.log("Utilisation de DIRECT_EXCHANGES comme collection de secours");
+            existingExchangeCollection = COLLECTIONS.DIRECT_EXCHANGES;
+            exchangeRef = doc(db, existingExchangeCollection, existingExchangeId);
+            exchangeDoc = await getDoc(exchangeRef);
+          }
           
           if (exchangeDoc.exists()) {
             console.log(`Document trouvé dans la collection ${existingExchangeCollection}`);
@@ -277,29 +299,37 @@ export const submitDirectExchange = async (
               'shift_exchanges' // Bourse aux gardes
             ];
             
+            console.log("Document non trouvé dans la collection initiale, recherche dans d'autres collections:", possibleCollections);
+            
             for (const collection of possibleCollections) {
               if (collection === existingExchangeCollection) continue; // Déjà vérifié
               
-              const alternativeRef = doc(db, collection, existingExchangeId);
-              const alternativeDoc = await getDoc(alternativeRef);
+              try {
+                console.log(`Tentative de recherche dans la collection ${collection}`);
+                const alternativeRef = doc(db, collection, existingExchangeId);
+                const alternativeDoc = await getDoc(alternativeRef);
               
-              if (alternativeDoc.exists()) {
-                console.log(`Document trouvé dans la collection alternative ${collection}`);
-                documentFound = true;
-                existingExchangeCollection = collection;
-                
-                // Mettre à jour le document trouvé
-                await updateDoc(alternativeRef, { 
-                  comment: data.comment,
-                  lastModified: serverTimestamp(),
-                  operationTypes: selectedOperationTypes
-                });
-                
-                // Mettre à jour les options de l'échange
-                await updateOptions(existingExchangeId, selectedOperationTypes);
-                
-                result.exchangeId = existingExchangeId;
-                break;
+                if (alternativeDoc.exists()) {
+                  console.log(`Document trouvé dans la collection alternative ${collection}`);
+                  documentFound = true;
+                  existingExchangeCollection = collection;
+                  
+                  // Mettre à jour le document trouvé
+                  await updateDoc(alternativeRef, { 
+                    comment: data.comment,
+                    lastModified: serverTimestamp(),
+                    operationTypes: selectedOperationTypes
+                  });
+                  
+                  // Mettre à jour les options de l'échange
+                  await updateOptions(existingExchangeId, selectedOperationTypes);
+                  
+                  result.exchangeId = existingExchangeId;
+                  break;
+                }
+              } catch (error) {
+                console.error(`Erreur lors de la recherche dans la collection ${collection}:`, error);
+                // Continuer avec la prochaine collection
               }
             }
             

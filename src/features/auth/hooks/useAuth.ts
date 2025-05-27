@@ -6,6 +6,7 @@ import { signInUser, signOutUser } from '../utils/session';
 import { getUserByEmail } from '../../../lib/firebase/users';
 import { ensureUserRoles } from '../../../features/users/utils/userUtils';
 import type { User } from '../../../features/users/types';
+import { ASSOCIATIONS } from '../../../constants/associations';
 
 /**
  * Hook pour gérer l'authentification des utilisateurs
@@ -22,14 +23,23 @@ export const useAuth = () => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       try {
         if (firebaseUser) {
-          const userData = await getUserByEmail(firebaseUser.email!);
+          // Essayer d'abord avec l'association Rive Droite
+          let userData = await getUserByEmail(firebaseUser.email!, ASSOCIATIONS.RIVE_DROITE);
+          
+          // Si l'utilisateur n'est pas trouvé dans Rive Droite, essayer avec Rive Gauche
+          if (!userData) {
+            userData = await getUserByEmail(firebaseUser.email!, ASSOCIATIONS.RIVE_GAUCHE);
+          }
+          
           if (userData) {
             // Assurer que l'utilisateur a la propriété roles correctement définie
             setUser(ensureUserRoles(userData));
             setError(null);
+            console.log(`Utilisateur connecté depuis l'association: ${userData.associationId}`);
           } else {
             setUser(null);
             setError('Utilisateur non trouvé');
+            console.error('Utilisateur authentifié mais non trouvé dans Firestore:', firebaseUser.email);
           }
         } else {
           setUser(null);

@@ -3,7 +3,7 @@ import React from 'react';
 export type BadgeType = 
   'exchange' | 'give' | 'replacement' | 'interested' | 'pending' | 'completed' | 'combined' |
   'exchange-replacement' | 'give-replacement' | 'combined-replacement' | 'operation-types';
-export type BadgeSize = 'sm' | 'md' | 'lg';
+export type BadgeSize = 'xs' | 'sm' | 'md' | 'lg';
 
 interface BadgeProps {
   type: BadgeType;
@@ -32,51 +32,51 @@ const Badge: React.FC<BadgeProps> = ({
       const hasGive = operationTypes.includes('give');
       const hasReplacement = operationTypes.includes('replacement');
       
-      // Utiliser les mêmes couleurs que dans DirectExchangeTable.tsx mais plus discrètes
+      // Adapter les couleurs pour correspondre exactement aux couleurs des cellules
       if (hasExchange && hasGive && hasReplacement) {
-        return 'bg-amber-50 text-amber-700 border-amber-100 font-medium'; // CER
+        return 'bg-orange-100 text-orange-800 border-orange-200 font-bold'; // CER - même que CR et ER
       } else if (hasExchange && hasGive) {
-        return 'bg-orange-50 text-orange-700 border-orange-100 font-medium'; // CE
+        return 'bg-lime-100 text-lime-800 border-lime-200 font-bold'; // CE - teinte intermédiaire jaune-vert
       } else if (hasExchange && hasReplacement) {
-        return 'bg-lime-50 text-lime-700 border-lime-100 font-medium'; // ER
+        return 'bg-orange-100 text-orange-800 border-orange-200 font-bold'; // ER - même que CR et CER
       } else if (hasGive && hasReplacement) {
-        return 'bg-amber-50 text-amber-700 border-amber-100 font-medium'; // CR
+        return 'bg-orange-100 text-orange-800 border-orange-200 font-bold'; // CR - référence pour R
       } else if (hasExchange) {
-        return 'bg-green-50 text-green-700 border-green-100 font-medium'; // E
+        return 'bg-green-50 text-green-700 border-green-100 font-bold'; // E - vert très pâle
       } else if (hasGive) {
-        return 'bg-yellow-50 text-yellow-700 border-yellow-100 font-medium'; // C
+        return 'bg-yellow-100 text-yellow-700 border-yellow-200 font-bold'; // C - jaune
       } else if (hasReplacement) {
-        return 'bg-amber-50 text-amber-700 border-amber-100 font-medium'; // R
+        return 'bg-orange-200 text-orange-800 border-orange-300 font-bold'; // R - légèrement plus foncé
       }
       
       // Couleur par défaut si aucune opération n'est spécifiée
-      return 'bg-gray-50 text-gray-700 border-gray-100 font-medium';
+      return 'bg-gray-50 text-gray-700 border-gray-200 font-bold';
     }
     
-    // Pour les autres types, conserver les couleurs existantes
+    // Pour les autres types, adapter les couleurs aux cellules
     switch (type) {
       case 'exchange':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200'; // Jaune pour échange
+        return 'bg-green-50 text-green-700 border-green-100 font-bold'; // Vert très pâle pour échange (E)
       case 'give':
-        return 'bg-blue-100 text-blue-800 border-blue-200'; // Bleu pour cession
+        return 'bg-yellow-100 text-yellow-700 border-yellow-200 font-bold'; // Jaune pour cession (C)
       case 'combined':
-        return 'bg-purple-100 text-purple-800 border-purple-200'; // Violet pour combiné
+        return 'bg-lime-100 text-lime-800 border-lime-200 font-bold'; // Teinte intermédiaire jaune-vert pour combiné (CE)
       case 'replacement':
-        return 'bg-amber-100 text-amber-800 border-amber-200'; // Ambre pour remplaçant
+        return 'bg-orange-200 text-orange-800 border-orange-300 font-bold'; // Orange foncé pour remplaçant (R)
       case 'exchange-replacement':
-        return 'bg-orange-100 text-orange-800 border-orange-200'; // Orange pour échange + remplaçant
+        return 'bg-orange-100 text-orange-800 border-orange-200 font-bold'; // Orange pour échange + remplaçant (ER)
       case 'give-replacement':
-        return 'bg-teal-100 text-teal-800 border-teal-200'; // Teal pour cession + remplaçant
+        return 'bg-orange-100 text-orange-800 border-orange-200 font-bold'; // Orange pour cession + remplaçant (CR)
       case 'combined-replacement':
-        return 'bg-indigo-100 text-indigo-800 border-indigo-200'; // Indigo pour combiné + remplaçant
+        return 'bg-orange-100 text-orange-800 border-orange-200 font-bold'; // Orange pour combiné + remplaçant (CER)
       case 'interested':
-        return 'bg-green-100 text-green-800 border-green-200'; // Vert pour intéressés
+        return 'bg-green-100 text-green-700 border-green-200 font-bold'; // Vert pour intéressés
       case 'pending':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+        return 'bg-yellow-100 text-yellow-700 border-yellow-200 font-bold';
       case 'completed':
-        return 'bg-green-100 text-green-800 border-green-200';
+        return 'bg-green-100 text-green-700 border-green-200 font-bold';
       default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
+        return 'bg-gray-100 text-gray-700 border-gray-200 font-bold';
     }
   };
 
@@ -85,13 +85,15 @@ const Badge: React.FC<BadgeProps> = ({
     // Pour le type 'operation-types', utiliser des tailles plus petites
     if (type === 'operation-types') {
       switch (size) {
+        case 'xs':
+          return 'text-[5px] px-1 min-w-[8px] h-2 leading-none font-bold';
         case 'sm':
-          return 'text-[7px] px-0.5 min-w-[12px] h-3';
+          return 'text-[6px] px-1 min-w-[10px] h-3 leading-none font-bold';
         case 'lg':
-          return 'text-[9px] px-1 min-w-[18px] h-5';
+          return 'text-[8px] px-1 min-w-[14px] h-4 leading-none font-bold';
         case 'md':
         default:
-          return 'text-[8px] px-0.5 min-w-[14px] h-4';
+          return 'text-[7px] px-1 min-w-[12px] h-3.5 leading-none font-bold';
       }
     }
     
@@ -149,7 +151,7 @@ const Badge: React.FC<BadgeProps> = ({
     <div 
       className={`
         inline-flex items-center justify-center 
-        font-medium rounded-full border
+        font-medium rounded-full border border-[0.5px]
         ${getTypeClasses()} 
         ${getSizeClasses()}
         ${className}

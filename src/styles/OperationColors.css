@@ -1,0 +1,71 @@
+/* 
+ * OperationColors.css - Classes CSS pour les couleurs des opérations
+ * Ce fichier définit les classes CSS pour les couleurs des opérations
+ * en utilisant les variables définies dans ThemeColors.css
+ */
+
+@import './ThemeColors.css';
+
+/* Classes pour les arrière-plans des cellules selon les types d'opérations */
+.operation-exchange-bg {
+  background-color: var(--operation-exchange-bg);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.operation-exchange-bg-light {
+  background-color: var(--operation-exchange-bg-light);
+}
+
+.operation-give-bg {
+  background-color: var(--operation-give-bg);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.operation-give-bg-light {
+  background-color: var(--operation-give-bg-light);
+}
+
+.operation-replacement-bg {
+  background-color: var(--operation-replacement-bg);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.operation-replacement-bg-light {
+  background-color: var(--operation-replacement-bg-light);
+}
+
+.operation-exchange-give-bg {
+  background-color: var(--operation-exchange-give-bg);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.operation-exchange-give-bg-light {
+  background-color: var(--operation-exchange-give-bg-light);
+}
+
+.operation-exchange-replacement-bg {
+  background-color: var(--operation-exchange-replacement-bg);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.operation-exchange-replacement-bg-light {
+  background-color: var(--operation-exchange-replacement-bg-light);
+}
+
+.operation-give-replacement-bg {
+  background-color: var(--operation-give-replacement-bg);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.operation-give-replacement-bg-light {
+  background-color: var(--operation-give-replacement-bg-light);
+}
+
+.operation-all-bg {
+  background-color: var(--operation-all-bg);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.operation-all-bg-light {
+  background-color: var(--operation-all-bg-light);
+}

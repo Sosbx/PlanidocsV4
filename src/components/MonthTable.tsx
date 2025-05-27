@@ -84,11 +84,16 @@ const MonthTable: React.FC<MonthTableProps> = React.memo(({
     });
   }, [month, startDate, endDate]);
 
-  // Forcer le re-rendu lorsque showDesiderata change
+  // Forcer le re-rendu lorsque les données clés changent
   React.useEffect(() => {
-    // Cet effet ne fait rien, mais force le composant à se re-rendre
-    // lorsque showDesiderata change
-  }, [showDesiderata]);
+    console.log("🔄 MonthTable: Données clés modifiées", {
+      desiderata: !!desiderata,
+      exchanges: Object.keys(exchanges).length,
+      directExchanges: Object.keys(directExchanges).length,
+      replacements: Object.keys(replacements).length,
+      bagPhase: bagPhaseConfig.phase
+    });
+  }, [showDesiderata, exchanges, directExchanges, replacements, bagPhaseConfig, userId]);
 
   // Si aucun jour n'est dans la plage, ne pas rendre le tableau
   if (filteredDays.length === 0) {
@@ -97,7 +102,7 @@ const MonthTable: React.FC<MonthTableProps> = React.memo(({
 
   return (
     <div className="inline-block align-top mr-4 mb-4" style={{ flexShrink: 0 }}>
-      <table className="border border-gray-200 bg-white">
+      <table className="border border-gray-200 bg-white" style={{ tableLayout: 'fixed' }}>
         <thead>
           <tr>
             <th colSpan={4} className="px-3 py-2 text-xs font-medium text-gray-500 border-b bg-gray-50/70 relative">
@@ -129,10 +134,16 @@ const MonthTable: React.FC<MonthTableProps> = React.memo(({
             </th>
           </tr>
           <tr className="bg-gray-50/70">
-            <th className="border px-2 py-1 text-xs font-normal text-gray-500 w-16">Jour</th>
-            <th className="border px-2 py-1 text-xs font-semibold text-gray-600 w-12">M</th>
-            <th className="border px-2 py-1 text-xs font-semibold text-gray-600 w-12">AM</th>
-            <th className="border px-2 py-1 text-xs font-semibold text-gray-600 w-12">S</th>
+            <th className="border px-2 py-1 text-xs font-normal text-gray-500 w-12 md:w-14">Jour</th>
+            <th className="border px-2 py-1 text-xs font-semibold text-gray-600 w-12 md:w-14">
+              <div className="w-full text-center">M</div>
+            </th>
+            <th className="border px-2 py-1 text-xs font-semibold text-gray-600 w-12 md:w-14">
+              <div className="w-full text-center">AM</div>
+            </th>
+            <th className="border px-2 py-1 text-xs font-semibold text-gray-600 w-12 md:w-14">
+              <div className="w-full text-center">S</div>
+            </th>
           </tr>
         </thead>
         <tbody>

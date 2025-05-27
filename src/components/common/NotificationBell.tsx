@@ -8,11 +8,18 @@ export interface Notification {
   userId: string;
   title: string;
   message: string;
-  type: 'exchange' | 'give' | 'interested' | 'accepted' | 'rejected' | 'completed' | 'system';
+  type: 'exchange' | 'give' | 'interested' | 'accepted' | 'rejected' | 'completed' | 'system' | 
+         'replacement_proposed' | 'replacement_accepted' | 'replacement_rejected' | 'replacement_updated' | 'replacement_cancelled';
   read: boolean;
   createdAt: string;
   relatedId?: string; // ID de l'échange ou de la garde concernée
   link?: string; // Lien optionnel pour rediriger l'utilisateur
+  iconType?: string; // Type d'icône pour l'affichage
+  actionText?: string; // Texte de l'action principale
+  secondaryAction?: { // Action secondaire optionnelle
+    text: string;
+    link: string;
+  };
 }
 
 interface NotificationBellProps {
@@ -85,17 +92,32 @@ const NotificationBell: React.FC<NotificationBellProps> = ({
     
     switch (type) {
       case 'exchange':
+      case 'exchange_proposed':
         return `${baseClass} border-l-4 border-indigo-400`;
       case 'give':
+      case 'give_proposed':
         return `${baseClass} border-l-4 border-emerald-400`;
       case 'interested':
         return `${baseClass} border-l-4 border-blue-400`;
       case 'accepted':
+      case 'exchange_accepted':
+      case 'give_accepted':
+      case 'replacement_accepted':
         return `${baseClass} border-l-4 border-green-400`;
       case 'rejected':
+      case 'exchange_rejected':
+      case 'give_rejected':
+      case 'replacement_rejected':
         return `${baseClass} border-l-4 border-red-400`;
       case 'completed':
+      case 'exchange_completed':
+      case 'give_completed':
         return `${baseClass} border-l-4 border-purple-400`;
+      case 'replacement_proposed':
+      case 'replacement_updated':
+        return `${baseClass} border-l-4 border-amber-400`;
+      case 'replacement_cancelled':
+        return `${baseClass} border-l-4 border-orange-400`;
       case 'system':
       default:
         return `${baseClass} border-l-4 border-gray-400`;
@@ -106,17 +128,32 @@ const NotificationBell: React.FC<NotificationBellProps> = ({
   const getNotificationIcon = (type: Notification['type']) => {
     switch (type) {
       case 'exchange':
+      case 'exchange_proposed':
         return <div className="w-2 h-2 rounded-full bg-indigo-500"></div>;
       case 'give':
+      case 'give_proposed':
         return <div className="w-2 h-2 rounded-full bg-emerald-500"></div>;
       case 'interested':
         return <div className="w-2 h-2 rounded-full bg-blue-500"></div>;
       case 'accepted':
+      case 'exchange_accepted':
+      case 'give_accepted':
+      case 'replacement_accepted':
         return <div className="w-2 h-2 rounded-full bg-green-500"></div>;
       case 'rejected':
+      case 'exchange_rejected':
+      case 'give_rejected':
+      case 'replacement_rejected':
         return <div className="w-2 h-2 rounded-full bg-red-500"></div>;
       case 'completed':
+      case 'exchange_completed':
+      case 'give_completed':
         return <div className="w-2 h-2 rounded-full bg-purple-500"></div>;
+      case 'replacement_proposed':
+      case 'replacement_updated':
+        return <div className="w-2 h-2 rounded-full bg-amber-500"></div>;
+      case 'replacement_cancelled':
+        return <div className="w-2 h-2 rounded-full bg-orange-500"></div>;
       case 'system':
       default:
         return <div className="w-2 h-2 rounded-full bg-gray-500"></div>;

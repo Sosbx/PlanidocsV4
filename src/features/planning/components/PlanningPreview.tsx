@@ -77,7 +77,7 @@ const PlanningPreview: React.FC<PlanningPreviewProps> = ({
     <div className="bg-white rounded-lg shadow-md p-6">
       <div className="mb-6 space-y-2">
         <h1 className="text-2xl font-bold text-gray-900">
-          Planning de {user.firstName} {user.lastName}
+          Désidérata de {user.firstName} {user.lastName}
         </h1>
         <div className="flex items-center gap-8">
           <p className="text-sm text-gray-500">

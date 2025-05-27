@@ -184,29 +184,30 @@ export const normalizePeriod = (period: string): 'M' | 'AM' | 'S' => {
 
 /**
  * Formate une date selon le format spécifié
- * @param dateStr - La date à formater (chaîne au format YYYY-MM-DD)
+ * @param date - La date à formater (chaîne au format YYYY-MM-DD ou objet Date)
  * @param formatType - Le type de format ('short' pour JJ/MM/YYYY, 'long' pour format complet)
  * @returns La date formatée
  */
-export const formatDate = (dateStr: string, formatType: 'short' | 'long' = 'short'): string => {
+export const formatDate = (date: string | Date, formatType: 'short' | 'long' = 'short'): string => {
   try {
-    const date = new Date(dateStr);
+    // Convertir en objet Date si c'est une chaîne
+    const dateObj = typeof date === 'string' ? new Date(date) : date;
     
     // Vérifier si la date est valide
-    if (isNaN(date.getTime())) {
-      console.error('Date invalide:', dateStr);
-      return dateStr;
+    if (isNaN(dateObj.getTime())) {
+      console.error('Date invalide:', date);
+      return typeof date === 'string' ? date : date.toString();
     }
     
     // Formater selon le type demandé
     if (formatType === 'short') {
-      return dateFnsFormat(date, 'dd/MM/yyyy');
+      return dateFnsFormat(dateObj, 'dd/MM/yyyy');
     } else {
-      return dateFnsFormat(date, 'EEEE d MMMM yyyy', { locale: fr });
+      return dateFnsFormat(dateObj, 'EEEE d MMMM yyyy', { locale: fr });
     }
   } catch (error) {
     console.error('Erreur lors du formatage de la date:', error);
-    return dateStr;
+    return typeof date === 'string' ? date : date.toString();
   }
 };
 

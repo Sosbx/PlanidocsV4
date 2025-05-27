@@ -15,6 +15,7 @@ interface PlanningSelectionCellProps {
   onCloseModal: () => void;
   isGrayedOut: boolean;
   readOnly?: boolean;
+  isBlocked?: boolean;
 }
 
 /**
@@ -31,20 +32,21 @@ const PlanningSelectionCell: React.FC<PlanningSelectionCellProps> = ({
   activeModal,
   onCloseModal,
   isGrayedOut,
-  readOnly = false
+  readOnly = false,
+  isBlocked = false
 }) => {
   const isModalOpen = activeModal?.cellKey === cellKey;
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!readOnly && selection?.type !== null) {
+    if (!readOnly && !isBlocked && selection?.type !== null) {
       onOpenModal(cellKey, { x: e.clientX, y: e.clientY });
     }
-  }, [readOnly, selection.type, cellKey, onOpenModal]);
+  }, [readOnly, isBlocked, selection.type, cellKey, onOpenModal]);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (!readOnly && selection?.type !== null) {
+    if (!readOnly && !isBlocked && selection?.type !== null) {
       e.stopPropagation();
       const touch = e.touches[0];
       let timer = setTimeout(() => {
@@ -60,19 +62,19 @@ const PlanningSelectionCell: React.FC<PlanningSelectionCellProps> = ({
       document.addEventListener('touchend', cleanup);
       document.addEventListener('touchmove', cleanup);
     }
-  }, [readOnly, selection.type, cellKey, onOpenModal]);
+  }, [readOnly, isBlocked, selection.type, cellKey, onOpenModal]);
 
   const handleMouseDown = (event: React.MouseEvent) => {
-    // Ne déclencher que pour le clic gauche (button 0) et si pas en lecture seule
-    if (readOnly) {
-      onMouseDown(cellKey, event);
+    // Ne déclencher que pour le clic gauche (button 0) et si pas en lecture seule ou bloqué
+    if (readOnly || isBlocked) {
+      return; // Ne rien faire si en lecture seule ou bloqué
     } else if (!isModalOpen && event.button === 0) {
       onMouseDown(cellKey, event);
     }
   };
 
   const handleMouseEnter = () => {
-    if (!readOnly && !isModalOpen) {
+    if (!readOnly && !isModalOpen && !isBlocked) {
       onMouseEnter(cellKey);
     }
   };
@@ -80,7 +82,7 @@ const PlanningSelectionCell: React.FC<PlanningSelectionCellProps> = ({
   const getCellClasses = () => {
     // Classes de base qui s'appliquent à toutes les cellules
     const baseClasses = `${selection.comment ? 'border-2 border-black' : 'border'} px-2 py-1 text-center select-none transition-colors`;
-    const cursorClasses = readOnly ? 'cursor-default' : 'cursor-pointer';
+    const cursorClasses = readOnly || isBlocked ? 'cursor-not-allowed' : 'cursor-pointer';
     const commentCursor = selection?.type !== null ? 'context-menu' : 'default';
     const hasComment = Boolean(selection.comment);
     const isWeekend = isGrayedOut;
@@ -90,8 +92,17 @@ const PlanningSelectionCell: React.FC<PlanningSelectionCellProps> = ({
     
     // NOUVELLE APPROCHE: Appliquer les couleurs dans un ordre de priorité clair
     
-    // 1. D'abord la couleur de base pour les week-ends
-    if (isWeekend) {
+    // 0. Si la date est bloquée, appliquer un style spécial
+    if (isBlocked) {
+      if (!selection?.type) {
+        classes.push('relative bg-orange-100');
+      } else {
+        classes.push('opacity-70');
+      }
+    }
+    
+    // 1. D'abord la couleur de base pour les week-ends (seulement si aucun type de sélection)
+    if (isWeekend && !selection?.type && !isBlocked) {
       classes.push('bg-gray-100');
     }
     
@@ -104,7 +115,7 @@ const PlanningSelectionCell: React.FC<PlanningSelectionCellProps> = ({
       if (isWeekend) {
         classes.push('bg-red-200');
         classes.push('text-red-900'); // Texte plus foncé pour les week-ends
-      } else if (!hasComment) {
+      } else if (!hasComment && !isBlocked) {
         // Si pas de commentaire, utiliser la couleur normale
         classes.push('bg-red-100');
       }
@@ -118,7 +129,7 @@ const PlanningSelectionCell: React.FC<PlanningSelectionCellProps> = ({
       if (isWeekend) {
         classes.push('bg-blue-200');
         classes.push('text-blue-900'); // Texte plus foncé pour les week-ends
-      } else if (!hasComment) {
+      } else if (!hasComment && !isBlocked) {
         // Si pas de commentaire, utiliser la couleur normale
         classes.push('bg-blue-100');
       }
@@ -132,7 +143,7 @@ const PlanningSelectionCell: React.FC<PlanningSelectionCellProps> = ({
     }
     
     // 4. Ajouter un hover uniquement si nécessaire
-    if (!readOnly && !selection?.type && !isWeekend) {
+    if (!readOnly && !selection?.type && !isWeekend && !isBlocked) {
       classes.push('hover:bg-gray-50');
     }
     
@@ -147,7 +158,7 @@ const PlanningSelectionCell: React.FC<PlanningSelectionCellProps> = ({
         onContextMenu={handleContextMenu}
         onTouchStart={handleTouchStart}
         className={getCellClasses()}
-        title={readOnly ? selection.comment : undefined}
+        title={readOnly ? selection.comment : isBlocked ? 'Cette date est bloquée' : undefined}
       >
         <span className="relative inline-block w-full">
           <span className="font-medium">
@@ -156,6 +167,14 @@ const PlanningSelectionCell: React.FC<PlanningSelectionCellProps> = ({
           </span>
           {selection.comment && (
             <MessageSquare className="absolute -top-1 -right-1 h-3 w-3 text-yellow-600" />
+          )}
+          {isBlocked && !selection?.type && (
+            <div className="absolute inset-0 bg-orange-100 flex items-center justify-center">
+              <svg width="16" height="16" viewBox="0 0 16 16" className="text-orange-500">
+                <circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" strokeWidth="1" />
+                <line x1="4" y1="8" x2="12" y2="8" stroke="currentColor" strokeWidth="1.5" />
+              </svg>
+            </div>
           )}
         </span>
       </td>

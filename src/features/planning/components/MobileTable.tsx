@@ -15,6 +15,7 @@ interface MobileTableProps {
   onOpenModal: (key: string, position: { x: number; y: number }) => void;
   activeModal: { cellKey: string; position: { x: number; y: number } } | null;
   onCloseModal: () => void;
+  isDateBlocked?: (date: Date) => boolean;
 }
 
 const MobileTable: React.FC<MobileTableProps> = ({
@@ -26,7 +27,8 @@ const MobileTable: React.FC<MobileTableProps> = ({
   onComment,
   onOpenModal,
   activeModal,
-  onCloseModal
+  onCloseModal,
+  isDateBlocked
 }) => {
   const days = getDaysArray(startDate, endDate);
   const months = getMonthsInRange(startDate, endDate);
@@ -70,6 +72,7 @@ const MobileTable: React.FC<MobileTableProps> = ({
                         </td>
                         {['M', 'AM', 'S'].map(period => {
                           const cellKey = `${dateStr}-${period}`;
+                          const isBlocked = isDateBlocked ? isDateBlocked(day) : false;
                           return (
                             <PlanningSelectionCell
                               key={cellKey}
@@ -82,6 +85,7 @@ const MobileTable: React.FC<MobileTableProps> = ({
                               activeModal={activeModal}
                               onCloseModal={onCloseModal}
                               isGrayedOut={isGrayed}
+                              isBlocked={isBlocked}
                             />
                           );
                         })}

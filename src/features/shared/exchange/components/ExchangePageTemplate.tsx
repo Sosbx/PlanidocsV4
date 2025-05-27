@@ -150,11 +150,6 @@ const ExchangePageTemplate: React.FC<ExchangePageTemplateProps> = ({
         />
       </div>
 
-      {description && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-          <p className="text-blue-700 text-sm">{description}</p>
-        </div>
-      )}
       
       <ShiftExchangeFilters
         filterPeriod={filterOptions.filterPeriod}

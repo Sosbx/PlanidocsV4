@@ -1,7 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { 
-  getFirestore, 
   initializeFirestore, 
   CACHE_SIZE_UNLIMITED,
   persistentLocalCache,
@@ -12,8 +11,19 @@ import {
 } from 'firebase/firestore';
 import { getFunctions } from 'firebase/functions';
 
-// Admin email constant
-const SYSTEM_ADMIN_EMAIL = 'secretariatrd@h24scm.com';
+// Admin emails constants
+const ADMIN_EMAILS = {
+  RD: 'secretariatrd@h24scm.com',
+  RG: 'secretariat.rive-gauche@h24scm.com'
+};
+
+// Pour la compatibilité avec le code existant
+const SYSTEM_ADMIN_EMAIL = ADMIN_EMAILS.RD;
+
+// Fonction utilitaire pour vérifier si un email est un administrateur système
+const isSystemAdminEmail = (email: string): boolean => {
+  return Object.values(ADMIN_EMAILS).includes(email);
+};
 
 const firebaseConfig = {
   apiKey: "AIzaSyC59Syrl04sY7E1zmJW_jFs1m5I7rHORB4",
@@ -63,4 +73,4 @@ export const precacheCollections = async () => {
   }
 };
 
-export { SYSTEM_ADMIN_EMAIL };
+export { SYSTEM_ADMIN_EMAIL, ADMIN_EMAILS, isSystemAdminEmail };

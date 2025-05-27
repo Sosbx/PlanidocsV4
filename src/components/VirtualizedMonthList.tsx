@@ -1,9 +1,11 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import { FixedSizeList as List } from 'react-window';
 import { getMonthsInRange } from '../utils/dateUtils';
 import MonthTable from './MonthTable';
 import type { ShiftAssignment } from '../types/planning';
 import type { ShiftExchange } from '../types/exchange';
+
+// Styles définis localement dans ce fichier pour éviter les problèmes d'importation
 
 interface VirtualizedMonthListProps {
   startDate: Date;
@@ -59,11 +61,14 @@ const VirtualizedMonthList: React.FC<VirtualizedMonthListProps> = ({
   onLoadPreviousMonth,
   onLoadNextMonth
 }) => {
+  // État local pour les mois - permettra de forcer des re-rendus
+  const [monthsState, setMonthsState] = useState(() => getMonthsInRange(startDate, endDate));
+  
   // Mémoïser le calcul des mois dans la plage de dates
   const months = useMemo(() => {
     return getMonthsInRange(startDate, endDate);
   }, [startDate, endDate]);
-
+  
   // Mémoïser la hauteur approximative d'un mois (300px par défaut)
   const itemHeight = useMemo(() => {
     // On pourrait calculer la hauteur en fonction du nombre de jours dans le mois
@@ -71,12 +76,18 @@ const VirtualizedMonthList: React.FC<VirtualizedMonthListProps> = ({
     return 300;
   }, []);
   
-  // Forcer le re-rendu lorsque showDesiderata change
+  // Mise à jour de l'état local uniquement lors du changement des mois
   React.useEffect(() => {
-    console.log("VirtualizedMonthList: showDesiderata a changé:", showDesiderata);
-    // Cet effet ne fait rien, mais force le composant à se re-rendre
-    // lorsque showDesiderata change
-  }, [showDesiderata]);
+    console.log("VirtualizedMonthList: Mise à jour de la liste des mois");
+    setMonthsState(months);
+  }, [months]);
+  
+  // Mettre à jour l'état lorsque les données importantes changent
+  React.useEffect(() => {
+    console.log("VirtualizedMonthList: Données importantes modifiées");
+    // Mise à jour simple sans re-rendus multiples
+    setMonthsState([...months]);
+  }, [showDesiderata, directExchanges, exchanges, replacements, bagPhaseConfig, width, months]);
 
   // Si aucun mois n'est dans la plage, ne rien rendre
   if (months.length === 0) {
@@ -112,7 +123,7 @@ const VirtualizedMonthList: React.FC<VirtualizedMonthListProps> = ({
           overflow: 'visible' // Permettre au contenu de déborder
         }}
       >
-        {months.map((month, index) => (
+        {monthsState.map((month, index) => (
           <div key={month.getTime()} className="month-table-wrapper">
             <MonthTable
               month={month}

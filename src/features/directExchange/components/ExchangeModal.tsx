@@ -29,7 +29,7 @@ const ExchangeModal: React.FC<ExchangeModalProps> = ({
   onSubmit,
   onRemove,
   initialComment = '',
-  position = { x: window.innerWidth / 2, y: window.innerHeight / 3 },
+  // La position n'est plus utilisée car la modale est maintenant toujours centrée
   assignment,
   exchangeType = 'direct',
   showReplacementOption = false,
@@ -138,22 +138,26 @@ const ExchangeModal: React.FC<ExchangeModalProps> = ({
     }
   };
 
-  // Calculer la position du modal
+  // Style pour centrer parfaitement la modale
   const modalStyle: React.CSSProperties = {
     position: 'fixed',
-    top: Math.min(Math.max(position.y, 100), window.innerHeight - 300),
-    left: Math.min(Math.max(position.x - 150, 20), window.innerWidth - 320),
+    top: '50%',
+    left: '50%',
+    transform: isVisible 
+      ? 'translate(-50%, -50%)' 
+      : 'translate(-50%, -55%)',
     zIndex: 1000,
-    width: '280px',
+    width: '90%',
+    maxWidth: '320px',
     opacity: isVisible ? 1 : 0,
-    transform: isVisible ? 'translateY(0)' : 'translateY(-10px)',
     transition: 'opacity 0.2s ease-out, transform 0.2s ease-out',
+    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-[2px]" onClick={onClose}>
+    <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-[2px] flex items-center justify-center" onClick={onClose}>
       <div 
-        className="bg-white rounded-lg shadow-xl overflow-hidden"
+        className="bg-white rounded-lg shadow-xl overflow-hidden w-full mx-4 sm:mx-0"
         style={modalStyle}
         onClick={e => e.stopPropagation()}
       >

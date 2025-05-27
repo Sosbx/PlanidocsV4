@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from "../../../features/auth/hooks";
 import { getAllDesiderata } from "../../../lib/firebase/desiderata";
+import { useAssociation } from "../../../context/association/AssociationContext";
 
 export const useDesiderataState = (includeArchived: boolean = false) => {
   const { user } = useAuth();
+  const { currentAssociation } = useAssociation();
   // Nous changeons la structure pour s'adapter aux composants qui attendent une propriété type
   const [selections, setSelectionsState] = useState<Record<string, { type: 'primary' | 'secondary' | null }>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -17,10 +19,11 @@ export const useDesiderataState = (includeArchived: boolean = false) => {
 
     setIsLoading(true);
     
-    // Utiliser getAllDesiderata avec le paramètre includeArchived
+    // Utiliser getAllDesiderata avec le paramètre includeArchived et l'association courante
     const loadDesiderata = async () => {
       try {
-        const data = await getAllDesiderata(user.id, includeArchived);
+        console.log(`useDesiderataState: Chargement des désidérata pour l'utilisateur ${user.id} de l'association ${currentAssociation}`);
+        const data = await getAllDesiderata(user.id, includeArchived, false, currentAssociation);
         
         if (data?.selections) {
           // Log détaillé pour comprendre la structure exacte des données
@@ -63,7 +66,7 @@ export const useDesiderataState = (includeArchived: boolean = false) => {
     
     // Pas besoin d'un unsubscribe car nous n'utilisons plus onSnapshot
     return () => {};
-  }, [user, includeArchived]);
+  }, [user, includeArchived, currentAssociation]); // Ajouter currentAssociation comme dépendance
 
   const setSelections = (newSelections: Record<string, { type: 'primary' | 'secondary' | null }>) => {
     setSelectionsState(newSelections);

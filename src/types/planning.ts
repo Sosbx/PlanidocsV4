@@ -5,6 +5,8 @@ export interface PlanningConfig {
   primaryDesiderataLimit: number;
   secondaryDesiderataLimit: number;
   isConfigured: boolean;
+  associationId?: string; // Identifiant de l'association (RD ou RG)
+  holidayBlocks?: Record<string, { blockChristmas: boolean; blockNewYear: boolean }>; // Blocages des fêtes par utilisateur
 }
 
 export interface BagPhaseConfig {
@@ -119,6 +121,7 @@ export const defaultConfig: PlanningConfig = {
   primaryDesiderataLimit: 0,
   secondaryDesiderataLimit: 0,
   isConfigured: false,
+  // associationId sera défini lors de l'initialisation du contexte
 };
 
 export interface ShiftReplacement {

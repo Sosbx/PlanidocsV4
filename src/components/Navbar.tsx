@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Calendar, Settings, Users, LogOut, Menu, X, UserCircle, CheckSquare, CalendarClock, Repeat, LayoutDashboard, ChevronDown, RefreshCw, FileSpreadsheet } from 'lucide-react';
+import { Calendar, Settings, Users, LogOut, Menu, X, UserCircle, CalendarClock, Repeat, ChevronDown, RefreshCw, FileSpreadsheet } from 'lucide-react';
 import { useAuth } from '../features/auth/hooks';
 import { useNotifications } from '../context/notifications/NotificationContext';
 import Logo from './common/Logo';
 import NotificationBell from './common/NotificationBell';
 import { Link, NavLink } from 'react-router-dom';
 import { getUserInitials } from '../features/users/utils/userUtils';
+import { toast } from 'react-toastify';
 
 interface AdminMenuItemProps {
   to: string;
@@ -61,22 +62,66 @@ const AdminMenu: React.FC<AdminMenuProps & { links: NavLinkDefinition[] }> = ({ 
   );
 };
 
-const NavItem: React.FC<NavItemProps> = ({ to, icon: Icon, children, onClick, className = '' }) => (
-  <NavLink
-    to={to}
-    onClick={onClick}
-    className={({ isActive }) => 
-      `flex items-center px-2 py-1.5 rounded-full text-sm font-medium transition-all duration-200 ease-in-out whitespace-nowrap flex-shrink-0 ${
-        isActive
-          ? 'bg-white text-blue-600 shadow-md transform scale-105'
-          : 'text-blue-50 hover:bg-blue-500/50 hover:text-white'
-      } ${className}`
+// Variable globale pour suivre les toasts récemment affichés
+const navItemRecentToasts: Record<string, number> = {};
+
+const NavItem: React.FC<NavItemProps & { disabled?: boolean }> = ({ to, icon: Icon, children, onClick, className = '', disabled }) => {
+  const handleDisabledClick = (e: React.MouseEvent, label?: string) => {
+    e.preventDefault();
+    const featureName = label || 'Cette fonctionnalité';
+    
+    // Vérifier si un toast pour cette fonctionnalité a été affiché récemment
+    const now = Date.now();
+    const lastToastTime = navItemRecentToasts[featureName] || 0;
+    
+    // N'afficher le toast que si aucun n'a été affiché dans les 5 dernières secondes
+    if (now - lastToastTime > 5000) {
+      // Message plus court
+      toast.info(`${featureName} en développement`, {
+        position: "top-center",
+        autoClose: 2000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true
+      });
+      
+      // Enregistrer le moment où ce toast a été affiché
+      navItemRecentToasts[featureName] = now;
     }
-  >
-    <Icon className="h-4 w-4 mr-1 transition-transform duration-200" />
-    {children}
-  </NavLink>
-);
+  };
+
+  if (disabled) {
+    return (
+      <div
+        onClick={(e) => handleDisabledClick(e, children?.toString())}
+        className={`flex items-center px-2 py-1.5 rounded-full text-sm font-medium transition-all duration-200 ease-in-out whitespace-nowrap flex-shrink-0 text-gray-400 cursor-pointer ${className}`}
+        title="En développement"
+      >
+        <Icon className="h-4 w-4 mr-1 transition-transform duration-200" />
+        {children}
+        <span className="text-xs ml-1 text-red-400">(Dev)</span>
+      </div>
+    );
+  }
+  
+  return (
+    <NavLink
+      to={to}
+      onClick={onClick}
+      className={({ isActive }) => 
+        `flex items-center px-2 py-1.5 rounded-full text-sm font-medium transition-all duration-200 ease-in-out whitespace-nowrap flex-shrink-0 ${
+          isActive
+            ? 'bg-white text-blue-600 shadow-md transform scale-105'
+            : 'text-blue-50 hover:bg-blue-500/50 hover:text-white'
+        } ${className}`
+      }
+    >
+      <Icon className="h-4 w-4 mr-1 transition-transform duration-200" />
+      {children}
+    </NavLink>
+  );
+};
 
 // Interface pour définir un lien de navigation
 interface NavLinkDefinition {
@@ -84,6 +129,7 @@ interface NavLinkDefinition {
   icon: React.ElementType;
   label: string;
   requiredRoles: Array<'isUser' | 'isManager' | 'isAdmin' | 'isPartTime' | 'isCAT'>;
+  disabled?: boolean; // Propriété pour désactiver temporairement un lien
 }
 
 const Navbar = () => {
@@ -93,63 +139,55 @@ const Navbar = () => {
   const [isAdminMenuOpen, setIsAdminMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
 
-  // Définition des liens par rôle spécifique (sans chevauchement)
-  const navLinksByRole: Record<string, NavLinkDefinition[]> = useMemo(() => ({
-    // Liens pour les utilisateurs standards
-    isUser: [
-      { to: "/planning", icon: CalendarClock, label: "Planning", requiredRoles: ['isUser'] },
-      { to: "/user", icon: Calendar, label: "Desiderata", requiredRoles: ['isUser'] },
-      { to: "/shift-exchange", icon: Repeat, label: "BaG", requiredRoles: ['isUser'] },
-      { to: "/direct-exchange", icon: RefreshCw, label: "Échanges Directs", requiredRoles: ['isUser'] },
-    ],
-    
-    // Liens pour les managers (incluant les fonctionnalités utilisateur + spécifiques manager)
-    isManager: [
-      { to: "/planning", icon: CalendarClock, label: "Planning", requiredRoles: ['isManager'] },
-      { to: "/user", icon: Calendar, label: "Desiderata", requiredRoles: ['isManager'] },
-      { to: "/shift-exchange", icon: Repeat, label: "BaG", requiredRoles: ['isManager'] },
-      { to: "/direct-exchange", icon: RefreshCw, label: "Échanges Directs", requiredRoles: ['isManager'] },
-      { to: "/admin", icon: Settings, label: "Configuration", requiredRoles: ['isManager'] },
-    ],
-    
-    // Liens pour les administrateurs (uniquement les liens principaux, le reste est dans le menu admin)
-    isAdmin: [
-      { to: "/planning", icon: CalendarClock, label: "Planning", requiredRoles: ['isAdmin'] },
-      { to: "/user", icon: Calendar, label: "Desiderata", requiredRoles: ['isAdmin'] },
-      { to: "/shift-exchange", icon: Repeat, label: "BaG", requiredRoles: ['isAdmin'] },
-      { to: "/direct-exchange", icon: RefreshCw, label: "Échanges Directs", requiredRoles: ['isAdmin'] },
-    ],
-  }), []);
+  // Définition des liens communs à tous les utilisateurs
+  const commonLinks: NavLinkDefinition[] = useMemo(() => [
+    { to: "/planning", icon: CalendarClock, label: "Planning", requiredRoles: ['isUser', 'isManager', 'isAdmin'], disabled: true },
+    { to: "/user", icon: Calendar, label: "Desiderata", requiredRoles: ['isUser', 'isManager', 'isAdmin'] },
+  ], []);
 
   // Liens spécifiques pour le menu d'administration (uniquement pour les administrateurs)
   const adminMenuLinks: NavLinkDefinition[] = useMemo(() => [
-    { to: "/admin", icon: Settings, label: "Configuration", requiredRoles: ['isAdmin'] },
+    { to: "/admin", icon: Settings, label: "Gestion des désidérata", requiredRoles: ['isAdmin', 'isManager'] },
     { to: "/users", icon: Users, label: "Utilisateurs", requiredRoles: ['isAdmin'] },
     { to: "/generated-planning", icon: FileSpreadsheet, label: "Gestion Planning", requiredRoles: ['isAdmin'] },
     { to: "/admin-shift-exchange", icon: Repeat, label: "Gestion BaG", requiredRoles: ['isAdmin'] },
-    { to: "/remplacements", icon: Users, label: "Remplacements", requiredRoles: ['isAdmin'] },
+    { to: "/remplacements", icon: Users, label: "Remplacements", requiredRoles: ['isAdmin'], disabled: true },
   ], []);
 
-  // Déterminer les liens à afficher en fonction de la hiérarchie des rôles
+  // Liens pour les fonctionnalités en développement (communs à tous les utilisateurs)
+  const devFeatureLinks: NavLinkDefinition[] = useMemo(() => [
+    { to: "/shift-exchange", icon: Repeat, label: "BaG", requiredRoles: ['isUser', 'isManager', 'isAdmin'], disabled: true },
+    { to: "/direct-exchange", icon: RefreshCw, label: "Échanges", requiredRoles: ['isUser', 'isManager', 'isAdmin'], disabled: true },
+  ], []);
+
+  // Déterminer les liens à afficher dans la barre de navigation principale
   const userNavLinks = useMemo(() => {
     if (!user || !user.roles) return [];
     
-    // Vérifier les rôles dans l'ordre de priorité
+    // Liens de base pour tous les utilisateurs
+    const links = [...commonLinks];
+    
+    // Ajouter les liens pour les fonctionnalités en développement pour les admins uniquement
     if (user.roles.isAdmin) {
-      return navLinksByRole.isAdmin;
-    } else if (user.roles.isManager) {
-      return navLinksByRole.isManager;
-    } else if (user.roles.isUser) {
-      return navLinksByRole.isUser;
+      links.push(...devFeatureLinks);
     }
     
-    // Si aucun rôle trouvé, retourner un tableau vide
-    return [];
-  }, [user, navLinksByRole]);
+    return links;
+  }, [user, commonLinks, devFeatureLinks]);
+  
+  // Filtrer les liens d'administration en fonction des rôles de l'utilisateur
+  const filteredAdminLinks = useMemo(() => {
+    if (!user || !user.roles) return [];
+    
+    return adminMenuLinks.filter(link => {
+      // Vérifier si l'utilisateur a au moins un des rôles requis
+      return link.requiredRoles.some(role => user.roles && user.roles[role] === true);
+    });
+  }, [user, adminMenuLinks]);
 
   // Vérifier si l'utilisateur a accès au menu d'administration
   const hasAdminAccess = useMemo(() => {
-    return user?.roles?.isAdmin || false;
+    return user && user.roles && user.roles.isAdmin === true ? true : false;
   }, [user]);
 
   useEffect(() => {
@@ -199,7 +237,7 @@ const Navbar = () => {
           <div className="hidden md:flex items-center space-x-1 lg:space-x-2 overflow-x-auto no-scrollbar">
             {/* Afficher les liens de navigation filtrés */}
             {userNavLinks.map(link => (
-              <NavItem key={link.to} to={link.to} icon={link.icon}>
+              <NavItem key={link.to} to={link.to} icon={link.icon} disabled={link.disabled}>
                 <span className="hidden md:inline">{link.label}</span>
               </NavItem>
             ))}
@@ -231,7 +269,7 @@ const Navbar = () => {
                 <AdminMenu 
                   isOpen={isAdminMenuOpen} 
                   onClose={() => setIsAdminMenuOpen(false)}
-                  links={adminMenuLinks}
+                  links={filteredAdminLinks}
                 />
               </div>
             )}
@@ -274,22 +312,31 @@ const Navbar = () => {
                 to={link.to} 
                 icon={link.icon} 
                 onClick={() => setIsMenuOpen(false)}
+                disabled={link.disabled}
               >
                 <span className="inline">{link.label}</span>
               </NavItem>
             ))}
             
-            {/* Liens d'administration pour les administrateurs */}
-            {hasAdminAccess && adminMenuLinks.map(link => (
-              <NavItem 
-                key={link.to} 
-                to={link.to} 
-                icon={link.icon} 
-                onClick={() => setIsMenuOpen(false)}
-              >
-                <span className="inline">{link.label}</span>
-              </NavItem>
-            ))}
+            {/* Section d'administration pour les administrateurs */}
+            {hasAdminAccess && (
+              <>
+                <div className="mt-4 mb-2 px-2 text-xs font-semibold text-blue-100 uppercase tracking-wider">
+                  Administration
+                </div>
+                {filteredAdminLinks.map(link => (
+                  <NavItem 
+                    key={link.to} 
+                    to={link.to} 
+                    icon={link.icon} 
+                    onClick={() => setIsMenuOpen(false)}
+                    disabled={link.disabled}
+                  >
+                    <span className="inline">{link.label}</span>
+                  </NavItem>
+                ))}
+              </>
+            )}
             <button
               onClick={() => {
                 setIsMenuOpen(false);

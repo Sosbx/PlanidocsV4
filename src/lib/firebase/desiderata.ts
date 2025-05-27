@@ -1,10 +1,25 @@
 import { doc, getDoc, setDoc, deleteDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from './config';
 import type { Selections, PeriodSelection } from '../../types/planning';
+import { ASSOCIATIONS } from '../../constants/associations';
 
-export const getDesiderata = async (userId: string): Promise<{ selections: Selections; validatedAt?: string } | null> => {
+/**
+ * Fonction utilitaire pour obtenir le nom de collection approprié selon l'association
+ * @param baseCollection Nom de base de la collection
+ * @param associationId Identifiant de l'association (RD ou RG)
+ * @returns Nom de la collection adapté à l'association
+ */
+export const getCollectionName = (baseCollection: string, associationId: string = ASSOCIATIONS.RIVE_DROITE): string => {
+  if (associationId === ASSOCIATIONS.RIVE_DROITE) {
+    return baseCollection; // Pas de modification pour préserver l'existant
+  }
+  return `${baseCollection}_${associationId}`; // Ex: "desiderata_RG"
+};
+
+export const getDesiderata = async (userId: string, associationId: string = ASSOCIATIONS.RIVE_DROITE): Promise<{ selections: Selections; validatedAt?: string } | null> => {
   try {
-    const docRef = doc(db, 'desiderata', userId);
+    const collectionName = getCollectionName('desiderata', associationId);
+    const docRef = doc(db, collectionName, userId);
     const docSnap = await getDoc(docRef);
     
     if (docSnap.exists()) {
@@ -32,12 +47,13 @@ export const getDesiderata = async (userId: string): Promise<{ selections: Selec
 export const getAllDesiderata = async (
   userId: string, 
   includeArchived: boolean = false,
-  currentPeriodOnly: boolean = false
+  currentPeriodOnly: boolean = false,
+  associationId: string = ASSOCIATIONS.RIVE_DROITE
 ): Promise<{ selections: Selections; validatedAt?: string }> => {
   try {
     // 1. Récupérer les desiderata actifs (toujours inclus)
-    const activeDesiderata = await getDesiderata(userId);
-    console.log(`getAllDesiderata: Desiderata actifs pour ${userId}:`, 
+    const activeDesiderata = await getDesiderata(userId, associationId);
+    console.log(`getAllDesiderata: Desiderata actifs pour ${userId} (association: ${associationId}):`, 
                 activeDesiderata?.selections ? Object.keys(activeDesiderata.selections).length : 0);
     
     const mergedSelections: Selections = activeDesiderata?.selections || {};
@@ -57,12 +73,14 @@ export const getAllDesiderata = async (
       console.log(`getAllDesiderata: Récupération des désidératas archivés pour ${userId}`);
       
       // Récupérer les périodes archivées
-      const archivedPeriodsSnapshot = await getDocs(collection(db, 'archived_planning_periods'));
+      const archivedCollectionName = getCollectionName('archived_planning_periods', associationId);
+      const archivedPeriodsSnapshot = await getDocs(collection(db, archivedCollectionName));
       console.log(`getAllDesiderata: ${archivedPeriodsSnapshot.docs.length} périodes archivées trouvées`);
       
       // Pour chaque période archivée, récupérer les desiderata de l'utilisateur
       for (const periodDoc of archivedPeriodsSnapshot.docs) {
-        const desiderataRef = doc(collection(periodDoc.ref, 'desiderata'), userId);
+        const desiderataCollectionName = getCollectionName('desiderata', associationId);
+        const desiderataRef = doc(collection(periodDoc.ref, desiderataCollectionName), userId);
         const desiderataSnap = await getDoc(desiderataRef);
         
         if (desiderataSnap.exists()) {
@@ -98,10 +116,12 @@ export const getAllDesiderata = async (
 
 export const saveDesiderata = async (
   userId: string, 
-  selections: Selections
+  selections: Selections,
+  associationId: string = ASSOCIATIONS.RIVE_DROITE
 ) => {
   try {
-    const docRef = doc(db, 'desiderata', userId);
+    const collectionName = getCollectionName('desiderata', associationId);
+    const docRef = doc(db, collectionName, userId);
     
     const cleanSelections = Object.fromEntries(
       Object.entries(selections).filter(([_, value]) => value.type !== null || value.comment)
@@ -112,6 +132,7 @@ export const saveDesiderata = async (
     } else {
       await setDoc(docRef, {
         userId,
+        associationId,
         selections: cleanSelections,
         updatedAt: new Date().toISOString()
       });
@@ -125,16 +146,19 @@ export const saveDesiderata = async (
 
 export const validateDesiderata = async (
   userId: string, 
-  selections: Selections
+  selections: Selections,
+  associationId: string = ASSOCIATIONS.RIVE_DROITE
 ) => {
   try {
-    const docRef = doc(db, 'desiderata', userId);
+    const collectionName = getCollectionName('desiderata', associationId);
+    const docRef = doc(db, collectionName, userId);
     const cleanSelections = Object.fromEntries(
       Object.entries(selections).filter(([_, value]) => value?.type !== null || value?.comment) || {}
     );
 
     await setDoc(docRef, {
       userId,
+      associationId,
       selections: cleanSelections,
       validatedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()

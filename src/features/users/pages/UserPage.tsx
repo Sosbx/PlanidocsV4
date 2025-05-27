@@ -302,14 +302,6 @@ const UserPage: React.FC = () => {
           <div className="flex items-center">
             <Calendar className="h-5 w-5 sm:h-6 sm:w-6 text-indigo-600 mr-2" />
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Mes Desiderata</h1>
-            <button
-              onClick={() => setShowTutorial(true)}
-              className="ml-2 p-1.5 rounded-full bg-amber-100/80 shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-300 transition-all transform hover:scale-105 active:scale-95"
-              title="Tutoriel"
-              data-tutorial="tutorial-button"
-            >
-              <HelpCircle className="h-4 w-4 sm:h-5 sm:w-5 text-orange-600 drop-shadow" />
-            </button>
           </div>
           
           <div className="flex items-center gap-1 border rounded-md bg-white shadow-sm" data-tutorial="view-switcher">
@@ -365,9 +357,38 @@ const UserPage: React.FC = () => {
 
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
           <div className="flex items-center mb-4 sm:mb-0">
-            {/* Placeholder div vide pour conserver l'espacement - titre déjà mis en haut */}
+            {/* Bouton d'aide - affiché à gauche sur grand écran */}
+            <div className="hidden sm:block">
+              <button
+                onClick={() => setShowTutorial(true)}
+                className="px-3 py-1 rounded-md bg-amber-50 hover:bg-amber-100 focus:outline-none focus:ring-1 focus:ring-amber-200 transition-all text-amber-700 text-sm"
+                title="Tutoriel"
+                data-tutorial="tutorial-button"
+                data-component-name="UserPage"
+              >
+                <div className="flex items-center gap-1">
+                  <span>Aide</span>
+                  <HelpCircle className="h-3.5 w-3.5 text-amber-500" />
+                </div>
+              </button>
+            </div>
           </div>
           <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+            {/* Bouton d'aide - affiché au-dessus du bouton valider sur petit écran */}
+            <div className="w-full sm:hidden mb-2">
+              <button
+                onClick={() => setShowTutorial(true)}
+                className="w-full px-3 py-1 rounded-md bg-amber-50 hover:bg-amber-100 focus:outline-none focus:ring-1 focus:ring-amber-200 transition-all text-amber-700 text-sm"
+                title="Tutoriel"
+                data-tutorial="tutorial-button"
+                data-component-name="UserPage"
+              >
+                <div className="flex items-center justify-center gap-1">
+                  <span>Aide</span>
+                  <HelpCircle className="h-3.5 w-3.5 text-amber-500" />
+                </div>
+              </button>
+            </div>
             <button 
               onClick={handleValidate}
               data-tutorial="validate-button"

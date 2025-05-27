@@ -52,14 +52,45 @@ export const usePlanningPeriods = ({
     }
     
     // Vérifier s'il y a des périodes qui chevauchent partiellement
-    const overlappingPeriods = allPeriods.filter(period => 
-      (startDate <= period.endDate && endDate >= period.startDate)
+    const overlappingPeriods = allPeriods.filter(period => {
+      // Calculer les dates de début et de fin du chevauchement
+      const overlapStart = new Date(Math.max(startDate.getTime(), period.startDate.getTime()));
+      const overlapEnd = new Date(Math.min(endDate.getTime(), period.endDate.getTime()));
+      
+      // Si pas de chevauchement (overlapStart > overlapEnd), retourner false
+      // On ajoute une marge de tolérance d'un jour pour éviter les problèmes dus aux heures/minutes
+      const oneDayInMs = 24 * 60 * 60 * 1000;
+      if (overlapStart.getTime() > overlapEnd.getTime() + oneDayInMs) {
+        return false;
+      }
+      
+      // Il y a chevauchement
+      return true;
+    });
+    
+    // Log pour le débogage
+    console.log(`Périodes existantes: ${allPeriods.length}`, 
+      allPeriods.map(p => ({
+        name: p.name,
+        start: p.startDate.toISOString(),
+        end: p.endDate.toISOString()
+      }))
+    );
+    console.log(`Nouvelle période: ${startDate.toISOString()} - ${endDate.toISOString()}`);
+    console.log(`Périodes chevauchantes détectées: ${overlappingPeriods.length}`, 
+      overlappingPeriods.map(p => ({
+        name: p.name,
+        start: p.startDate.toISOString(),
+        end: p.endDate.toISOString()
+      }))
     );
     
     if (overlappingPeriods.length > 0) {
-      throw new Error(`Impossible de créer une période qui chevauche des périodes existantes: ${
-        overlappingPeriods.map(p => p.name).join(', ')
-      }`);
+      const overlappingPeriodDetails = overlappingPeriods.map(p => 
+        `${p.name} (${p.startDate.toLocaleDateString()} - ${p.endDate.toLocaleDateString()})`
+      ).join(', ');
+      
+      throw new Error(`Impossible de créer une période qui chevauche des périodes existantes: ${overlappingPeriodDetails}`);
     }
     
     const today = new Date();
@@ -182,7 +213,7 @@ export const usePlanningPeriods = ({
       futurePeriodId,
       futurePeriod: futurePeriodObj
     };
-  }, [createPlanningPeriod]);
+  }, [createPlanningPeriod, allPeriods]);
 
   /**
    * Trouve une période qui correspond exactement à la plage de dates spécifiée
@@ -221,8 +252,8 @@ export const usePlanningPeriods = ({
       // Calculer le pourcentage de chevauchement par rapport à la période détectée
       const overlapPercentage = (overlapDuration / effectiveDuration) * 100;
       
-      // Retourner true si le chevauchement est significatif (au moins 50%)
-      return overlapPercentage >= 50;
+      // Retourner true si le chevauchement est significatif (au moins 10%)
+      return overlapPercentage >= 10;
     });
   }, [allPeriods]);
 

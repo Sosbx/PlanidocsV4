@@ -13,6 +13,7 @@ import {
   FileText,
   Shield
 } from 'lucide-react';
+import LogoImage from '../assets/images/Logo.png';
 
 interface DashboardCardProps {
   to: string;
@@ -20,24 +21,43 @@ interface DashboardCardProps {
   title: string;
   description: string;
   color: string;
+  disabled?: boolean;
 }
 
-const DashboardCard: React.FC<DashboardCardProps> = ({ to, icon, title, description, color }) => (
-  <Link
-    to={to}
-    className={`relative group p-6 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 border-2 border-gray-100 ${color} overflow-hidden transform hover:-translate-y-0.5`}
-  >
-    <div className="relative z-10">
-      <div className="flex items-center gap-4 mb-3">
-        <div className="p-2.5 bg-gray-50/50 rounded-lg group-hover:bg-white transition-colors">
-          {icon}
+const DashboardCard: React.FC<DashboardCardProps> = ({ to, icon, title, description, color, disabled }) => (
+  disabled ? (
+    <div
+      className={`relative group p-6 bg-white rounded-xl shadow-sm border-2 border-gray-100 overflow-hidden cursor-not-allowed opacity-60`}
+    >
+      <div className="relative z-10">
+        <div className="flex items-center gap-4 mb-3">
+          <div className="p-2.5 bg-gray-50/50 rounded-lg transition-colors">
+            {icon}
+          </div>
+          <h3 className="text-lg font-medium text-gray-900">{title}</h3>
         </div>
-        <h3 className="text-lg font-medium text-gray-900">{title}</h3>
+        <p className="text-sm text-gray-600 leading-relaxed">{description}</p>
+        <p className="text-xs text-red-500 mt-2 font-medium">En développement</p>
       </div>
-      <p className="text-sm text-gray-600 leading-relaxed">{description}</p>
+      <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-gray-50/50 opacity-0 transition-all duration-500" />
     </div>
-    <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-gray-50/50 opacity-0 group-hover:opacity-100 transition-all duration-500" />
-  </Link>
+  ) : (
+    <Link
+      to={to}
+      className={`relative group p-6 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 border-2 border-gray-100 ${color} overflow-hidden transform hover:-translate-y-0.5`}
+    >
+      <div className="relative z-10">
+        <div className="flex items-center gap-4 mb-3">
+          <div className="p-2.5 bg-gray-50/50 rounded-lg group-hover:bg-white transition-colors">
+            {icon}
+          </div>
+          <h3 className="text-lg font-medium text-gray-900">{title}</h3>
+        </div>
+        <p className="text-sm text-gray-600 leading-relaxed">{description}</p>
+      </div>
+      <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-gray-50/50 opacity-0 group-hover:opacity-100 transition-all duration-500" />
+    </Link>
+  )
 );
 
 const DashboardPage: React.FC = () => {
@@ -45,13 +65,15 @@ const DashboardPage: React.FC = () => {
 
   if (!user) return null;
 
-  const userCards = [
+  // Définition de tous les cartes utilisateur
+  const allUserCards = [
     {
       to: "/planning",
       icon: <CalendarClock className="h-6 w-6 text-teal-600" />,
       title: "Mon Planning",
       description: "Consulter mon planning et échanger mes Gardes",
-      color: "hover:border-teal-500 hover:bg-gradient-to-br hover:from-teal-50 hover:to-emerald-50/50"
+      color: "hover:border-teal-500 hover:bg-gradient-to-br hover:from-teal-50 hover:to-emerald-50/50",
+      disabled: true // Temporairement désactivé
     },
     {
       to: "/user",
@@ -65,22 +87,28 @@ const DashboardPage: React.FC = () => {
       icon: <Repeat className="h-6 w-6 text-violet-600" />,
       title: "Bourse aux Gardes",
       description: "Interagir avec la bourse aux gardes",
-      color: "hover:border-violet-500 hover:bg-gradient-to-br hover:from-violet-50 hover:to-purple-50/50"
+      color: "hover:border-violet-500 hover:bg-gradient-to-br hover:from-violet-50 hover:to-purple-50/50",
+      disabled: true // Temporairement désactivé
     },
     {
       to: "/direct-exchange",
       icon: <Repeat className="h-6 w-6 text-orange-600" />,
-      title: "Échanges Directs",
-      description: "Échanger directement vos gardes avec d'autres médecins",
-      color: "hover:border-orange-500 hover:bg-gradient-to-br hover:from-orange-50 hover:to-amber-50/50"
+      title: "Échanges",
+      description: "Céder, échanger ou se faire remplacer",
+      color: "hover:border-orange-500 hover:bg-gradient-to-br hover:from-orange-50 hover:to-amber-50/50",
+      disabled: true // Temporairement désactivé
     }
   ];
+  
+  // Filtrer uniquement la carte "Échanges" tout en gardant les autres cartes désactivées visibles
+  const userCards = allUserCards.filter(card => !(card.title === "Échanges"));
 
-  const adminCards = [
+  // Définition de toutes les cartes administrateur
+  const allAdminCards = [
     {
       to: "/admin",
       icon: <Settings className="h-6 w-6 text-indigo-600" />,
-      title: "Configuration",
+      title: "Gestion des désidérata",
       description: "Configurer les paramètres des desiderata",
       color: "hover:border-indigo-500 hover:bg-gradient-to-br hover:from-indigo-50 hover:to-blue-50/50"
     },
@@ -89,14 +117,16 @@ const DashboardPage: React.FC = () => {
       icon: <Repeat className="h-6 w-6 text-fuchsia-600" />,
       title: "Gestion BaG",
       description: "Gérer la bourse aux gardes",
-      color: "hover:border-fuchsia-500 hover:bg-gradient-to-br hover:from-fuchsia-50 hover:to-pink-50/50"
+      color: "hover:border-fuchsia-500 hover:bg-gradient-to-br hover:from-fuchsia-50 hover:to-pink-50/50",
+      disabled: true // Temporairement désactivé
     },
     {
       to: "/direct-exchange",
       icon: <Repeat className="h-6 w-6 text-orange-600" />,
-      title: "Échanges Directs",
-      description: "Gérer les échanges directs entre médecins",
-      color: "hover:border-orange-500 hover:bg-gradient-to-br hover:from-orange-50 hover:to-amber-50/50"
+      title: "Échanges",
+      description: "Gérer les cessions, échanges et remplacements entre médecins",
+      color: "hover:border-orange-500 hover:bg-gradient-to-br hover:from-orange-50 hover:to-amber-50/50",
+      disabled: true // Temporairement désactivé
     },
     {
       to: "/generated-planning",
@@ -129,7 +159,7 @@ const DashboardPage: React.FC = () => {
           <div className="flex items-center justify-between">
             <div className="flex items-center">
               <img 
-                src="/src/assets/images/Logo.png" 
+                src={LogoImage} 
                 alt="PlaniDoc Logo" 
                 className="h-8 w-8 sm:h-12 sm:w-12 object-contain"
               />
@@ -174,7 +204,7 @@ const DashboardPage: React.FC = () => {
         {user.roles.isAdmin && (
           <div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {adminCards.map((card, index) => (
+              {allAdminCards.filter(card => !(card.title === "Échanges")).map((card, index) => (
                 <DashboardCard key={index} {...card} />
               ))}
             </div>

@@ -1,9 +1,9 @@
 @tailwind base;
-@tailwind components;
-@tailwind utilities;
-
 /* Import des styles personnalisés */
 @import './styles/PlanningStyles.css';
+
+@tailwind components;
+@tailwind utilities;
 
 @layer utilities {
   /* Masquer la barre de défilement tout en permettant le défilement */

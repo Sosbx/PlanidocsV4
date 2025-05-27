@@ -3,6 +3,7 @@ import { db } from './config';
 import { ShiftPeriod } from '../../types/exchange';
 import { getPeriodDisplayText, formatDate } from '../../utils/dateUtils';
 import { FirestoreCacheUtils } from '../../utils/cacheUtils';
+import { sendPushNotification } from './pushNotifications';
 
 // Types de notifications
 export enum NotificationType {
@@ -34,6 +35,9 @@ export enum NotificationType {
   PROPOSAL_ACCEPTED = 'proposal_accepted',
   PROPOSAL_REJECTED = 'proposal_rejected',
   PROPOSAL_CANCELLED = 'proposal_cancelled',
+  
+  // Désiderata
+  DESIDERATA_REMINDER = 'desiderata_reminder',
   
   // Autres
   INTERESTED_USER = 'interested_user',
@@ -92,6 +96,8 @@ export interface NotificationCreateOptions {
   };
 }
 
+
+
 /**
  * Récupère les notifications d'un utilisateur
  * @param userId ID de l'utilisateur
@@ -144,9 +150,9 @@ export const getNotificationsForUser = async (
       });
     });
     
-    // Stocker les données dans le cache
+    // Mettre en cache les données récupérées
     FirestoreCacheUtils.set(cacheKey, notifications);
-
+    
     return notifications;
   } catch (error) {
     console.error('Error getting notifications:', error);
@@ -177,11 +183,15 @@ export const addNotification = async (
         iconType = NotificationIconType.GIVE;
       } else if (options.type.includes('replacement')) {
         iconType = NotificationIconType.REPLACEMENT;
-      } else if (options.type === NotificationType.INFO) {
+      } else if (options.type.includes('accepted')) {
+        iconType = NotificationIconType.CHECK;
+      } else if (options.type.includes('rejected')) {
+        iconType = NotificationIconType.X;
+      } else if (options.type.includes('info')) {
         iconType = NotificationIconType.INFO;
-      } else if (options.type === NotificationType.WARNING) {
+      } else if (options.type.includes('warning')) {
         iconType = NotificationIconType.WARNING;
-      } else if (options.type === NotificationType.ERROR) {
+      } else if (options.type.includes('error')) {
         iconType = NotificationIconType.ERROR;
       } else {
         iconType = NotificationIconType.NONE;
@@ -189,13 +199,49 @@ export const addNotification = async (
     }
     
     const notificationsRef = collection(db, 'notifications');
-    const docRef = await addDoc(notificationsRef, {
-      ...options,
-      iconType,
+    const notificationData = {
+      userId: options.userId,
+      title: options.title,
+      message: options.message,
+      type: options.type,
+      iconType: iconType,
       read: false,
-      createdAt: Timestamp.now()
-    });
-    return docRef.id;
+      createdAt: Timestamp.now(),
+      relatedId: options.relatedId,
+      link: options.link,
+      actionText: options.actionText,
+      secondaryAction: options.secondaryAction
+    };
+    
+    const notificationRef = await addDoc(notificationsRef, notificationData);
+    
+    // Invalider le cache pour cet utilisateur
+    FirestoreCacheUtils.invalidate(`notifications_user_${options.userId}`);
+    
+    // Envoyer également une notification push
+    try {
+      const pushData = {
+        userId: options.userId,
+        title: options.title,
+        body: options.message,
+        type: options.type,
+        data: {
+          relatedId: options.relatedId || '',
+          link: options.link || '',
+          type: options.type,
+          createdAt: new Date().toISOString()
+        }
+      };
+      
+      // Envoyer la notification push
+      await sendPushNotification(pushData);
+      console.log('Notification push envoyée avec succès');
+    } catch (pushError) {
+      console.error('Erreur lors de l\'envoi de la notification push:', pushError);
+      // Ne pas bloquer le processus si l'envoi de notification push échoue
+    }
+    
+    return notificationRef.id;
   } catch (error) {
     console.error('Error adding notification:', error);
     throw error;
@@ -449,6 +495,54 @@ export const sendExchangeNotification = async (
     relatedId: exchangeId,
     link
   });
+};
+
+
+
+/**
+ * Crée une notification de rappel pour les désiderata
+ * @param userId ID de l'utilisateur destinataire
+ * @param deadline Date limite pour la validation des désiderata
+ * @returns ID de la notification créée
+ */
+export const createDesiderataReminderNotification = async (
+  userId: string,
+  deadline: Date
+): Promise<string> => {
+  const deadlineStr = formatDate(deadline);
+  
+  return addNotification({
+    userId,
+    title: 'Rappel : Validation des désiderata',
+    message: `N'oubliez pas de valider vos désiderata avant le ${deadlineStr}. Votre participation est essentielle pour la création du planning.`,
+    type: NotificationType.DESIDERATA_REMINDER,
+    iconType: NotificationIconType.WARNING,
+    link: '/desiderata',
+    actionText: 'Voir mes désiderata'
+  });
+};
+
+/**
+ * Crée une notification de rappel pour les désiderata et envoie également un email
+ * @param userId ID de l'utilisateur destinataire
+ * @param deadline Date limite pour la validation des désiderata
+ * @param associationId ID de l'association
+ * @returns ID de la notification créée
+ */
+export const createDesiderataReminderWithEmail = async (
+  userId: string,
+  deadline: Date,
+  associationId?: string
+): Promise<string> => {
+  // Créer la notification dans l'application
+  const notificationId = await createDesiderataReminderNotification(userId, deadline);
+  
+  // Essayer d'envoyer également un email
+  // Cette partie sera implémentée plus tard en intégrant avec le système d'email existant
+  // TODO: Intégrer avec le système d'email existant
+  console.log('Association ID pour l\'envoi d\'email:', associationId);
+  
+  return notificationId;
 };
 
 /**

@@ -2,6 +2,10 @@ import React, { useMemo } from 'react';
 import { Badge } from './common';
 import type { ShiftAssignment } from '../types/planning';
 import type { ShiftExchange } from '../types/exchange';
+import { getCellBackgroundClass } from '../utils/cellColorUtils';
+
+// Importer les styles pour les couleurs des opérations
+import '../styles/OperationColors.css';
 
 interface PlanningGridCellProps {
   cellKey: string;
@@ -56,12 +60,23 @@ const PlanningGridCell: React.FC<PlanningGridCellProps> = React.memo(({
   // Vérifier si l'utilisateur a proposé cette garde à l'échange
   const hasProposedGuard = exchange && exchange.userId === userId && !isReceivedShift;
   
+  // Vérifier si cette garde a reçu des propositions (pour afficher une pastille)
+  const hasIncomingProposals = (exchange && exchange.hasProposals) || 
+                              (directExchange && directExchange.hasProposals) || false;
+  
   // Vérifier si la garde est proposée aux remplaçants
   const isProposedToReplacements = replacement && replacement.originalUserId === userId;
   
   // Obtenir les types d'opération à partir de l'échange
   const operationTypes = useMemo(() => {
     if (!exchange) return [];
+    
+    // Forcer un log pour vérifier la structure de l'échange
+    console.log('PlanningGridCell - Échange détecté:', exchange.id, 
+      'operationTypes:', exchange.operationTypes, 
+      'operationType:', exchange.operationType,
+      'userId:', exchange.userId,
+      'cellKey:', cellKey);
     
     // Prioriser le tableau operationTypes s'il existe
     if (exchange.operationTypes?.length) {
@@ -74,7 +89,7 @@ const PlanningGridCell: React.FC<PlanningGridCellProps> = React.memo(({
     }
     
     return exchange.operationType ? [exchange.operationType] : [];
-  }, [exchange]);
+  }, [exchange, cellKey]);
   
   // Déterminer les combinaisons de types d'opérations
   const hasExchangeOp = operationTypes.includes('exchange');
@@ -88,33 +103,51 @@ const PlanningGridCell: React.FC<PlanningGridCellProps> = React.memo(({
   const directExchangeBgClass = useMemo(() => {
     if (bagPhaseConfig.phase !== 'completed') return '';
     
+    if (directExchange) {
+      console.log('PlanningGridCell - Échange direct en PHASE COMPLETED détecté:', directExchange.id, 
+        'operationTypes:', directExchange.operationTypes, 
+        'operationType:', directExchange.operationType,
+        'userId:', directExchange.userId, 'userIdMatch:', directExchange.userId === userId,
+        'cellKey:', cellKey);
+    }
+    
     if (directExchange && directExchange.userId === userId) {
       const directExchangeOpTypes = directExchange.operationTypes || [];
       const hasDirectExchangeOp = directExchangeOpTypes.includes('exchange');
       const hasDirectGiveOp = directExchangeOpTypes.includes('give');
       const hasDirectReplacementOp = directExchangeOpTypes.includes('replacement');
       
+      console.log('PlanningGridCell - Analyse types PHASE COMPLETED:', 
+        'hasExchange:', hasDirectExchangeOp, 
+        'hasGive:', hasDirectGiveOp, 
+        'hasReplacement:', hasDirectReplacementOp);
+      
+      // Utiliser des couleurs plus foncées pour être sûr qu'elles s'affichent
       if (hasDirectExchangeOp && hasDirectGiveOp && hasDirectReplacementOp) {
-        return 'bg-amber-50'; // CER
+        return 'bg-amber-200'; // CER
       } else if (hasDirectExchangeOp && hasDirectGiveOp) {
-        return 'bg-orange-50'; // CE
+        return 'bg-orange-200'; // CE
       } else if (hasDirectExchangeOp && hasDirectReplacementOp) {
-        return 'bg-lime-50'; // ER
+        return 'bg-lime-200'; // ER
       } else if (hasDirectGiveOp && hasDirectReplacementOp) {
-        return 'bg-amber-50'; // CR
+        return 'bg-amber-200'; // CR
       } else if (hasDirectExchangeOp) {
-        return 'bg-green-50'; // E
+        return 'bg-green-200'; // E
       } else if (hasDirectGiveOp) {
-        return 'bg-yellow-50'; // C
+        return 'bg-yellow-200'; // C
       } else if (hasDirectReplacementOp) {
-        return 'bg-amber-50'; // R
+        return 'bg-amber-200'; // R
       }
+      
+      // Fallback - s'il y a un échange direct mais aucun type, appliquer quand même une couleur
+      console.log('⚠️ DIRECT EXCHANGE WITHOUT TYPE IN COMPLETED PHASE:', cellKey);
+      return 'bg-blue-200';
     } else if (isProposedToReplacements) {
-      return 'bg-amber-50'; // R
+      return 'bg-amber-200'; // R
     }
     
     return '';
-  }, [bagPhaseConfig.phase, directExchange, userId, isProposedToReplacements]);
+  }, [bagPhaseConfig.phase, directExchange, userId, isProposedToReplacements, cellKey]);
   
   // Vérifier si la date est dans le passé
   const isPastDate = useMemo(() => {
@@ -125,76 +158,45 @@ const PlanningGridCell: React.FC<PlanningGridCellProps> = React.memo(({
     return cellDate < today;
   }, [assignment?.date]);
 
+  // Utiliser l'utilitaire de coloration centralisé
+
   // Construire les classes de fond
   const bgClasses = useMemo(() => {
-    // Forcer la mise à jour lorsque desideratum change
-    console.log("PlanningGridCell: Recalcul des classes de fond pour", cellKey, "desideratum:", desideratum?.type);
+    // Utiliser l'utilitaire centralisé pour déterminer la classe de fond
+    const baseClass = getCellBackgroundClass({
+      isGrayedOut,
+      desideratum,
+      showDesiderata: !!desideratum,
+      exchange,
+      directExchange,
+      isProposedToReplacements,
+      isReceivedShift,
+      isReceivedPermutation,
+      userId,
+      bagPhase: bagPhaseConfig.phase
+    });
     
-    // Déterminer les classes en fonction des différentes conditions
+    // Collecter toutes les classes supplémentaires
     const classes = [];
     
-    // NOUVELLE APPROCHE: Appliquer les couleurs de base d'abord
-    
-    // Classe de base pour les cellules grisées (week-ends)
-    if (isGrayedOut) {
-      classes.push('bg-gray-100');
+    // Ajouter la classe de fond principale
+    if (baseClass) {
+      classes.push(baseClass);
     }
     
-    // Appliquer les couleurs de désidérata (qu'il y ait une garde ou non)
-    if (desideratum?.type) {
-      if (desideratum.type === 'primary') {
-        // Pour les désidératas principaux (rouge), plus foncé si grisé
-        classes.push(isGrayedOut ? 'bg-red-200' : 'bg-red-100');
-      } else {
-        // Pour les désidératas secondaires (bleu), plus foncé si grisé
-        classes.push(isGrayedOut ? 'bg-blue-200' : 'bg-blue-100');
-      }
-    }
-    
-    // ENSUITE, appliquer les classes pour les gardes et échanges
-    // en utilisant la transparence pour préserver les couleurs de base
-    
-    // Gardes proposées
-    if (bagPhaseConfig.phase !== 'completed' && hasProposedGuard && !isReceivedShift) {
-      if (hasBoth) {
-        classes.push('bg-purple-100/80'); // Utiliser la transparence
-      } else if (hasExchangeOp) {
-        classes.push('bg-yellow-100/80');
-      } else if (hasGiveOp) {
-        classes.push('bg-blue-100/80');
-      }
-      classes.push('shadow-sm'); // Appliquer l'ombre indépendamment
-    }
-    
-    // Échanges directs en phase completed
-    else if (directExchangeBgClass) {
-      // Utiliser la transparence pour préserver les couleurs de base
-      const transparentClass = directExchangeBgClass.replace('bg-', 'bg-') + '/70';
-      classes.push(transparentClass);
-    }
-    
-    // Gardes reçues 
-    else if (isReceivedShift && bagPhaseConfig.phase !== 'completed') {
-      if (isReceivedPermutation) {
-        classes.push('bg-emerald-100/70');
-      } else {
-        classes.push('bg-green-100/70');
-      }
+    // Ajouter une classe spécifique pour les gardes avec propositions
+    if (hasIncomingProposals) {
+      classes.push('ring-1 ring-red-400');
     }
     
     // Ajouter les classes communes
-    if (assignment) {
-      if (!isPastDate) {
-        classes.push('hover:bg-opacity-75');
-      }
+    if (assignment && !isPastDate) {
+      classes.push('hover:bg-opacity-75');
     }
     
     // Ajouter une classe pour les dates passées
     if (isPastDate) {
-      // Suppression de bg-gray-50/50 qui causait le fond blanc
-      // Appliquer uniquement l'opacité pour préserver le fond d'origine
       classes.push('opacity-70');
-      // Supprimer le pointeur de souris
       classes.push('cursor-default');
     }
     
@@ -210,11 +212,16 @@ const PlanningGridCell: React.FC<PlanningGridCellProps> = React.memo(({
     isReceivedPermutation, 
     bagPhaseConfig.phase, 
     hasProposedGuard, 
+    hasIncomingProposals,
     hasBoth, 
     hasExchangeOp, 
     hasGiveOp, 
     assignment,
-    isPastDate
+    isPastDate,
+    userId,
+    exchange,
+    directExchange,
+    isProposedToReplacements
   ]);
   
   // Générer le titre (tooltip) de la cellule
@@ -230,6 +237,11 @@ const PlanningGridCell: React.FC<PlanningGridCellProps> = React.memo(({
       // Info sur les gardes reçues
       if (isReceivedShift) {
         title += isReceivedPermutation ? ' (Garde permutée)' : ' (Garde reçue via la bourse)';
+      }
+      
+      // Info sur les propositions reçues
+      if (hasIncomingProposals) {
+        title += ' (Vous avez reçu des propositions pour cette garde)';
       }
       
       // Info sur tous les types d'opérations dans un seul message
@@ -255,7 +267,8 @@ const PlanningGridCell: React.FC<PlanningGridCellProps> = React.memo(({
     hasProposedGuard, 
     isProposedToReplacements, 
     hasExchangeOp, 
-    hasGiveOp
+    hasGiveOp,
+    hasIncomingProposals
   ]);
   
   // Si pas d'assignment, rendre une cellule vide mais avec le grisage et les desiderata appropriés
@@ -285,9 +298,10 @@ const PlanningGridCell: React.FC<PlanningGridCellProps> = React.memo(({
       title={cellTitle}
       onClick={(e) => !isAdminView && assignment && !isPastDate && onCellClick(e, cellKey, assignment)}
     >
-      <div className="relative">
+      <div className="relative w-full h-full">
+        {/* Texte du shift, avec position relative pour ne pas être recouvert */}
         <span className={`
-          font-semibold text-[13px] 
+          inline-block relative z-10 font-semibold text-[13px] 
           ${period === 'M' 
             ? 'text-amber-800' 
             : period === 'AM' 
@@ -300,13 +314,21 @@ const PlanningGridCell: React.FC<PlanningGridCellProps> = React.memo(({
           {assignment.shiftType || ''}
         </span>
         
-        {/* Badges pour les différents types d'opérations */}
-        <div className="absolute -top-2 -right-2 flex space-x-1">
+        {/* Badges pour les différents types d'opérations - position absolue dans le coin supérieur droit */}
+        <div className="absolute top-0 right-0 badge-container" style={{ fontSize: 0, maxWidth: '40%', maxHeight: '40%', pointerEvents: 'auto', margin: '-4px 0 0 0' }}>
           {/* Badge pour les intéressés */}
           {bagPhaseConfig.phase !== 'completed' && hasProposedGuard && interestedCount > 0 && !isReceivedShift && (
-            <span className="badge-appear">
-              <Badge type="interested" count={interestedCount} size="sm" />
-            </span>
+            <div className="badge-appear" style={{ position: 'absolute', top: '-4px', right: '0' }}>
+              <Badge type="interested" count={interestedCount} size="xs" />
+            </div>
+          )}
+          
+          {/* Badge pour les propositions reçues */}
+          {hasIncomingProposals && (
+            <div 
+              className="absolute -bottom-1 -right-1 w-3 h-3 bg-red-500 rounded-full border border-white shadow-sm animate-pulse" 
+              title="Vous avez reçu des propositions pour cette garde"
+            ></div>
           )}
           
           {/* Badge pour les types d'opérations */}
@@ -316,54 +338,92 @@ const PlanningGridCell: React.FC<PlanningGridCellProps> = React.memo(({
               // Si un échange direct existe pour cette cellule et cet utilisateur
               if (directExchange && directExchange.userId === userId) {
                 return (
-                  <span className="badge-appear absolute top-0 right-0 mt-1 mr-1" style={{ zIndex: 40 }}>
+                  <div className="badge-appear" style={{ position: 'absolute', zIndex: 40, top: '-4px', right: '0' }}>
                     <Badge 
                       type="operation-types" 
-                      size="sm" 
+                      size="xs" 
                       operationTypes={directExchange.operationTypes || []}
                     />
-                  </span>
+                  </div>
                 );
               }
               
               // Sinon, afficher uniquement le badge de remplacement si applicable
               if (isProposedToReplacements) {
                 return (
-                  <span className="badge-appear absolute top-0 right-0 mt-1 mr-1" style={{ zIndex: 40 }}>
+                  <div className="badge-appear" style={{ position: 'absolute', zIndex: 40, top: '-4px', right: '0' }}>
                     <Badge 
                       type="operation-types" 
-                      size="sm" 
+                      size="xs" 
                       operationTypes={['replacement']}
                     />
-                  </span>
+                  </div>
                 );
               }
               
               return null;
             }
             
-            // Pour les autres phases, conserver le comportement existant mais sans pastille E pour la bourse aux gardes
-            if ((hasProposedGuard || isProposedToReplacements) && operationTypes.length + (isProposedToReplacements ? 1 : 0) > 0) {
-              // Si c'est un échange de la bourse aux gardes (type 'bag'), ne pas afficher la pastille E
-              const filteredOperationTypes = hasProposedGuard && exchange?.exchangeType === 'bag' 
-                ? operationTypes.filter(type => type !== 'exchange')
-                : [...(hasProposedGuard ? operationTypes : [])];
+            // Pour les autres phases, conserver le comportement existant
+            console.log('PlanningGridCell - Évaluation du badge:', 
+              'hasProposedGuard:', hasProposedGuard, 
+              'isProposedToReplacements:', isProposedToReplacements,
+              'operationTypes:', operationTypes,
+              'exchange:', exchange?.id,
+              'exchangeType:', exchange?.exchangeType,
+              'directExchange:', directExchange?.id);
+            
+            // Badge seulement pour les échanges directs, pas pour la bourse aux gardes
+            // Utiliser directExchange comme source alternative d'échanges directs
+            if ((hasProposedGuard && exchange?.exchangeType !== 'bag') || directExchange || isProposedToReplacements) {
+              // Construire la liste des types d'opérations à afficher
+              const filteredOperationTypes: string[] = [];
               
-              // Ajouter le type 'replacement' si nécessaire
-              if (isProposedToReplacements) {
-                filteredOperationTypes.push('replacement');
+              // Ajouter les types d'échange si c'est une garde proposée en direct exchange
+              if (hasProposedGuard && exchange?.exchangeType !== 'bag') {
+                operationTypes.forEach(type => filteredOperationTypes.push(type));
               }
               
-              // N'afficher le badge que s'il reste des types d'opérations après filtrage
+              // Ajouter les types d'un échange direct explicite si présent
+              if (directExchange) {
+                const directTypes = directExchange.operationTypes || [];
+                directTypes.forEach(type => {
+                  if (!filteredOperationTypes.includes(type)) {
+                    filteredOperationTypes.push(type);
+                  }
+                });
+                
+                // Utiliser l'operationType si operationTypes n'est pas disponible
+                if (directTypes.length === 0 && directExchange.operationType) {
+                  if (directExchange.operationType === 'both') {
+                    if (!filteredOperationTypes.includes('exchange')) filteredOperationTypes.push('exchange');
+                    if (!filteredOperationTypes.includes('give')) filteredOperationTypes.push('give');
+                  } else if (!filteredOperationTypes.includes(directExchange.operationType)) {
+                    filteredOperationTypes.push(directExchange.operationType);
+                  }
+                }
+              }
+              
+              // Ajouter le type 'replacement' si applicable
+              if (isProposedToReplacements) {
+                if (!filteredOperationTypes.includes('replacement')) {
+                  filteredOperationTypes.push('replacement');
+                }
+              }
+              
+              // Log des opérations filtrées
+              console.log('PlanningGridCell - Types filtrés:', filteredOperationTypes);
+              
+              // Afficher le badge seulement s'il y a des types d'opérations
               if (filteredOperationTypes.length > 0) {
                 return (
-                  <span className="badge-appear absolute top-0 right-0 -mt-1 -mr-1" style={{ zIndex: 40 }}>
+                  <div className="badge-appear" style={{ position: 'absolute', zIndex: 40, top: '-4px', right: '0' }}>
                     <Badge 
                       type="operation-types" 
-                      size="sm" 
+                      size="xs" 
                       operationTypes={filteredOperationTypes}
                     />
-                  </span>
+                  </div>
                 );
               }
             }

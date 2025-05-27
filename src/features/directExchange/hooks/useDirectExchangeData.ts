@@ -32,10 +32,30 @@ export const useDirectExchangeData = (userAssignments: Record<string, any> | nul
     if (!user || !userAssignments || !directExchanges.length) return;
     
     const userAssignmentsKeys = Object.keys(userAssignments);
-    const receivedProps = directExchanges.filter(exchange => 
-      exchange.userId !== user.id &&
-      userAssignmentsKeys.includes(`${exchange.date}-${exchange.period}`)
-    );
+    
+    // Filtrer les propositions pour:
+    // 1. Exclure les gardes de l'utilisateur actuel (exchange.userId !== user.id)
+    // 2. S'assurer que la garde correspond à une assignation de l'utilisateur courant
+    // 3. Exclure les gardes déjà proposées par l'utilisateur courant (doublons)
+    // 4. Exclure les gardes proposées uniquement aux remplaçants
+    const receivedProps = directExchanges.filter(exchange => {
+      const key = `${exchange.date}-${exchange.period}`;
+      
+      // Vérifier si cette garde est destinée uniquement aux remplaçants
+      const isReplacementOnly = exchange.operationTypes && 
+                               exchange.operationTypes.length === 1 && 
+                               exchange.operationTypes[0] === 'replacement';
+      
+      // Vérifier si l'utilisateur est un remplaçant
+      const isUserReplacement = user.roles?.isReplacement === true;
+      
+      return (
+        exchange.userId !== user.id && 
+        userAssignmentsKeys.includes(key) &&
+        // N'afficher les gardes de remplacement que si l'utilisateur est un remplaçant
+        (!isReplacementOnly || (isReplacementOnly && isUserReplacement))
+      );
+    });
     
     setReceivedProposals(receivedProps);
     
@@ -61,10 +81,24 @@ export const useDirectExchangeData = (userAssignments: Record<string, any> | nul
       // Filtrer les propositions reçues
       if (userAssignments) {
         const userAssignmentsKeys = Object.keys(userAssignments);
-        const receivedProps = exchangesData.filter(exchange => 
-          exchange.userId !== user.id &&
-          userAssignmentsKeys.includes(`${exchange.date}-${exchange.period}`)
-        );
+        const receivedProps = exchangesData.filter(exchange => {
+          const key = `${exchange.date}-${exchange.period}`;
+          
+          // Vérifier si cette garde est destinée uniquement aux remplaçants
+          const isReplacementOnly = exchange.operationTypes && 
+                                   exchange.operationTypes.length === 1 && 
+                                   exchange.operationTypes[0] === 'replacement';
+          
+          // Vérifier si l'utilisateur est un remplaçant
+          const isUserReplacement = user.roles?.isReplacement === true;
+          
+          return (
+            exchange.userId !== user.id && 
+            userAssignmentsKeys.includes(key) &&
+            // N'afficher les gardes de remplacement que si l'utilisateur est un remplaçant
+            (!isReplacementOnly || (isReplacementOnly && isUserReplacement))
+          );
+        });
         
         setReceivedProposals(receivedProps);
       }

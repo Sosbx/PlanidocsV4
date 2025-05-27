@@ -1,4 +1,5 @@
 import React from 'react';
+import logoImage from '../../assets/images/Logo.png';
 
 interface LogoProps {
   className?: string;
@@ -9,7 +10,7 @@ const Logo: React.FC<LogoProps> = ({ className = '', showText = true }) => {
   return (
     <div className={`flex items-center ${className}`}>
       <img 
-        src="/src/assets/images/Logo.png" 
+        src={logoImage} 
         alt="PlaniDoc Logo" 
         className="h-16 w-16 object-contain"
       />

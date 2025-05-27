@@ -9,6 +9,8 @@ import { PlanningPeriodProvider } from './context/planning';
 import { NotificationProvider } from './context/notifications';
 import { ExchangeProvider } from './context/exchange';
 import { ConnectionStatus, LoadingSpinner } from './components/common';
+import { AssociationProvider } from './context/association/AssociationContext';
+import NotificationPermissionManager from './components/notifications/NotificationPermissionManager';
 
 // Import des pages critiques directement (utiles dès le début)
 import LoginPage from './features/auth/pages/LoginPage';
@@ -34,7 +36,8 @@ const AdminShiftExchangePage = lazy(() => import('./features/shiftExchange/pages
 const App: React.FC = () => {
   return (
     <Router>
-      <UserProvider>
+      <AssociationProvider>
+        <UserProvider>
         <PlanningProvider>
           <BagPhaseProvider>
             <PlanningPeriodProvider>
@@ -191,6 +194,8 @@ const App: React.FC = () => {
                               <Route path="/" element={<Navigate to="/dashboard" replace />} />
                             </Routes>
                             <ConnectionStatus />
+                            {/* Gestionnaire de permissions pour les notifications push */}
+                            <NotificationPermissionManager />
                           </div>
                         </ProtectedRoute>
                       }
@@ -202,6 +207,7 @@ const App: React.FC = () => {
           </BagPhaseProvider>
         </PlanningProvider>
       </UserProvider>
+      </AssociationProvider>
     </Router>
   );
 };

@@ -3,6 +3,7 @@ import { AlertCircle } from 'lucide-react';
 import { generateCredentials } from '../utils';
 import { createUser } from '../../../lib/firebase/auth/userCreation';
 import { useAuth } from '../../../features/auth/hooks';
+import { useAssociation } from '../../../context/association/AssociationContext';
 
 interface AddUserFormProps {
   type: 'h24' | 'external';
@@ -16,6 +17,7 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({ type, onSuccess }) => 
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { user: currentUser } = useAuth();
+  const { currentAssociation } = useAssociation();
 
   const getEmailPlaceholder = () => {
     if (type === 'h24') {
@@ -32,13 +34,20 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({ type, onSuccess }) => 
     setIsSubmitting(true);
 
     try {
-      const credentials = generateCredentials(
+      // Générer les credentials de manière asynchrone
+      const credentials = await generateCredentials(
         type === 'external' 
           ? { firstName, lastName, email }
-          : { email }
+          : { email },
+        currentAssociation // Passer l'association actuelle
       );
 
-      await createUser(credentials);
+      // Ajouter l'associationId aux informations utilisateur
+      console.log(`Création d'un utilisateur pour l'association: ${currentAssociation}`);
+      console.log(`Login généré: ${credentials.login}`);
+      
+      // Créer l'utilisateur avec la bonne association
+      await createUser(credentials, currentAssociation);
       setEmail('');
       setFirstName('');
       setLastName('');

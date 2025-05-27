@@ -12,6 +12,7 @@ import {
   getAllPlanningsByPeriod
 } from '../../../lib/firebase/planning';
 import { getAllDesiderata } from '../../../lib/firebase/desiderata';
+import { useAssociation } from '../../../context/association/AssociationContext';
 import { LoadingSpinner } from '../../../components/common';
 import { ConfirmationModal } from '../../../components/modals';
 import Toast from '../../../components/Toast';
@@ -51,7 +52,8 @@ const GeneratedPlanningTable = lazy(() => import('../components/GeneratedPlannin
  * Page d'administration du planning généré
  */
 const GeneratedPlanningPage: React.FC = () => {
-  // Hooks Firebase
+  const { currentAssociation } = useAssociation();
+  const [isLoading, setIsLoading] = useState(true);
   const { users, loading: isLoadingUsers } = useUsers();
   const { allPeriods, isLoading: isLoadingPeriods, refreshPeriods, getActivePeriod } = usePlanningPeriod();
   const activePeriod = getActivePeriod();
@@ -228,6 +230,8 @@ const GeneratedPlanningPage: React.FC = () => {
   };
 
   // Sélectionner les assignments du planning actuel (combinés de toutes les périodes)
+
+
   const currentAssignments = React.useMemo(() => {
     if (!selectedUserId || !generatedPlannings || Object.keys(generatedPlannings).length === 0) {
       return {};
@@ -331,7 +335,9 @@ const GeneratedPlanningPage: React.FC = () => {
     const fetchDesiderata = async () => {
       try {
         // Spécifier explicitement que nous voulons inclure les desiderata archivés
-        const userDesiderata = await getAllDesiderata(selectedUserId, true);
+        // Utiliser l'association courante pour récupérer les desiderata depuis la bonne collection
+        console.log(`GeneratedPlanningPage: Chargement des désidérata pour l'utilisateur ${selectedUserId} de l'association ${currentAssociation}`);
+        const userDesiderata = await getAllDesiderata(selectedUserId, true, false, currentAssociation);
         if (userDesiderata && userDesiderata.selections) {
           // Transformer les données pour correspondre au format attendu
           const formattedDesiderata: Record<string, { type: 'primary' | 'secondary' | null }> = {};

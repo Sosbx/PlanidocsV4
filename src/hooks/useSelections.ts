@@ -2,6 +2,8 @@ import { useState, useCallback, useEffect, useMemo } from 'react';
 import { calculatePercentages, wouldExceedLimit } from '../utils/planningUtils';
 import { useDesiderataState } from '../features/planning/hooks/useDesiderataState';
 import { useDesiderata } from '../features/planning/hooks/useDesiderata';
+import { usePlanningConfig } from '../context/planning/PlanningContext';
+import { useAuth } from '../features/auth/hooks';
 import type { Selections, PeriodSelection } from '../types/planning';
 
 interface UseSelectionsProps {
@@ -23,6 +25,8 @@ export const useSelections = ({
 }: UseSelectionsProps) => {
   const { selections: savedSelections, isLoading } = useDesiderataState();
   const { saveDesiderata, isSaving } = useDesiderata();
+  const { config } = usePlanningConfig();
+  const { user } = useAuth();
   const [activeDesiderata, setActiveDesiderata] = useState<'primary' | 'secondary' | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [localSelections, setLocalSelections] = useState<Selections>({});
@@ -51,6 +55,25 @@ export const useSelections = ({
       const currentSelection = prev[dateKey]?.type;
       
       if (action === 'select') {
+        // Vérifier si l'utilisateur est bloqué pour cette date
+        if (user && config.holidayBlocks?.[user.id]) {
+          const userBlocks = config.holidayBlocks[user.id];
+          const dateObj = new Date(dateKey);
+          const dayMonth = `${dateObj.getDate()}-${dateObj.getMonth() + 1}`;
+          
+          // Vérifier Noël (24 et 25 décembre)
+          if (userBlocks.blockChristmas && (dayMonth === '24-12' || dayMonth === '25-12')) {
+            onLimitExceeded('Vous ne pouvez pas sélectionner les jours de Noël');
+            return prev;
+          }
+          
+          // Vérifier Nouvel An (31 décembre)
+          if (userBlocks.blockNewYear && dayMonth === '31-12') {
+            onLimitExceeded('Vous ne pouvez pas sélectionner le jour de Nouvel An');
+            return prev;
+          }
+        }
+        
         newSelections[dateKey] = { 
           ...prev[dateKey],
           type: activeDesiderata 
@@ -69,7 +92,7 @@ export const useSelections = ({
       setHasUnsavedChanges(true);
       return newSelections;
     });
-  }, [activeDesiderata, startDate, endDate, primaryLimit, secondaryLimit, onLimitExceeded]);
+  }, [activeDesiderata, startDate, endDate, primaryLimit, secondaryLimit, onLimitExceeded, user, config]);
 
   const handleComment = useCallback((dateKey: string, comment: string) => {
     setLocalSelections(prev => {
@@ -108,12 +131,22 @@ export const useSelections = ({
   }, [isDragging, activeDesiderata, dragAction, updateSelection]);
 
   useEffect(() => {
-    const handleMouseUp = () => {
+    // Gestionnaire pour terminer la sélection au relâchement du clic ou du toucher
+    const handleDragEnd = () => {
       setIsDragging(false);
       setDragAction('select');
     };
-    window.addEventListener('mouseup', handleMouseUp);
-    return () => window.removeEventListener('mouseup', handleMouseUp);
+    
+    // Écouter les événements de souris et tactiles
+    window.addEventListener('mouseup', handleDragEnd);
+    window.addEventListener('touchend', handleDragEnd);
+    window.addEventListener('touchcancel', handleDragEnd);
+    
+    return () => {
+      window.removeEventListener('mouseup', handleDragEnd);
+      window.removeEventListener('touchend', handleDragEnd);
+      window.removeEventListener('touchcancel', handleDragEnd);
+    };
   }, []);
 
   const resetSelections = useCallback(async () => {

@@ -16,6 +16,7 @@ import { format } from 'date-fns';
 import type { GeneratedPlanning, ExchangeHistory, ShiftAssignment } from "../types";
 import Toast from "../../../components/Toast";
 import { getAllDesiderata } from "../../../lib/firebase/desiderata";
+import { useAssociation } from "../../../context/association/AssociationContext";
 
 // Importation dynamique des fonctions d'export volumineuses
 import { 
@@ -32,6 +33,7 @@ const UserPlanningPage: React.FC = () => {
   const { config } = usePlanningConfig();
   const { config: bagPhaseConfig } = useBagPhase();
   const { allPeriods } = usePlanningPeriod();
+  const { currentAssociation } = useAssociation();
   const [planning, setPlanning] = useState<GeneratedPlanning | null>(null);
   const [planningsByPeriod, setPlanningsByPeriod] = useState<Record<string, GeneratedPlanning>>({});
   const todayRef = useRef<HTMLDivElement>(null);
@@ -67,10 +69,10 @@ const UserPlanningPage: React.FC = () => {
     if (!user) return;
     const loadDesiderata = async () => {
       try {
-        console.log("UserPlanningPage: Chargement des désiderata pour l'utilisateur", user.id);
+        console.log(`UserPlanningPage: Chargement des désiderata pour l'utilisateur ${user.id} de l'association ${currentAssociation}`);
         
         // Récupérer d'abord uniquement les désiderata actifs pour les examiner
-        const activeData = await getAllDesiderata(user.id, false);
+        const activeData = await getAllDesiderata(user.id, false, false, currentAssociation);
         console.log("UserPlanningPage: Désiderata actifs récupérés:", 
                     activeData?.selections ? Object.keys(activeData.selections).length : 0);
         
@@ -83,7 +85,7 @@ const UserPlanningPage: React.FC = () => {
         }
         
         // Inclure les desiderata archivés pour l'affichage complet
-        const data = await getAllDesiderata(user.id, true);
+        const data = await getAllDesiderata(user.id, true, false, currentAssociation);
         console.log("UserPlanningPage: Total des désiderata (actifs + archivés):", 
                     data?.selections ? Object.keys(data.selections).length : 0);
         
@@ -139,7 +141,7 @@ const UserPlanningPage: React.FC = () => {
       }
     };
     loadDesiderata();
-  }, [user]);
+  }, [user, currentAssociation]); // Ajouter currentAssociation comme dépendance pour recharger les desiderata quand l'association change
   
   // Update timeLeft every second during submission phase
   useEffect(() => {
@@ -271,17 +273,21 @@ const UserPlanningPage: React.FC = () => {
             
             // Pour chaque période, extraire les assignments et les ajouter à planningsByPeriod
             periodIds.forEach(periodId => {
+              // Vérifier que la période existe et n'est pas null
               const periodData = data.periods[periodId];
               console.log(`Période ${periodId}:`, periodData);
               
-              if (periodData.assignments) {
+              // Vérifier que periodData existe et contient des assignments
+              if (periodData && periodData.assignments) {
                 console.log(`Assignments dans la période ${periodId}:`, Object.keys(periodData.assignments).length);
-                console.log(`Exemple d'assignment dans la période ${periodId}:`, Object.entries(periodData.assignments)[0]);
+                if (Object.keys(periodData.assignments).length > 0) {
+                  console.log(`Exemple d'assignment dans la période ${periodId}:`, Object.entries(periodData.assignments)[0]);
+                }
                 
                 // Convertir le timestamp Firestore en Date
                 const uploadedAt = periodData.uploadedAt && typeof periodData.uploadedAt.toDate === 'function' 
                   ? periodData.uploadedAt.toDate() 
-                  : new Date(periodData.uploadedAt);
+                  : new Date(periodData.uploadedAt || Date.now());
                 
                 // Stocker le planning dans la structure par période
                 setPlanningsByPeriod(prev => {
@@ -592,6 +598,20 @@ const UserPlanningPage: React.FC = () => {
   
   // Fonction pour déterminer si un jour est le premier jour d'une période BAG
   const isFirstDayOfBagPeriod = (date: Date) => {
+    // Vérifier d'abord si la date appartient à une période importée sans BAG
+    const matchingPeriod = allPeriods.find(period => {
+      const startDate = new Date(period.startDate);
+      const endDate = new Date(period.endDate);
+      return date >= startDate && date <= endDate;
+    });
+    
+    // Si la période existe et est soit en phase 'completed' soit a le statut 'active',
+    // alors c'est une période importée sans BAG - ignorer la détection de début de BAG
+    if (matchingPeriod && (matchingPeriod.bagPhase === 'completed' || matchingPeriod.status === 'active')) {
+      console.log(`Date ${format(date, 'yyyy-MM-dd')} appartient à une période importée sans BAG: ${matchingPeriod.name}`);
+      return false;
+    }
+    
     // Trouver la période future (BAG)
     const bagPeriod = allPeriods.find(p => p.status === 'future');
     if (!bagPeriod) {

@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { X, HelpCircle, Columns, LayoutList } from 'lucide-react';
 
-const HIGHLIGHT_CLASS = 'ring-4 ring-indigo-500 ring-opacity-70 z-50 shadow-lg animate-pulse';
+// Classes CSS pour la mise en surbrillance des éléments
+const HIGHLIGHT_CLASSES = {
+  standard: ['ring-4', 'ring-indigo-500', 'ring-opacity-90', 'z-[100]', 'shadow-xl', 'animate-pulse'],
+  button: ['ring-4', 'ring-amber-500', 'ring-opacity-100', 'z-[100]', 'shadow-xl', 'animate-pulse', 'scale-105']
+};
 
 interface TutorialStep {
   target: string;
@@ -10,6 +14,7 @@ interface TutorialStep {
   position: 'top' | 'bottom' | 'left' | 'right';
   highlightTargets?: string[];
   icon?: React.ReactNode;
+  important?: boolean; // Pour mettre en évidence les étapes cruciales
 }
 
 const tutorialSteps: TutorialStep[] = [
@@ -18,7 +23,8 @@ const tutorialSteps: TutorialStep[] = [
     title: 'Guide Interactif',
     content: 'Bienvenue dans le tutoriel. Cliquez sur ce bouton orange à tout moment pour retrouver l\'aide. Suivez les étapes pour découvrir toutes les fonctionnalités de votre planning.',
     position: 'bottom',
-    highlightTargets: ['[data-tutorial="tutorial-button"]'],
+    highlightTargets: ['[data-tutorial="tutorial-button"] button'],
+    important: true,
     icon: <HelpCircle className="h-5 w-5 text-orange-600" />
   },
   {
@@ -26,7 +32,8 @@ const tutorialSteps: TutorialStep[] = [
     title: 'Afficher les Desiderata',
     content: 'Activez ce bouton pour voir vos desiderata superposés sur votre planning. Cela vous permet de comparer vos souhaits avec le planning final.',
     position: 'bottom',
-    highlightTargets: ['[data-tutorial="toggle-desiderata"]'],
+    highlightTargets: ['[data-tutorial="toggle-desiderata"] button', '[data-tutorial="toggle-desiderata"] input[type="checkbox"]'],
+    important: true,
     icon: <HelpCircle className="h-5 w-5 text-orange-600" />
   },
   {
@@ -34,15 +41,17 @@ const tutorialSteps: TutorialStep[] = [
     title: 'Changer de Vue',
     content: 'Alternez entre deux modes : Vue en colonnes (défilement horizontal) et Vue en liste (défilement vertical). Choisissez celle qui convient le mieux à votre appareil.',
     position: 'bottom',
-    highlightTargets: ['[data-tutorial="view-switcher"]'],
+    highlightTargets: ['[data-tutorial="view-switcher"] button:first-child', '[data-tutorial="view-switcher"] button:last-child'],
+    important: true,
     icon: <div className="flex gap-2"><Columns className="h-5 w-5 text-orange-600" /><LayoutList className="h-5 w-5 text-orange-600" /></div>
   },
   {
     target: '[data-tutorial="planning-grid"]',
     title: 'Interagir avec le Planning',
     content: 'Cliquez sur une garde pour la proposer à l\'échange ou la retirer. Vous pourrez également ajouter un commentaire pour préciser vos conditions d\'échange.',
-    position: 'top',
-    highlightTargets: ['[data-tutorial="planning-grid"] table', '[data-tutorial="planning-grid"] table tbody'],
+    position: 'bottom',
+    highlightTargets: ['[data-tutorial="planning-grid"] table td'],
+    important: true,
     icon: <HelpCircle className="h-5 w-5 text-orange-600" />
   },
   {
@@ -81,8 +90,10 @@ const PlanningTutorial: React.FC<TutorialProps> = ({ isOpen, onClose }) => {
 
     // Fonction pour nettoyer les highlights
     const cleanupHighlights = () => {
-      document.querySelectorAll(`.${HIGHLIGHT_CLASS.split(' ').join('.')}`).forEach(el => {
-        HIGHLIGHT_CLASS.split(' ').forEach(className => {
+      // Sélectionner tous les éléments avec les classes de surbrillance
+      document.querySelectorAll('.ring-indigo-500, .ring-amber-500, .animate-pulse').forEach(el => {
+        // Supprimer toutes les classes possibles
+        [...HIGHLIGHT_CLASSES.standard, ...HIGHLIGHT_CLASSES.button, 'scale-110', 'transition-all', 'duration-300', 'ease-in-out'].forEach(className => {
           el.classList.remove(className);
         });
       });
@@ -95,48 +106,66 @@ const PlanningTutorial: React.FC<TutorialProps> = ({ isOpen, onClose }) => {
       // Nettoyer les highlights précédents
       cleanupHighlights();
 
-      // Appliquer les nouveaux highlights
-      const currentStepData = tutorialSteps[currentStep];
-      if (currentStepData.highlightTargets) {
-        currentStepData.highlightTargets.forEach(target => {
-          const elements = document.querySelectorAll(target);
-          elements.forEach(el => {
-            HIGHLIGHT_CLASS.split(' ').forEach(className => {
-              el.classList.add(className);
+      // Le nettoyage est déjà fait par cleanupHighlights()
+
+      // Appliquer les nouveaux highlights avec délai pour éviter les problèmes de rendu
+      setTimeout(() => {
+        const currentStepData = tutorialSteps[currentStep];
+        if (currentStepData.highlightTargets) {
+          currentStepData.highlightTargets.forEach(target => {
+            // Utiliser directement les sélecteurs spécifiques pour les boutons
+            const elements = document.querySelectorAll(target);
+            
+            if (elements.length === 0) {
+              console.warn(`Aucun élément trouvé pour le sélecteur: ${target}`);
+            }
+            
+            elements.forEach(el => {
+              // Toujours appliquer la classe de surbrillance des boutons pour plus de visibilité
+              HIGHLIGHT_CLASSES.button.forEach(className => {
+                el.classList.add(className);
+              });
+              
+              // Ajouter des classes pour la transition
+              el.classList.add('transition-all', 'duration-300', 'ease-in-out');
+              
+              // Ajouter un effet de zoom pour rendre le bouton plus visible
+              if (el.tagName === 'BUTTON' || el.tagName === 'A') {
+                el.classList.add('scale-110');
+              }
             });
           });
-        });
-      }
+        }
+      }, 100); // Délai plus long pour s'assurer que le DOM est prêt
 
       // Mesures de base
       const windowHeight = window.innerHeight;
       const windowWidth = window.innerWidth;
-      const isMobile = windowWidth < 640;
-      const isTablet = windowWidth >= 640 && windowWidth < 768;
-      
-      // Calculer la taille de la bulle en fonction de la taille d'écran
-      const tooltipWidth = isMobile ? Math.min(windowWidth * 0.92, 400) : isTablet ? 400 : 448;
-      const tooltipHeight = isMobile ? 240 : 220;
-      const margin = isMobile ? 12 : 16;
-      
-      // Obtenir la position de l'élément ciblé
+      const isMobile = window.innerWidth < 640; // Breakpoint sm de Tailwind
+
+      // Dimensions dynamiques basées sur la taille de l'écran
+      const tooltipWidth = isMobile ? window.innerWidth * 0.92 : Math.min(448, window.innerWidth * 0.8); // max-w-md = 28rem = 448px
+      const tooltipHeight = isMobile ? 280 : 250; // Estimation plus réaliste de la hauteur
+      const margin = isMobile ? 8 : 16; // Marge plus petite sur mobile
+
       const rect = currentTarget.getBoundingClientRect();
-      
+
       let top = 0;
       let left = 0;
       let origin = 'center';
+      const position = tutorialSteps[currentStep].position;
 
       // Gestion spéciale pour l'étape planning qui nécessite un meilleur positionnement
-      const isPlanningStep = currentStepData.target === '[data-tutorial="planning-grid"]';
-      const isTutorialButton = currentStepData.target === '[data-tutorial="tutorial-button"]';
+      const isPlanningStep = tutorialSteps[currentStep].target === '[data-tutorial="planning-grid"]';
+      const isTutorialButton = tutorialSteps[currentStep].target === '[data-tutorial="tutorial-button"]';
 
       if (isMobile) {
         // Sur mobile, positionner au centre horizontalement
         left = (windowWidth - tooltipWidth) / 2;
-        
+
         // Ajuster horizontalement si nécessaire
         left = Math.max(margin, Math.min(windowWidth - tooltipWidth - margin, left));
-        
+
         // Positionnement vertical intelligent selon l'étape
         if (isPlanningStep) {
           // Pour le planning, positionner en haut
@@ -150,35 +179,91 @@ const PlanningTutorial: React.FC<TutorialProps> = ({ isOpen, onClose }) => {
         }
       } else {
         // Sur tablette/desktop, positionnement plus précis
-        
-        // Calcul horizontal centré sur l'élément cible
-        left = rect.left + (rect.width / 2) - (tooltipWidth / 2);
-        
-        // Ajustement horizontal pour rester dans l'écran
-        left = Math.max(margin, Math.min(windowWidth - tooltipWidth - margin, left));
-        
-        // Orientation automatique en fonction de l'espace disponible
-        if (isPlanningStep) {
-          // Pour la grille de planning, toujours en haut avec espace
-          top = margin + 10;
-          origin = 'top';
-        } else if (rect.top > tooltipHeight + margin + 40) {
-          // Si assez d'espace au-dessus, placer au-dessus
-          top = rect.top - tooltipHeight - margin;
-          origin = 'bottom';
-        } else if (rect.bottom + tooltipHeight + margin < windowHeight) {
-          // Si assez d'espace en-dessous, placer en-dessous
-          top = rect.bottom + margin;
-          origin = 'top';
+
+        // Calcul de la position horizontale en fonction de la position demandée
+        if (position === 'left') {
+          left = Math.max(margin, rect.left - tooltipWidth - margin);
+          origin = 'right';
+        } else if (position === 'right') {
+          left = Math.min(windowWidth - tooltipWidth - margin, rect.right + margin);
+          origin = 'left';
         } else {
-          // Sinon, centrer verticalement dans la fenêtre
-          top = (windowHeight - tooltipHeight) / 2;
-          origin = 'center';
+          // Pour 'top' et 'bottom', centrer horizontalement
+          left = rect.left + (rect.width / 2) - (tooltipWidth / 2);
+
+          // Ajustement si le tooltip dépasse l'écran horizontalement
+          if (left < margin) {
+            left = margin;
+            origin = 'left';
+          } else if (left + tooltipWidth > windowWidth - margin) {
+            left = windowWidth - tooltipWidth - margin;
+            origin = 'right';
+          }
+        }
+
+        // Calcul de la position verticale en fonction de la position demandée
+        if (position === 'top') {
+          top = Math.max(margin, rect.top - tooltipHeight - margin);
+          origin = `${origin} bottom`;
+        } else if (position === 'bottom') {
+          top = Math.min(windowHeight - tooltipHeight - margin, rect.bottom + margin);
+          origin = `${origin} top`;
+        } else {
+          // Pour 'left' et 'right', centrer verticalement
+          top = rect.top + (rect.height / 2) - (tooltipHeight / 2);
+
+          // Ajustement si le tooltip dépasse l'écran verticalement
+          if (top < margin) {
+            top = margin;
+            origin = `top ${origin}`;
+          } else if (top + tooltipHeight > windowHeight - margin) {
+            top = windowHeight - tooltipHeight - margin;
+            origin = `bottom ${origin}`;
+          }
         }
       }
 
-      // Assurer que la bulle est toujours entièrement visible (sécurité finale)
+      // Sur mobile, toujours positionner les tooltips en dessous ou au-dessus pour ne pas cacher les boutons
+      if (isMobile) {
+        // Déterminer s'il y a plus d'espace en haut ou en bas
+        const spaceAbove = rect.top;
+        const spaceBelow = windowHeight - rect.bottom;
+        
+        if (spaceBelow > tooltipHeight + margin * 2 || spaceBelow > spaceAbove) {
+          // Positionner en dessous si assez d'espace
+          top = rect.bottom + margin * 2; // Ajouter plus d'espace pour éviter de cacher le bouton
+          origin = 'top';
+        } else {
+          // Sinon positionner au-dessus
+          top = Math.max(margin, rect.top - tooltipHeight - margin * 2);
+          origin = 'bottom';
+        }
+        
+        // Centrer horizontalement sur mobile
+        left = windowWidth / 2 - tooltipWidth / 2;
+      } else {
+        // Sur desktop, suivre la position demandée mais avec des ajustements
+        if (position === 'left' || position === 'right') {
+          // Si l'espace est insuffisant sur les côtés, placer au-dessus ou en-dessous
+          if (left < margin || left + tooltipWidth > windowWidth - margin) {
+            if (rect.top > windowHeight / 2) {
+              // Plus de place en haut
+              top = Math.max(margin, rect.top - tooltipHeight - margin);
+              left = rect.left + (rect.width / 2) - (tooltipWidth / 2);
+              origin = 'bottom';
+            } else {
+              // Plus de place en bas
+              top = Math.min(windowHeight - tooltipHeight - margin, rect.bottom + margin);
+              left = rect.left + (rect.width / 2) - (tooltipWidth / 2);
+              origin = 'top';
+            }
+          }
+        }
+      }
+
+      // S'assurer que le tooltip reste dans les limites de l'écran
       top = Math.max(margin, Math.min(windowHeight - tooltipHeight - margin, top));
+      left = Math.max(margin, Math.min(windowWidth - tooltipWidth - margin, left));
 
       setTooltipStyle({
         top,
@@ -226,7 +311,7 @@ const PlanningTutorial: React.FC<TutorialProps> = ({ isOpen, onClose }) => {
 
       {/* Tooltip */}
       <div
-        className="fixed z-50 w-[92%] sm:w-auto sm:max-w-md bg-white rounded-lg shadow-xl transform transition-all duration-300 ease-in-out opacity-0 animate-fadeIn"
+        className="fixed z-50 w-[92%] sm:w-auto sm:max-w-md bg-white rounded-lg shadow-xl transform transition-all duration-300 ease-in-out opacity-0 animate-fadeIn overflow-hidden"
         style={{
           top: `${tooltipStyle.top}px`,
           left: `${tooltipStyle.left}px`,

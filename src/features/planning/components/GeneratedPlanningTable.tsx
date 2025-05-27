@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { format, getDaysInMonth } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { getMonthsInRange, isGrayedOut } from '../../../utils/dateUtils';
@@ -7,6 +7,7 @@ import type { ShiftExchange } from '../../../types/exchange';
 import { getAllDesiderata } from '../../../lib/firebase/desiderata';
 import { useBagPhase } from '../../../features/shiftExchange/hooks';
 import { usePlanningPeriod } from '../../../context/planning';
+import { useAssociation } from '../../../context/association/AssociationContext';
 import { addShiftExchange, removeShiftExchange, subscribeToShiftExchanges } from '../../../lib/firebase/exchange';
 import { getReplacementsForUser } from '../../../lib/firebase/replacements';
 import { CommentModal } from '../../../components/modals';
@@ -19,6 +20,11 @@ import { Badge } from '../../../components/common';
 import { OperationType } from '../../../types/exchange';
 import VirtualizedMonthList from '../../../components/VirtualizedMonthList';
 import useConsolidatedExchanges from '../../../hooks/useConsolidatedExchanges';
+import { getCellBackgroundClass } from '../../../utils/cellColorUtils';
+import PlanningGridCell from '../../../components/PlanningGridCell';
+
+// Importer les styles pour les couleurs des opérations
+import '../../../styles/OperationColors.css';
 
 interface GeneratedPlanningTableProps {
   startDate: Date;
@@ -61,6 +67,17 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
   const { user } = useAuth();
   const { config: bagPhaseConfig } = useBagPhase();
   const { isInCurrentPeriod, allPeriods } = usePlanningPeriod();
+  const { currentAssociation } = useAssociation();
+  const lastViewModeRef = useRef(viewMode);
+  
+  // Mise à jour du viewMode
+  useEffect(() => {
+    // Mémoriser le nouveau mode de vue
+    if (lastViewModeRef.current !== viewMode) {
+      console.log("GeneratedPlanningTable: Changement de viewMode détecté", lastViewModeRef.current, "->", viewMode);
+      lastViewModeRef.current = viewMode;
+    }
+  }, [viewMode]);
   const [selectedCell, setSelectedCell] = useState<{
     key: string;
     position: { x: number; y: number };
@@ -129,7 +146,14 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
 
   // Fonction pour convertir les échanges en un objet avec les clés au format "YYYY-MM-DD-PERIOD"
   const convertExchangesToMap = useCallback((exchanges: ShiftExchange[]) => {
-    return exchanges.reduce((acc, exchange) => {
+    console.log("Conversion des échanges en map. Nombre d'échanges:", exchanges.length);
+    
+    // Log détaillé des échanges à convertir
+    exchanges.forEach(exchange => {
+      console.log(`Échange à convertir: id=${exchange.id}, date=${exchange.date}, period=${exchange.period}, type=${exchange.exchangeType}, operationTypes=${exchange.operationTypes?.join(',')}`);
+    });
+    
+    const result = exchanges.reduce((acc, exchange) => {
       if (!exchange.date || !exchange.period) {
         console.warn("Échange sans date ou période:", exchange);
         return acc;
@@ -137,6 +161,7 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
       
       // Clé unique pour chaque échange
       const key = `${exchange.date}-${exchange.period}`;
+      console.log(`Traitement de l'échange avec clé ${key}:`, exchange);
       
       // Vérifier si une entrée existe déjà pour cette clé
       if (acc[key]) {
@@ -154,11 +179,15 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
         }
       } else {
         // Pas de conflit, ajouter l'échange
+        console.log(`Ajout de l'échange avec clé ${key} à la map`);
         acc[key] = exchange;
       }
       
       return acc;
     }, {} as Record<string, ShiftExchange>);
+    
+    console.log("Résultat de la conversion en map:", Object.keys(result).length, result);
+    return result;
   }, []);
 
   // S'abonner aux changements en temps réel des gardes proposées à l'échange (bourse aux gardes)
@@ -192,8 +221,14 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
       const userExchanges = allDirectExchanges.filter(ex => ex.userId === user.id);
       console.log("Échanges directs rafraîchis. Trouvés:", userExchanges.length);
       
+      // Log détaillé des échanges directs trouvés
+      userExchanges.forEach(ex => {
+        console.log(`Échange direct: date=${ex.date}, period=${ex.period}, operationTypes=${ex.operationTypes?.join(',')}`, ex);
+      });
+      
       // Convertir en map
       const directExchangesMap = convertExchangesToMap(userExchanges);
+      console.log("Échanges directs convertis en map:", Object.keys(directExchangesMap).length, directExchangesMap);
       setDirectExchanges(directExchangesMap);
       
       // Rafraîchir également les remplacements
@@ -285,6 +320,38 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
     loadReplacements();
   }, [user]);
 
+  // Fonction pour vérifier si une période spécifique à une date a été importée avec bagEnabled=false
+  const isPeriodWithoutBag = useCallback((dateObj: Date) => {
+    // Si allPeriods n'est pas disponible ou vide, retourner false
+    if (!allPeriods || allPeriods.length === 0) {
+      return false;
+    }
+    
+    // Chercher la période couvrant cette date
+    const matchingPeriod = allPeriods.find(period => {
+      const startDate = new Date(period.startDate);
+      const endDate = new Date(period.endDate);
+      
+      // Vérifier si la date est dans cette période
+      return dateObj >= startDate && dateObj <= endDate;
+    });
+    
+    // Si on a trouvé une période, vérifier son statut et sa phase BAG
+    if (matchingPeriod) {
+      console.log(`Période trouvée pour ${dateObj.toISOString()}: ${matchingPeriod.name}, status=${matchingPeriod.status}, bagPhase=${matchingPeriod.bagPhase}`);
+      
+      // Une période importée sans BAG aura soit:
+      // - status = 'active' (pour les imports directs avec bagEnabled=false)
+      // - status quelconque + bagPhase = 'completed'
+      return (
+        matchingPeriod.status === 'active' || 
+        matchingPeriod.bagPhase === 'completed'
+      );
+    }
+    
+    return false;
+  }, [allPeriods]);
+
   const handleCellClick = useCallback((event: React.MouseEvent, cellKey: string, assignment: ShiftAssignment) => {
     if (!assignment) return;
     
@@ -314,6 +381,55 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
     // Vérifier si la date est après le début de la bourse aux gardes (en utilisant isFirstDayOfBagPeriod)
     // Si isFirstDayOfBagPeriod n'est pas fourni, considérer que toutes les dates sont après la bourse
     const isAfterBagStart = isFirstDayOfBagPeriod ? dateObj >= findBagStartDate() : true;
+    
+    // NOUVEAU: Vérifier si cette garde appartient à une période importée sans BAG
+    const isInPeriodWithoutBag = isPeriodWithoutBag(dateObj);
+    console.log(`Vérification de la période pour ${formattedDate}: isInPeriodWithoutBag=${isInPeriodWithoutBag}`);
+    
+    // Si la garde est dans une période importée sans BAG, toujours utiliser l'échange direct
+    if (isInPeriodWithoutBag && !isAdminView) {
+      console.log(`Garde du ${formattedDate} dans une période importée sans BAG - utilisation de l'échange direct`);
+      
+      // Forcer un rafraîchissement des données avant d'ouvrir la modale
+      refreshDirectExchanges().then(() => {
+        // Vérifier si cette garde a déjà des types d'opérations existants
+        const existingDirectExchange = Object.values(directExchanges).find(ex => 
+          ex.userId === user?.id && 
+          ex.date === formattedDate && 
+          ex.period === period
+        );
+        
+        // Récupérer les types d'opérations existants
+        const operationTypes = existingDirectExchange?.operationTypes || [];
+        
+        // Vérifier le remplacement
+        const existingReplacement = Object.values(replacements).find(rep => 
+          rep.originalUserId === user?.id && 
+          rep.date === formattedDate && 
+          rep.period === period
+        );
+        
+        // Ajouter replacement si applicable
+        if (existingReplacement && !operationTypes.includes('replacement')) {
+          operationTypes.push('replacement');
+        }
+        
+        // Ouvrir la modale d'échange direct
+        setSelectedDirectExchangeCell({
+          key: cellKey,
+          position: { x: event.clientX, y: event.clientY },
+          assignment: {
+            ...assignment,
+            date: formattedDate,
+            period: period as 'M' | 'AM' | 'S'
+          },
+          operationTypes: operationTypes,
+          existingExchangeId: existingDirectExchange?.id
+        });
+      });
+      
+      return;
+    }
     
     // En Phase 2 (distribution) - désactiver les interactions pour les utilisateurs
     if (bagPhaseConfig.phase === 'distribution' && !isAdminView) {
@@ -454,7 +570,7 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
         period: period as 'M' | 'AM' | 'S'
       }
     });
-  }, [bagPhaseConfig.phase, isAdminView, isInCurrentPeriod, user, directExchanges, exchanges, replacements, setToast, setSelectedDirectExchangeCell, setSelectedCell, findBagStartDate]);
+  }, [bagPhaseConfig.phase, isAdminView, isInCurrentPeriod, user, directExchanges, exchanges, replacements, setToast, setSelectedDirectExchangeCell, setSelectedCell, findBagStartDate, isPeriodWithoutBag]);
   
   // Fonction pour gérer la soumission d'un échange direct
   const handleDirectExchangeSubmit = useCallback(async (comment: string, operationTypes: OperationType[]) => {
@@ -628,7 +744,9 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
         
         // Spécifier explicitement includeArchived=true pour s'assurer d'obtenir 
         // à la fois les désidératas archivés et les désidératas actifs
-        const data = await getAllDesiderata(user.id, true);
+        // Utiliser l'association courante pour récupérer les désidératas depuis la bonne collection
+        console.log(`Chargement des désidératas pour l'utilisateur ${user.id} de l'association ${currentAssociation}`);
+        const data = await getAllDesiderata(user.id, true, false, currentAssociation);
         if (data?.selections) {
           console.log("GeneratedPlanningTable: Désidératas chargés pour l'affichage:", Object.keys(data.selections).length);
           console.log("GeneratedPlanningTable: Clés des désidératas:", Object.keys(data.selections));
@@ -649,7 +767,7 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
     };
 
     loadDesiderata();
-  }, [user, showDesiderata, desiderataProps]);
+  }, [user, showDesiderata, desiderataProps, currentAssociation]); // Ajouter currentAssociation comme dépendance pour recharger les desiderata quand l'association change
   
   // Log pour vérifier la plage de dates et les désiderata
   useEffect(() => {
@@ -949,18 +1067,79 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
                     }
                     
                     // Construire les classes de fond
+                        // Définir les couleurs en fonction des types d'opérations
+                        const getOperationBackgroundClass = () => {
+                          // Vérifier d'abord si c'est un échange direct
+                          const key = `${dateStr}-${period}`;
+                          const directExchange = directExchanges[key];
+                          
+                          // Log pour débogage
+                          if (directExchange && directExchange.userId === userId) {
+                            console.log(`Échange direct trouvé pour ${key}:`, directExchange);
+                          }
+                          
+                          // En phase completed, utiliser les couleurs correspondant aux types d'opérations
+                          if (bagPhaseConfig.phase === 'completed' && directExchangeBgClass) {
+                            console.log(`Utilisation de directExchangeBgClass pour ${key}:`, directExchangeBgClass);
+                            return directExchangeBgClass;
+                          }
+                          
+                          // Pour les échanges directs en cours (non completed)
+                          if (directExchange && directExchange.userId === userId && !isReceivedShift) {
+                            console.log(`Traitement de l'échange direct pour ${key}:`, directExchange.operationTypes);
+                            
+                            const directExchangeOpTypes = directExchange.operationTypes || [];
+                            const hasDirectExchangeOp = directExchangeOpTypes.includes('exchange');
+                            const hasDirectGiveOp = directExchangeOpTypes.includes('give');
+                            const hasDirectReplacementOp = directExchangeOpTypes.includes('replacement');
+                            
+                            // Appliquer les classes en fonction des types d'opérations
+                            if (hasDirectExchangeOp && hasDirectGiveOp && hasDirectReplacementOp) {
+                              return 'bg-amber-100 shadow-sm'; // E + C + R
+                            } else if (hasDirectExchangeOp && hasDirectGiveOp) {
+                              return 'bg-orange-100 shadow-sm'; // E + C
+                            } else if (hasDirectExchangeOp && hasDirectReplacementOp) {
+                              return 'bg-lime-100 shadow-sm'; // E + R
+                            } else if (hasDirectGiveOp && hasDirectReplacementOp) {
+                              return 'bg-amber-100 shadow-sm'; // C + R
+                            } else if (hasDirectExchangeOp) {
+                              return 'bg-green-100 shadow-sm'; // E
+                            } else if (hasDirectGiveOp) {
+                              return 'bg-yellow-100 shadow-sm'; // C
+                            } else if (hasDirectReplacementOp) {
+                              return 'bg-amber-100 shadow-sm'; // R
+                            }
+                          }
+                          
+                          // Sinon, pour les gardes proposées dans la bourse aux gardes
+                          if (bagPhaseConfig.phase !== 'completed' && (hasProposedGuard || isProposedToReplacements) && !isReceivedShift) {
+                            // Vérifier les combinaisons des opérations
+                            if (hasExchangeOp && hasGiveOp && isProposedToReplacements) {
+                              return 'bg-amber-100 shadow-sm'; // E + C + R
+                            } else if (hasExchangeOp && hasGiveOp) {
+                              return 'bg-orange-100 shadow-sm'; // E + C
+                            } else if (hasExchangeOp && isProposedToReplacements) {
+                              return 'bg-lime-100 shadow-sm'; // E + R
+                            } else if (hasGiveOp && isProposedToReplacements) {
+                              return 'bg-amber-100 shadow-sm'; // C + R
+                            } else if (hasExchangeOp) {
+                              return 'bg-green-100 shadow-sm'; // E
+                            } else if (hasGiveOp) {
+                              return 'bg-yellow-100 shadow-sm'; // C
+                            } else if (isProposedToReplacements) {
+                              return 'bg-amber-100 shadow-sm'; // R
+                            }
+                          }
+                          return '';
+                        };
+                        
                         // Déterminer les classes en fonction des différentes conditions
                         const classes = [];
                         
-                        // Priorité 1: Gardes proposées (même pour les week-ends)
-                        if (bagPhaseConfig.phase !== 'completed' && hasProposedGuard && !isReceivedShift) {
-                          if (hasBoth) {
-                            classes.push('bg-purple-100 shadow-sm');
-                          } else if (hasExchangeOp) {
-                            classes.push('bg-yellow-100 shadow-sm');
-                          } else if (hasGiveOp) {
-                            classes.push('bg-blue-100 shadow-sm');
-                          }
+                        // Priorité 1: Gardes proposées avec couleurs correspondant aux types d'opérations
+                        const operationBgClass = getOperationBackgroundClass();
+                        if (operationBgClass) {
+                          classes.push(operationBgClass);
                         }
                         // Priorité 2: Cellule grisée (weekend, jour férié, pont) si pas de garde proposée
                         else if (grayedOut) {
@@ -984,11 +1163,7 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
                             classes.push('bg-blue-100');
                           }
                         }
-                        // Priorité 4: En phase completed, utiliser les couleurs des échanges directs
-                        else if (directExchangeBgClass) {
-                          classes.push(directExchangeBgClass);
-                        }
-                        // Priorité 5: Gardes reçues
+                        // Priorité 4: Gardes reçues
                         else if (!desideratum?.type && isReceivedShift && bagPhaseConfig.phase !== 'completed') {
                           if (isReceivedPermutation) {
                             classes.push('bg-emerald-100');
@@ -1058,68 +1233,54 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
                               </span>
                             )}
                             
-                          {/* Badge pour les types d'opérations */}
+                          {/* Badge pour les types d'opérations - TOUJOURS afficher */}
                           {(() => {
-                            // En phase completed, on veut afficher tous les types d'opérations des échanges directs
+                            // Récupérer tous les types d'opérations applicables pour cette cellule
+                            const allOperationTypes: string[] = [];
+                            
+                            // En phase completed, récupérer les opérations des échanges directs
                             if (bagPhaseConfig.phase === 'completed') {
-                              // Vérifier si cette cellule a un échange direct
                               const key = `${dateStr}-${period}`;
                               const directExchange = directExchanges[key];
                               
                               // Si un échange direct existe pour cette cellule et cet utilisateur
                               if (directExchange && directExchange.userId === userId) {
-                                return (
-                                  <span className="badge-appear absolute top-0 right-0 mt-1 mr-1" style={{ zIndex: 40 }}>
-                                    <Badge 
-                                      type="operation-types" 
-                                      size="sm" 
-                                      operationTypes={directExchange.operationTypes || []}
-                                    />
-                                  </span>
-                                );
+                                // Ajouter tous les types d'opérations de l'échange direct
+                                directExchange.operationTypes?.forEach(type => {
+                                  if (!allOperationTypes.includes(type)) {
+                                    allOperationTypes.push(type);
+                                  }
+                                });
                               }
-                              
-                              // Sinon, afficher uniquement le badge de remplacement si applicable
-                              if (isProposedToReplacements) {
-                                return (
-                                  <span className="badge-appear absolute top-0 right-0 mt-1 mr-1" style={{ zIndex: 40 }}>
-                                    <Badge 
-                                      type="operation-types" 
-                                      size="sm" 
-                                      operationTypes={['replacement']}
-                                    />
-                                  </span>
-                                );
+                            } else {
+                              // Pour les autres phases, récupérer les types d'opérations de l'échange et du remplacement
+                              if (hasProposedGuard) {
+                                // Si c'est un échange de la bourse aux gardes (type 'bag'), toujours afficher 'exchange'
+                                operationTypes.forEach(type => {
+                                  if (!allOperationTypes.includes(type)) {
+                                    allOperationTypes.push(type);
+                                  }
+                                });
                               }
-                              
-                              return null;
                             }
                             
-                                // Pour les autres phases, conserver le comportement existant mais sans pastille E pour la bourse aux gardes
-                                if ((hasProposedGuard || isProposedToReplacements) && operationTypes.length + (isProposedToReplacements ? 1 : 0) > 0) {
-                                  // Si c'est un échange de la bourse aux gardes (type 'bag'), ne pas afficher la pastille E
-                                  const filteredOperationTypes = hasProposedGuard && exchange?.exchangeType === 'bag' 
-                                    ? operationTypes.filter(type => type !== 'exchange')
-                                    : [...(hasProposedGuard ? operationTypes : [])];
-                                  
-                                  // Ajouter le type 'replacement' si nécessaire
-                                  if (isProposedToReplacements) {
-                                    filteredOperationTypes.push('replacement');
-                                  }
-                                  
-                                  // N'afficher le badge que s'il reste des types d'opérations après filtrage
-                                  if (filteredOperationTypes.length > 0) {
-                                    return (
-                                      <span className="badge-appear absolute top-0 right-0 -mt-1 -mr-1" style={{ zIndex: 40 }}>
-                                        <Badge 
-                                          type="operation-types" 
-                                          size="sm" 
-                                          operationTypes={filteredOperationTypes}
-                                        />
-                                      </span>
-                                    );
-                                  }
-                                }
+                            // Ajouter le type 'replacement' si applicable
+                            if (isProposedToReplacements && !allOperationTypes.includes('replacement')) {
+                              allOperationTypes.push('replacement');
+                            }
+                            
+                            // Toujours afficher le badge si au moins un type d'opération est présent
+                            if (allOperationTypes.length > 0) {
+                              return (
+                                <span className="badge-appear absolute top-0 right-0 -mt-1 -mr-1" style={{ zIndex: 40 }}>
+                                  <Badge 
+                                    type="operation-types" 
+                                    size="sm" 
+                                    operationTypes={allOperationTypes}
+                                  />
+                                </span>
+                              );
+                            }
                             
                             return null;
                           })()}
@@ -1224,27 +1385,29 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
                       {['M', 'AM', 'S'].map(period => {
                         const cellKey = `${dateStr}-${period}`;
                         const exchange = exchanges[cellKey];
+                        const directExchange = directExchanges[cellKey];
                         const replacement = replacements[cellKey];
                         
                         // Vérifier si la cellule représente une garde reçue via un échange
-                        const key = `${dateStr}-${period}`;
-                        const receivedShift = receivedShifts[key];
+                        const receivedShift = receivedShifts[cellKey];
                         
+                        // Vérifier si c'est une garde reçue
                         const isReceivedShift = receivedShift && (
                           receivedShift.newUserId === userId || 
                           (receivedShift.isPermutation && receivedShift.originalUserId === userId)
                         );
                         
-                        const isReceivedPermutation = isReceivedShift && receivedShift.isPermutation;
-                        
+                        // Récupérer l'assignment de base ou la garde reçue
                         let cellAssignment = assignments[cellKey];
                         
+                        // Si la garde a été donnée via un échange simple (non permutation), ne rien afficher
                         if (receivedShift && receivedShift.originalUserId === userId && !receivedShift.isPermutation && !cellAssignment) {
                           return (
                             <td key={cellKey} className="border px-1 py-1 text-xs text-center"></td>
                           );
                         }
                         
+                        // Si aucune garde assignée mais c'est une garde reçue, créer un assignment temporaire
                         if (!cellAssignment && isReceivedShift) {
                           cellAssignment = {
                             type: period as 'M' | 'AM' | 'S',
@@ -1254,240 +1417,26 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
                           };
                         }
                         
-                        const desideratum = showDesiderata ? desiderata[cellKey] : null;
-                        const hasProposedGuard = exchange && exchange.userId === userId && !isReceivedShift;
-                        const isProposedToReplacements = replacement && replacement.originalUserId === userId;
+                        const desideratum = showDesiderata ? desiderata[cellKey] : undefined;
                         
-                        // Obtenir les types d'opération à partir de l'échange
-                        // Prioriser le tableau operationTypes s'il existe
-                        // Sinon, déterminer les types à partir de operationType
-                        const operationTypes = exchange?.operationTypes?.length ? 
-                          exchange.operationTypes : 
-                          (exchange?.operationType === 'both' ? ['exchange', 'give'] : 
-                           exchange?.operationType ? [exchange.operationType] : []);
-                        
-                        // Déterminer les combinaisons de types d'opérations
-                        const hasExchangeOp = operationTypes.includes('exchange');
-                        const hasGiveOp = operationTypes.includes('give');
-                        const hasBoth = hasExchangeOp && hasGiveOp;
-                        
-                        const interestedCount = exchange?.interestedUsers?.length || 0;
-                        
-                        // Déterminer les couleurs de fond pour les échanges directs en phase completed
-                        let directExchangeBgClass = '';
-                        if (bagPhaseConfig.phase === 'completed') {
-                          const key = `${dateStr}-${period}`;
-                          const directExchange = directExchanges[key];
-                          
-                          if (directExchange && directExchange.userId === userId) {
-                            const directExchangeOpTypes = directExchange.operationTypes || [];
-                            const hasDirectExchangeOp = directExchangeOpTypes.includes('exchange');
-                            const hasDirectGiveOp = directExchangeOpTypes.includes('give');
-                            const hasDirectReplacementOp = directExchangeOpTypes.includes('replacement');
-                            
-                            if (hasDirectExchangeOp && hasDirectGiveOp && hasDirectReplacementOp) {
-                              directExchangeBgClass = 'bg-amber-50'; // CER
-                            } else if (hasDirectExchangeOp && hasDirectGiveOp) {
-                              directExchangeBgClass = 'bg-orange-50'; // CE
-                            } else if (hasDirectExchangeOp && hasDirectReplacementOp) {
-                              directExchangeBgClass = 'bg-lime-50'; // ER
-                            } else if (hasDirectGiveOp && hasDirectReplacementOp) {
-                              directExchangeBgClass = 'bg-amber-50'; // CR
-                            } else if (hasDirectExchangeOp) {
-                              directExchangeBgClass = 'bg-green-50'; // E
-                            } else if (hasDirectGiveOp) {
-                              directExchangeBgClass = 'bg-yellow-50'; // C
-                            } else if (hasDirectReplacementOp) {
-                              directExchangeBgClass = 'bg-amber-50'; // R
-                            }
-                          } else if (isProposedToReplacements) {
-                            directExchangeBgClass = 'bg-amber-50'; // R
-                          }
-                        }
-                        
-                        // Définir la classe de base pour les cellules grisées
-                        const grayedOutBaseClass = grayedOut ? 'bg-gray-100' : '';
-                        
-                        // Déterminer les classes en fonction des différentes conditions
-                        const classes = [];
-                        
-                        // Priorité 1: Cellule grisée (weekend, jour férié, pont)
-                        if (grayedOut) {
-                          // Si c'est un desideratum, appliquer une couleur plus foncée
-                          if (showDesiderata && desideratum?.type) {
-                            if (desideratum.type === 'primary') {
-                              classes.push('bg-red-200');
-                            } else {
-                              classes.push('bg-blue-200');
-                            }
-                          } else {
-                            // Sinon, appliquer le gris standard
-                            classes.push('bg-gray-100');
-                          }
-                        } 
-                        // Priorité 2: Si pas grisé mais a un desideratum
-                        else if (showDesiderata && desideratum?.type) {
-                          if (desideratum.type === 'primary') {
-                            classes.push('bg-red-100');
-                          } else {
-                            classes.push('bg-blue-100');
-                          }
-                        }
-                        // Priorité 3: En phase completed, utiliser les couleurs des échanges directs
-                        else if (directExchangeBgClass) {
-                          classes.push(directExchangeBgClass);
-                        }
-                        // Priorité 4: Gardes reçues
-                        else if (!desideratum?.type && isReceivedShift && bagPhaseConfig.phase !== 'completed') {
-                          if (isReceivedPermutation) {
-                            classes.push('bg-emerald-100');
-                          } else {
-                            classes.push('bg-green-100');
-                          }
-                        }
-                        // Priorité 5: Gardes proposées
-                        else if (bagPhaseConfig.phase !== 'completed' && hasProposedGuard && !isReceivedShift) {
-                          if (hasBoth) {
-                            classes.push('bg-purple-100 shadow-sm');
-                          } else if (hasExchangeOp) {
-                            classes.push('bg-yellow-100 shadow-sm');
-                          } else if (hasGiveOp) {
-                            classes.push('bg-blue-100 shadow-sm');
-                          }
-                        }
-                        
-                        // Ajouter les classes communes
-                        if (cellAssignment) {
-                          classes.push('hover:bg-opacity-75');
-                        }
-                        
-                        // Ajouter une classe de transition pour les animations
-                        classes.push('cell-transition');
-                        
-                        const bgClasses = classes.filter(Boolean).join(' ');
-
+                        // Utiliser PlanningGridCell pour un rendu cohérent
                         return (
-                          <td
+                          <PlanningGridCell
                             key={cellKey}
-                            className={`border px-1 py-1 text-xs text-center relative transition-colors ${bgClasses} ${
-                              cellAssignment && bagPhaseConfig.phase === 'submission' ? 'cursor-pointer hover:bg-gray-50' : ''
-                            } ${
-                              showDesiderata && desideratum?.type ? 'z-10' : ''
-                            }`}
-                            title={cellAssignment ? 
-                              `${cellAssignment.shiftType} - ${cellAssignment.timeSlot}${
-                              // Info sur les gardes reçues
-                              isReceivedShift ? 
-                                isReceivedPermutation ? ' (Garde permutée)' : ' (Garde reçue via la bourse)' 
-                                : ''
-                              }${
-                              // Info sur les types d'opérations - à implémenter ici aussi
-                              hasProposedGuard ? 
-                                ` (Proposée pour: ${[
-                                  hasExchangeOp ? 'Échange' : '',
-                                  hasGiveOp ? 'Cession' : '',
-                                ].filter(Boolean).join(', ')})` 
-                                : ''
-                              }${
-                              // Info sur le remplacement
-                              isProposedToReplacements ? ' (Proposée aux remplaçants)' : ''
-                              }` 
-                              : ''}
-                            onClick={(e) => !isAdminView && cellAssignment && handleCellClick(e, cellKey, cellAssignment)}
-                          >
-                            <div className="relative">
-                              <span className={`
-                                font-semibold text-[13px] 
-                                ${period === 'M' 
-                                  ? 'text-amber-800' 
-                                  : period === 'AM' 
-                                    ? 'text-blue-800' 
-                                    : 'text-violet-800'
-                                }
-                                ${hasProposedGuard ? 'drop-shadow-sm' : ''}
-                                ${isReceivedShift ? 'drop-shadow-sm' : ''}
-                              `}>
-                                {cellAssignment?.shiftType || ''}
-                              </span>
-                              {/* Badges pour les différents types d'opérations */}
-                              <div className="absolute -top-2 -right-2 flex space-x-1">
-                                {/* Badge pour les intéressés */}
-                                {bagPhaseConfig.phase !== 'completed' && hasProposedGuard && interestedCount > 0 && !isReceivedShift && (
-                                  <span className="badge-appear">
-                                    <Badge type="interested" count={interestedCount} size="sm" />
-                                  </span>
-                                )}
-                                
-                              {/* Badge pour les types d'opérations */}
-                              {(() => {
-                                // En phase completed, on veut afficher tous les types d'opérations des échanges directs
-                                if (bagPhaseConfig.phase === 'completed') {
-                                  // Vérifier si cette cellule a un échange direct
-                                  const key = `${dateStr}-${period}`;
-                                  const directExchange = directExchanges[key];
-                                  
-                                  // Si un échange direct existe pour cette cellule et cet utilisateur
-                                  if (directExchange && directExchange.userId === userId) {
-                                    return (
-                                      <span className="badge-appear absolute top-0 right-0 mt-1 mr-1" style={{ zIndex: 40 }}>
-                                        <Badge 
-                                          type="operation-types" 
-                                          size="sm" 
-                                          operationTypes={directExchange.operationTypes || []}
-                                        />
-                                      </span>
-                                    );
-                                  }
-                                  
-                                  // Sinon, afficher uniquement le badge de remplacement si applicable
-                                  if (isProposedToReplacements) {
-                                    return (
-                                      <span className="badge-appear absolute top-0 right-0 mt-1 mr-1" style={{ zIndex: 40 }}>
-                                        <Badge 
-                                          type="operation-types" 
-                                          size="sm" 
-                                          operationTypes={['replacement']}
-                                        />
-                                      </span>
-                                    );
-                                  }
-                                  
-                                  return null;
-                                }
-                                
-                                // Pour les autres phases, conserver le comportement existant mais sans pastille E pour la bourse aux gardes
-                                if ((hasProposedGuard || isProposedToReplacements) && operationTypes.length + (isProposedToReplacements ? 1 : 0) > 0) {
-                                  // Si c'est un échange de la bourse aux gardes (type 'bag'), ne pas afficher la pastille E
-                                  const filteredOperationTypes = hasProposedGuard && exchange?.exchangeType === 'bag' 
-                                    ? operationTypes.filter(type => type !== 'exchange')
-                                    : [...(hasProposedGuard ? operationTypes : [])];
-                                  
-                                  // Ajouter le type 'replacement' si nécessaire
-                                  if (isProposedToReplacements) {
-                                    filteredOperationTypes.push('replacement');
-                                  }
-                                  
-                                  // N'afficher le badge que s'il reste des types d'opérations après filtrage
-                                  if (filteredOperationTypes.length > 0) {
-                                    return (
-                                      <span className="badge-appear absolute top-0 right-0 -mt-1 -mr-1" style={{ zIndex: 40 }}>
-                                        <Badge 
-                                          type="operation-types" 
-                                          size="sm" 
-                                          operationTypes={filteredOperationTypes}
-                                        />
-                                      </span>
-                                    );
-                                  }
-                                }
-                                
-                                return null;
-                              })()}
-                              </div>
-                              
-                              {/* Les gardes proposées sans utilisateurs intéressés n'affichent pas de pastille */}
-                            </div>
-                          </td>
+                            cellKey={cellKey}
+                            assignment={cellAssignment}
+                            exchange={exchange}
+                            directExchange={directExchange}
+                            replacement={replacement}
+                            desideratum={desideratum}
+                            receivedShift={receivedShift}
+                            userId={userId}
+                            isGrayedOut={grayedOut}
+                            period={period as 'M' | 'AM' | 'S'}
+                            bagPhaseConfig={bagPhaseConfig}
+                            isAdminView={isAdminView}
+                            onCellClick={handleCellClick}
+                          />
                         );
                       })}
                     </tr>
@@ -1503,10 +1452,34 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
   // Utiliser le hook useConsolidatedExchanges pour optimiser les souscriptions
   const consolidatedExchanges = useConsolidatedExchanges();
   
+  // État pour suivre si les données sont en cours de chargement
+  const [isLoading, setIsLoading] = useState(true);
+  
+  // Fonction pour forcer un rafraîchissement des données (désactivée)
+  const forceRefresh = useCallback(async () => {
+    // Fonction désactivée
+    console.log("Fonction de rafraîchissement forcé désactivée");
+  }, []);
+  
+  // Effet pour marquer la fin du chargement initial
+  useEffect(() => {
+    if (Object.keys(directExchanges).length > 0 || Object.keys(exchanges).length > 0) {
+      console.log("Données chargées, fin du chargement initial");
+      setIsLoading(false);
+    }
+  }, [directExchanges, exchanges]);
+  
+  // Effet pour le changement de vue (sans forçage de rafraîchissement)
+  useEffect(() => {
+    console.log("Changement de vue détecté:", viewMode);
+    // Forçage du rafraîchissement désactivé
+  }, [viewMode]);
+  
   // Mémoïser les données consolidées pour éviter les re-rendus inutiles
   const consolidatedData = useMemo(() => {
     // Si les données consolidées sont disponibles, les utiliser
     if (!consolidatedExchanges.loading && !consolidatedExchanges.error) {
+      console.log("Utilisation des données consolidées");
       return {
         exchanges: consolidatedExchanges.exchanges,
         directExchanges: consolidatedExchanges.directExchanges,
@@ -1515,6 +1488,7 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
     }
     
     // Sinon, utiliser les données locales
+    console.log("Utilisation des données locales");
     return {
       exchanges,
       directExchanges,

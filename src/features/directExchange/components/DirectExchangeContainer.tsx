@@ -6,7 +6,7 @@ import { useComposableExchangeData } from '../hooks';
 import { useCalendarNavigation } from '../../shiftExchange/hooks/useCalendarNavigation';
 import { addMonths } from 'date-fns';
 import { Toast } from '../../../components';
-import { DirectExchangeTable, ExchangeModal } from './';
+import { DirectExchangeTable, ExchangeModal, ProposedShiftModal, ExchangeProposalsModal } from './';
 import { ExchangePageTemplate } from '../../shared/exchange/components';
 import { useDirectExchangeData } from '../hooks/useDirectExchangeData';
 import { useDirectExchangeFilters } from '../hooks/useDirectExchangeFilters';
@@ -16,9 +16,6 @@ import { useDirectProposalActions } from '../hooks/useDirectProposalActions';
 import type { ShiftExchange as PlanningShiftExchange } from '../../../types/planning';
 import type { ShiftExchange as ExchangeShiftExchange } from '../../../types/exchange';
 import type { OperationType } from '../types';
-
-// Définir un composant fictif pour ExchangeProposalsModal
-const ExchangeProposalsModal = (props: any) => <div>ExchangeProposalsModal (Composant fictif)</div>;
 
 /**
  * Composant principal pour la page d'échanges directs
@@ -331,76 +328,105 @@ const DirectExchangeContainer: React.FC = () => {
     // Utiliser le premier échange trouvé comme référence (pour l'ID et le commentaire)
     const primaryExchange = existingExchanges.length > 0 ? existingExchanges[0] : undefined;
     
-    // Si la garde a des propositions en attente, ouvrir le modal des propositions
-    if (hasIncomingProposals && primaryExchange) {
+    // Vérifier explicitement si l'échange a des propositions
+    // en cherchant parmi les propositions reçues dans la base de données
+    const checkForProposals = async (exchangeId: string) => {
       try {
-        setIsLoadingProposals(true);
-        
         // Importer dynamiquement la fonction pour éviter les dépendances circulaires
         const { getProposalsForExchange } = await import('../../../lib/firebase/directExchange');
         
         // Récupérer les propositions pour cet échange
-        const directProposals = await getProposalsForExchange(primaryExchange.id);
+        const directProposals = await getProposalsForExchange(exchangeId);
         
-        // Convertir les DirectExchangeProposal en ExchangeProposal
-        const proposals = directProposals.map(p => {
-          // Gérer les dates de manière sécurisée
-          let createdAtString = new Date().toISOString();
-          let lastModifiedString = new Date().toISOString();
+        return directProposals.length > 0 ? directProposals : null;
+      } catch (error) {
+        console.error('Erreur lors de la vérification des propositions:', error);
+        return null;
+      }
+    };
+    
+    // Vérifier les propositions pour cet échange, même si hasIncomingProposals est false
+    if (primaryExchange) {
+      try {
+        setIsLoadingProposals(true);
+        
+        const directProposals = await checkForProposals(primaryExchange.id);
+        
+        // Si des propositions sont trouvées, ouvrir le modal des propositions
+        if (directProposals && directProposals.length > 0) {
+          console.log('Propositions trouvées pour l\'échange:', directProposals.length);
           
-          try {
-            if (p.createdAt) {
-              if (typeof p.createdAt === 'object' && 'toDate' in p.createdAt && typeof p.createdAt.toDate === 'function') {
-                createdAtString = p.createdAt.toDate().toISOString();
-              } else if (p.createdAt instanceof Date) {
-                createdAtString = p.createdAt.toISOString();
-              } else if (typeof p.createdAt === 'string') {
-                createdAtString = p.createdAt;
+          // Convertir les DirectExchangeProposal en ExchangeProposal
+          const proposals = directProposals.map(p => {
+            // Gérer les dates de manière sécurisée
+            let createdAtString = new Date().toISOString();
+            let lastModifiedString = new Date().toISOString();
+            
+            try {
+              if (p.createdAt) {
+                if (typeof p.createdAt === 'object' && 'toDate' in p.createdAt && typeof p.createdAt.toDate === 'function') {
+                  createdAtString = p.createdAt.toDate().toISOString();
+                } else if (p.createdAt instanceof Date) {
+                  createdAtString = p.createdAt.toISOString();
+                } else if (typeof p.createdAt === 'string') {
+                  createdAtString = p.createdAt;
+                }
               }
+              
+              if (p.lastModified) {
+                if (typeof p.lastModified === 'object' && 'toDate' in p.lastModified && typeof p.lastModified.toDate === 'function') {
+                  lastModifiedString = p.lastModified.toDate().toISOString();
+                } else if (p.lastModified instanceof Date) {
+                  lastModifiedString = p.lastModified.toISOString();
+                } else if (typeof p.lastModified === 'string') {
+                  lastModifiedString = p.lastModified;
+                }
+              }
+            } catch (error) {
+              console.error('Erreur lors de la conversion des dates:', error);
             }
             
-            if (p.lastModified) {
-              if (typeof p.lastModified === 'object' && 'toDate' in p.lastModified && typeof p.lastModified.toDate === 'function') {
-                lastModifiedString = p.lastModified.toDate().toISOString();
-              } else if (p.lastModified instanceof Date) {
-                lastModifiedString = p.lastModified.toISOString();
-              } else if (typeof p.lastModified === 'string') {
-                lastModifiedString = p.lastModified;
-              }
-            }
-          } catch (error) {
-            console.error('Erreur lors de la conversion des dates:', error);
-          }
+            // S'assurer que proposedShifts est toujours un tableau
+            const proposedShifts = Array.isArray(p.proposedShifts) ? p.proposedShifts : [];
+            
+            return {
+              id: p.id || '',
+              userId: p.proposingUserId, // Ajouter userId qui est obligatoire dans ExchangeProposal
+              targetExchangeId: p.targetExchangeId,
+              targetUserId: p.targetUserId,
+              proposingUserId: p.proposingUserId,
+              proposalType: p.proposalType || 'exchange', // Valeur par défaut
+              targetShift: p.targetShift || {
+                date: '',
+                period: 'M',
+                shiftType: '',
+                timeSlot: ''
+              },
+              proposedShifts: proposedShifts,
+              comment: p.comment || '',
+              status: p.status || 'pending',
+              createdAt: createdAtString,
+              lastModified: lastModifiedString
+            };
+          });
           
-          // S'assurer que proposedShifts est toujours un tableau
-          const proposedShifts = Array.isArray(p.proposedShifts) ? p.proposedShifts : [];
+          // Ouvrir le modal des propositions
+          setSelectedExchangeWithProposals({
+            exchange: primaryExchange,
+            proposals
+          });
+        } else {
+          console.log('Aucune proposition trouvée, ouverture du modal d\'échange standard');
           
-          return {
-            id: p.id || '',
-            userId: p.proposingUserId, // Ajouter userId qui est obligatoire dans ExchangeProposal
-            targetExchangeId: p.targetExchangeId,
-            targetUserId: p.targetUserId,
-            proposingUserId: p.proposingUserId,
-            proposalType: p.proposalType || 'exchange', // Valeur par défaut
-            targetShift: p.targetShift || {
-              date: '',
-              period: 'M',
-              shiftType: '',
-              timeSlot: ''
-            },
-            proposedShifts: proposedShifts,
-            comment: p.comment || '',
-            status: p.status || 'pending',
-            createdAt: createdAtString,
-            lastModified: lastModifiedString
-          };
-        });
-        
-        // Ouvrir le modal des propositions
-        setSelectedExchangeWithProposals({
-          exchange: primaryExchange,
-          proposals
-        });
+          // Sinon, ouvrir le modal d'échange normal
+          setSelectedCell({
+            assignment: normalizedAssignment, // Utiliser l'assignation normalisée
+            position: { x: 0, y: 0 }, // Valeurs par défaut, ne seront pas utilisées
+            existingExchanges: existingExchanges, // Stocker tous les échanges existants
+            existingExchange: primaryExchange,
+            operationTypes: existingOperationTypes
+          });
+        }
       } catch (error) {
         console.error('Erreur lors de la récupération des propositions:', error);
         setToast({
@@ -408,17 +434,26 @@ const DirectExchangeContainer: React.FC = () => {
           message: `Erreur: ${error instanceof Error ? error.message : 'Une erreur est survenue lors de la récupération des propositions'}`,
           type: 'error'
         });
+        
+        // En cas d'erreur, ouvrir le modal d'échange normal
+        setSelectedCell({
+          assignment: normalizedAssignment,
+          position: { x: 0, y: 0 },
+          existingExchanges: existingExchanges,
+          existingExchange: primaryExchange,
+          operationTypes: existingOperationTypes
+        });
       } finally {
         setIsLoadingProposals(false);
       }
     } else {
-      // Sinon, ouvrir le modal d'échange normal
+      // Si aucun échange existant n'est trouvé, ouvrir le modal standard
       setSelectedCell({
-        assignment: normalizedAssignment, // Utiliser l'assignation normalisée
-        position: { x: 0, y: 0 }, // Valeurs par défaut, ne seront pas utilisées
-        existingExchanges: existingExchanges, // Stocker tous les échanges existants
-        existingExchange: primaryExchange,
-        operationTypes: existingOperationTypes
+        assignment: normalizedAssignment,
+        position: { x: 0, y: 0 },
+        existingExchanges: [],
+        existingExchange: undefined,
+        operationTypes: []
       });
     }
   };
@@ -440,6 +475,38 @@ const DirectExchangeContainer: React.FC = () => {
       userShiftKeys,
       comment,
       operationType,
+      () => {
+        setSelectedProposedExchange(null);
+      }
+    );
+  };
+  
+  // Nouvelle fonction pour gérer la proposition de cession
+  const handleCessionSubmit = (exchangeId: string, comment: string) => {
+    if (!selectedProposedExchange) return;
+    
+    handleProposedExchangeSubmit(
+      exchangeId,
+      selectedProposedExchange.exchange,
+      undefined, // Pas de sélection de garde pour une cession
+      comment,
+      'take', // Type d'opération : cession
+      () => {
+        setSelectedProposedExchange(null);
+      }
+    );
+  };
+  
+  // Nouvelle fonction pour gérer la proposition d'échange
+  const handleExchangeSubmit = (exchangeId: string, userShiftKeys: string[], comment: string) => {
+    if (!selectedProposedExchange) return;
+    
+    handleProposedExchangeSubmit(
+      exchangeId,
+      selectedProposedExchange.exchange,
+      userShiftKeys.join(','), // Convertir l'array en string séparé par des virgules
+      comment,
+      'exchange', // Type d'opération : échange
       () => {
         setSelectedProposedExchange(null);
       }
@@ -472,8 +539,18 @@ const DirectExchangeContainer: React.FC = () => {
       proposalId,
       selectedExchangeWithProposals.exchange,
       () => {
-        // Fermer le modal si nécessaire
-        // Note: cette logique pourrait être déplacée dans le hook
+        // Fermer le modal après l'acceptation réussie
+        setSelectedExchangeWithProposals(null);
+        
+        // Afficher une confirmation
+        setToast({
+          visible: true,
+          message: 'Échange effectué avec succès ! Les plannings ont été mis à jour.',
+          type: 'success'
+        });
+        
+        // Rafraîchir les données
+        loadDirectExchanges();
       }
     );
   };
@@ -533,7 +610,7 @@ const DirectExchangeContainer: React.FC = () => {
   };
   
   // Simuler un handleToggleInterest pour la compatibilité avec ExchangePageTemplate
-  const handleToggleInterest = async (exchange: PlanningShiftExchange) => {
+  const handleToggleInterest = async (exchange: any) => {
     // Cette fonction est un placeholder pour la compatibilité avec ExchangePageTemplate
     // Dans DirectExchangePage, nous n'utilisons pas cette fonctionnalité
     console.log('Toggle interest not implemented for DirectExchangePage');
@@ -570,7 +647,7 @@ const DirectExchangeContainer: React.FC = () => {
     
     console.log('Types d\'opération disponibles pour cet échange:', existingOperationTypes);
     
-    // Ouvrir le modal pour proposer un échange ou une reprise
+    // Ouvrir le modal pour proposer un échange ou une reprise avec notre nouveau composant
     setSelectedProposedExchange({
       exchange,
       position: { x: e.clientX, y: e.clientY },
@@ -681,6 +758,19 @@ const DirectExchangeContainer: React.FC = () => {
           showReplacementOption={true}
           operationTypes={selectedCell.operationTypes || []}
           existingExchangeId={selectedCell.existingExchange?.id}
+        />
+      )}
+      
+      {/* Nouveau modal pour les gardes proposées */}
+      {selectedProposedExchange && (
+        <ProposedShiftModal
+          isOpen={true}
+          onClose={() => setSelectedProposedExchange(null)}
+          exchange={selectedProposedExchange.exchange}
+          userAssignments={userAssignments || {}}
+          onSubmitExchange={handleExchangeSubmit}
+          onSubmitCession={handleCessionSubmit}
+          onCancel={userProposals.some(p => p.targetExchangeId === selectedProposedExchange.exchange.id) ? handleCancelProposalWrapper : undefined}
         />
       )}
       

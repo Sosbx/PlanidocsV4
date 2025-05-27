@@ -39,7 +39,8 @@ export const ensureUserRoles = (user: any): User => {
       isUser: user.role === 'user' || user.role === 'admin', // Les admins sont aussi des utilisateurs par défaut
       isManager: user.role === 'manager',
       isPartTime: false,
-      isCAT: false
+      isCAT: false,
+      isReplacement: false
     };
     
     return {
@@ -55,7 +56,8 @@ export const ensureUserRoles = (user: any): User => {
     isUser: typeof roles.isUser === 'boolean' ? roles.isUser : user.role === 'user' || user.role === 'admin',
     isManager: typeof roles.isManager === 'boolean' ? roles.isManager : user.role === 'manager',
     isPartTime: typeof roles.isPartTime === 'boolean' ? roles.isPartTime : false,
-    isCAT: typeof roles.isCAT === 'boolean' ? roles.isCAT : false
+    isCAT: typeof roles.isCAT === 'boolean' ? roles.isCAT : false,
+    isReplacement: typeof roles.isReplacement === 'boolean' ? roles.isReplacement : false
   };
   
   // Si les rôles ont été modifiés, retourner un nouvel objet

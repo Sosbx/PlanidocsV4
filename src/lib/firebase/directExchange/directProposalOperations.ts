@@ -45,8 +45,8 @@ export const proposeMultipleExchange = async (
     const targetExchangeDoc = await getDoc(targetExchangeRef);
     
     if (!targetExchangeDoc.exists()) {
-      // Essayer dans la collection des cessions
-      targetCollectionName = COLLECTIONS.DIRECT_CESSIONS;
+      // Essayer dans la collection des échanges (anciennement cessions)
+      targetCollectionName = COLLECTIONS.DIRECT_EXCHANGES;
       const targetCessionRef = doc(db, targetCollectionName, targetExchangeId);
       const targetCessionDoc = await getDoc(targetCessionRef);
       
@@ -83,6 +83,7 @@ export const proposeMultipleExchange = async (
         targetExchangeId,
         targetUserId: targetExchange.userId,
         proposingUserId,
+        proposalType: 'exchange', // Définir explicitement le type de proposition
         targetShift: {
           date: targetExchange.date,
           period: targetShiftPeriod,
@@ -920,130 +921,90 @@ export const cancelProposal = async (proposalId: string): Promise<void> => {
 
 /**
  * Accepter une proposition d'échange
+ * 
+ * Cette fonction gère l'acceptation d'une proposition d'échange entre deux médecins.
+ * Elle utilise un service de transaction pour garantir l'atomicité des opérations en base de données.
+ * La collection 'generated_plannings' est utilisée pour les mises à jour des plannings des médecins.
  */
 export const acceptProposal = async (proposalId: string): Promise<void> => {
   try {
-    await runTransaction(db, async (transaction) => {
-      // Récupérer la proposition
-      const proposalRef = doc(db, DIRECT_EXCHANGE_PROPOSALS, proposalId);
-      const proposalDoc = await transaction.get(proposalRef);
-      
-      if (!proposalDoc.exists()) {
-        throw new Error('Proposition non trouvée');
-      }
-      
-      const proposal = proposalDoc.data() as DirectExchangeProposal;
-      
-      if (proposal.status !== 'pending') {
-        throw new Error('Cette proposition n\'est plus disponible');
-      }
-      
-      // Récupérer l'échange cible
-      // Déterminer la collection en fonction du type d'opération
-      let targetCollectionName = COLLECTIONS.DIRECT_EXCHANGES;
-      
-      // Récupérer l'échange cible
-      const targetExchangeRef = doc(db, targetCollectionName, proposal.targetExchangeId);
-      let targetExchangeDoc = await transaction.get(targetExchangeRef);
-      
-      if (!targetExchangeDoc.exists()) {
-        // Essayer dans la collection des cessions
-        targetCollectionName = COLLECTIONS.DIRECT_CESSIONS;
-        const targetCessionRef = doc(db, targetCollectionName, proposal.targetExchangeId);
-        targetExchangeDoc = await transaction.get(targetCessionRef);
-        
-        if (!targetExchangeDoc.exists()) {
-          // Essayer dans la collection des remplacements
-          targetCollectionName = COLLECTIONS.DIRECT_REPLACEMENTS;
-          const targetReplacementRef = doc(db, targetCollectionName, proposal.targetExchangeId);
-          targetExchangeDoc = await transaction.get(targetReplacementRef);
-          
-          if (!targetExchangeDoc.exists()) {
-            throw new Error('Échange cible non trouvé');
-          }
-        }
-      }
-      
-      const targetExchange = targetExchangeDoc.data() as ShiftExchange;
-      
-      if (targetExchange.status !== 'pending') {
-        throw new Error('Cet échange n\'est plus disponible');
-      }
-      
-      // Mettre à jour la proposition acceptée
-      transaction.update(proposalRef, {
-        status: 'accepted',
-        lastModified: serverTimestamp()
-      });
-      
-      // Mettre à jour l'échange cible uniquement si c'est une proposition de type 'take'
-      // Pour les propositions de type 'exchange', l'échange reste disponible pour d'autres propositions
-      if (proposal.proposalType === 'take') {
-        transaction.update(targetExchangeRef, {
-          status: 'validated',
-          acceptedBy: proposal.proposingUserId,
-          acceptedAt: serverTimestamp(),
-          lastModified: serverTimestamp()
-        });
-      }
-      
-      // TODO: Effectuer l'échange des gardes dans le planning
-      // Cette partie dépend de la structure de votre base de données pour les plannings
-    });
+    console.log("🔄 Début du processus d'acceptation de la proposition:", proposalId);
     
-    // Récupérer les détails pour les notifications
+    // 1. Récupérer la proposition
     const proposalRef = doc(db, DIRECT_EXCHANGE_PROPOSALS, proposalId);
     const proposalDoc = await getDoc(proposalRef);
     
-    if (proposalDoc.exists()) {
-      const proposal = proposalDoc.data() as DirectExchangeProposal;
-      
-      try {
-        // Récupérer les informations des utilisateurs
-        const targetUserRef = doc(db, 'users', proposal.targetUserId);
-        const proposingUserRef = doc(db, 'users', proposal.proposingUserId);
-        
-        const [targetUserDoc, proposingUserDoc] = await Promise.all([
-          getDoc(targetUserRef),
-          getDoc(proposingUserRef)
-        ]);
-        
-        if (targetUserDoc.exists() && proposingUserDoc.exists()) {
-          const targetUser = targetUserDoc.data() as User;
-          
-          // Notification pour l'utilisateur qui a proposé l'échange/reprise
-          const title1 = 'Proposition acceptée';
-          const message1 = `${targetUser.lastName || 'Un utilisateur'} a accepté votre proposition pour la garde du ${format(new Date(proposal.targetShift.date), 'dd/MM/yyyy')} (${proposal.targetShift.period})`;
-          
-          await addNotification({
-            userId: proposal.proposingUserId,
-            title: title1,
-            message: message1,
-            type: NotificationType.EXCHANGE_ACCEPTED,
-            relatedId: proposal.targetExchangeId,
-            link: '/planning'
-          });
-          
-          // Notification pour l'utilisateur qui a accepté la proposition
-          const title2 = proposal.proposalType === 'exchange' ? 'Échange finalisé' : 'Cession finalisée';
-          const message2 = `Votre ${proposal.proposalType === 'exchange' ? 'échange' : 'cession'} pour la garde du ${format(new Date(proposal.targetShift.date), 'dd/MM/yyyy')} (${proposal.targetShift.period}) a été finalisé(e)`;
-          
-          await addNotification({
-            userId: proposal.targetUserId,
-            title: title2,
-            message: message2,
-            type: NotificationType.EXCHANGE_COMPLETED,
-            relatedId: proposal.targetExchangeId,
-            link: '/planning'
-          });
-        }
-      } catch (error) {
-        console.error('Error sending notifications:', error);
-        // Ne pas bloquer le processus si les notifications échouent
-      }
+    if (!proposalDoc.exists()) {
+      console.error("❌ La proposition n'existe pas:", proposalId);
+      throw new Error('Proposition non trouvée');
     }
+    
+    const proposal = proposalDoc.data() as DirectExchangeProposal;
+    console.log("📋 Détails de la proposition:", {
+      id: proposalId,
+      targetExchangeId: proposal.targetExchangeId,
+      proposingUserId: proposal.proposingUserId,
+      targetUserId: proposal.targetUserId,
+      proposalType: proposal.proposalType,
+      status: proposal.status
+    });
+    
+    // 2. Vérifier que la proposition est toujours en attente
+    if (proposal.status !== 'pending') {
+      console.error("❌ La proposition n'est plus disponible:", proposalId, "Status:", proposal.status);
+      throw new Error('Cette proposition n\'est plus disponible');
+    }
+    
+    // 3. Importer le service de transaction pour utiliser la fonction acceptProposalTransaction
+    console.log("🔄 Importation du service de transaction...");
+    const { acceptProposalTransaction } = await import('./TransactionService');
+    
+    // 4. Exécuter la transaction via le service spécialisé
+    console.log("🔄 Exécution de la transaction d'acceptation...");
+    console.log("🔍 IMPORTANT: Utilisation de la collection GENERATED_PLANNINGS pour les mises à jour des plannings");
+    
+    const result = await acceptProposalTransaction(
+      proposalId,
+      proposal.targetUserId,
+      true, // Mettre à jour les plannings dans generated_plannings
+      true  // Envoyer des notifications
+    );
+    
+    // 5. Vérifier le résultat de la transaction
+    if (!result.success) {
+      console.error("❌ Échec de la transaction:", result.error);
+      throw new Error(result.error || 'Erreur lors de l\'acceptation de la proposition');
+    }
+    
+    // 6. Invalider les caches potentiels pour forcer le rafraîchissement des UI
+    console.log("🔄 Proposition acceptée avec succès, ID:", proposalId);
+    console.log("📊 Transaction ID:", result.transactionId);
+    console.log("🧹 Invalidation des caches pour le rafraîchissement de l'UI...");
+    
+    // Si une fonction d'invalidation de cache existe, l'appeler ici
+    try {
+      // Tenter d'importer les fonctions d'invalidation de cache
+      const { invalidateExchangeCache, invalidatePlanningCache } = await import('../cache');
+      if (typeof invalidateExchangeCache === 'function') {
+        await invalidateExchangeCache(proposal.targetUserId);
+        await invalidateExchangeCache(proposal.proposingUserId);
+        console.log("🧹 Cache d'échange invalidé pour les deux utilisateurs");
+      }
+      
+      if (typeof invalidatePlanningCache === 'function') {
+        await invalidatePlanningCache(proposal.targetUserId);
+        await invalidatePlanningCache(proposal.proposingUserId);
+        console.log("🧹 Cache de planning invalidé pour les deux utilisateurs");
+      }
+    } catch (cacheError) {
+      // Ne pas bloquer le processus si l'invalidation du cache échoue
+      console.warn("⚠️ Impossible d'invalider les caches:", cacheError);
+    }
+    
+    console.log("✅ Processus d'acceptation terminé avec succès");
+    
   } catch (error) {
-    console.error('Error accepting proposal:', error);
+    console.error("❌ Erreur lors de l'acceptation de la proposition:", error);
     throw error;
   }
 };

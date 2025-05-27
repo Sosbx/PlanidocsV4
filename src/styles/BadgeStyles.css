@@ -700,6 +700,83 @@ button:hover .desiderata-bar {
 .badge-operation-types-wrapper {
   position: relative;
   z-index: 15;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.08);
+  border-radius: 9999px;
+  transition: transform 0.15s ease-in-out, opacity 0.15s ease-in-out;
+  opacity: 0.95;
+}
+
+.badge-operation-types-wrapper:hover {
+  transform: scale(1.05);
+  opacity: 1;
+  z-index: 50 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Style pour le badge d'opération dans le coin supérieur droit */
+.badge-container {
+  position: absolute !important;
+  top: 0 !important;
+  right: 0 !important;
+  margin: -4px 0 0 0 !important; /* Permet au badge de s'étendre au-delà du padding */
+  pointer-events: none; /* Permet de cliquer à travers les badges */
+  z-index: 30;
+}
+
+.badge-appear {
+  opacity: 0;
+  animation: fadeIn 0.3s ease-in-out forwards;
+  display: inline-block;
+  position: absolute;
+  top: -4px;
+  right: 0;
+  margin: 0;
+  pointer-events: auto; /* Rétablit les événements de pointeur pour le badge lui-même */
+  z-index: 40;
+}
+
+/* Position spéciale pour la vue multi-colonnes */
+table .badge-container {
+  position: absolute !important;
+  top: 0 !important;
+  right: 0 !important;
+  margin: -4px -4px 0 0 !important; /* Permet au badge de s'étendre au-delà du padding */
+  z-index: 30 !important;
+}
+
+table .badge-appear {
+  position: absolute;
+  top: -4px;
+  right: 0;
+  z-index: 40;
+}
+
+/* Spécifiquement pour la vue multi-colonnes */
+.month-table-wrapper table td .badge-container {
+  position: absolute !important;
+  top: 0 !important;
+  right: 0 !important;
+  transform: translate(0, 0) !important;
+  margin: -4px -4px 0 0 !important; /* Permet au badge de s'étendre au-delà du padding */
+  padding: 0 !important;
+  z-index: 50 !important;
+  pointer-events: auto !important;
+}
+
+.month-table-wrapper table td .badge-appear {
+  position: absolute !important;
+  top: -4px !important;
+  right: 0 !important;
+  z-index: 50 !important;
+}
+
+@keyframes fadeIn {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
 }
 
 /* Supprimer les styles qui peuvent entrer en conflit avec le badge des types d'opérations */

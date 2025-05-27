@@ -11,7 +11,7 @@ interface ToastProps {
 const Toast: React.FC<ToastProps> = ({ message, isVisible, type = 'error', onClose }) => {
   useEffect(() => {
     if (isVisible) {
-      const timer = setTimeout(onClose, 3000);
+      const timer = setTimeout(onClose, 1500);
       return () => clearTimeout(timer);
     }
   }, [isVisible, onClose]);

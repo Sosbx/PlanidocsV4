@@ -3,6 +3,7 @@ import { AlertCircle } from 'lucide-react';
 import { generateCredentials } from '../utils';
 import { createUser } from '../../../lib/firebase/auth/userCreation';
 import { useAuth } from '../../../features/auth/hooks';
+import { useAssociation } from '../../../context/association/AssociationContext';
 
 interface BulkAddUserFormProps {
   onSuccess: () => void;
@@ -13,6 +14,7 @@ export const BulkAddUserForm: React.FC<BulkAddUserFormProps> = ({ onSuccess }) =
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { user: currentUser } = useAuth();
+  const { currentAssociation } = useAssociation();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,8 +37,12 @@ export const BulkAddUserForm: React.FC<BulkAddUserFormProps> = ({ onSuccess }) =
       // Créer les utilisateurs en séquence
       for (const email of emailList) {
         try {
-          const credentials = generateCredentials({ email });
-          await createUser(credentials);
+          // Générer les credentials de manière asynchrone avec l'association actuelle
+          const credentials = await generateCredentials({ email }, currentAssociation);
+          console.log(`Login généré pour ${email}: ${credentials.login}`);
+          
+          // Créer l'utilisateur avec la bonne association
+          await createUser(credentials, currentAssociation);
         } catch (err: any) {
           console.error(`Erreur lors de la création de l'utilisateur ${email}:`, err);
           throw new Error(`Erreur pour ${email}: ${err.message}`);

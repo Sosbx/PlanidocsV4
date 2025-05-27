@@ -2,6 +2,12 @@
  * Exporte tous les hooks liés aux échanges directs
  */
 
+// Nouveaux hooks basés sur le TransactionService
+export * from './useTransactionService';
+export * from './useDirectExchangeTransactions'; // Wrapper de compatibilité
+export * from './useExchangeListFilters'; // Nouveau système de filtres
+
+// Hooks existants (progressivement remplacés par les nouveaux)
 export * from './useDirectExchangeFilters';
 export * from './useDirectExchangeModals';
 export * from './useDirectExchangeData';

@@ -28,3 +28,8 @@ export const loadExcelExporter = () => import('./excelExport').then(module => mo
 
 // Chargement dynamique des composants
 export const loadGeneratedPlanningTable = () => import('../features/planning/components/GeneratedPlanningTable').then(module => module.default);
+
+// Firebase services - lazy loading pour optimiser les chunks et éviter les conflicts statiques/dynamiques
+export const loadPlanningService = () => import('../lib/firebase/planning');
+export const loadExchangeCoreService = () => import('../lib/firebase/exchange/core');
+export const loadExchangeHistoryService = () => import('../lib/firebase/exchange/history-operations');

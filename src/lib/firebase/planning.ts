@@ -1,5 +1,5 @@
 import { doc, setDoc, getDoc, addDoc, updateDoc } from 'firebase/firestore';
-import { collection, getDocs, deleteDoc, writeBatch, deleteField } from 'firebase/firestore';
+import { collection, getDocs, deleteDoc, writeBatch, deleteField, onSnapshot } from 'firebase/firestore';
 import { db } from './config';
 import { serverTimestamp } from 'firebase/firestore';
 import type { GeneratedPlanning, PlanningPeriod, ShiftAssignment } from '../../types/planning';
@@ -67,6 +67,19 @@ export const saveGeneratedPlanning = async (
         lastUpdated: serverTimestamp()
       });
     }
+    
+    // Notifier la bourse aux gardes de la mise à jour
+    try {
+      const { notifyExchangeSystem } = await import('./planningEventService');
+      
+      // Ne pas notifier les échanges pour les périodes archivées
+      if (!isArchivedPeriod) {
+        await notifyExchangeSystem(userId, finalPeriodId, updatedAssignments, 'update');
+      }
+    } catch (notifyError) {
+      // Log l'erreur mais ne la propage pas pour ne pas bloquer la sauvegarde principale
+      console.error('Error notifying exchange system:', notifyError);
+    }
   } catch (error) {
     console.error('Error saving generated planning:', error);
     throw new Error('Erreur lors de la sauvegarde du planning');
@@ -102,6 +115,15 @@ export const deletePlanningForPeriod = async (userId: string, periodId: string):
       
       // Si le document utilise le nouveau format avec périodes
       if (data.periods && data.periods[periodId]) {
+        // Supprimer les échanges correspondants
+        try {
+          const assignments = data.periods[periodId].assignments;
+          const { notifyExchangeSystem } = await import('./planningEventService');
+          await notifyExchangeSystem(userId, periodId, assignments, 'delete');
+        } catch (notifyError) {
+          console.error('Error cleaning up exchanges:', notifyError);
+        }
+        
         // Supprimer uniquement la période spécifiée
         await updateDoc(docRef, {
           [`periods.${periodId}`]: deleteField()
@@ -692,13 +714,10 @@ export const updatePlanningPeriod = async (
  */
 export const deletePlanningPeriod = async (periodId: string): Promise<void> => {
   try {
-    // 1. D'abord supprimer tous les plannings associés à cette période
-    await deleteAllPlanningsForPeriod(periodId);
-    console.log(`Tous les plannings associés à la période ${periodId} ont été supprimés`);
-    
-    // 2. Ensuite supprimer la période elle-même
-    await deleteDoc(doc(db, 'planning_periods', periodId));
-    console.log(`Période ${periodId} supprimée avec succès`);
+    // Utiliser la fonction de suppression avec cascade
+    const { deletePlanningPeriodWithCascade } = await import('./atomicOperations');
+    await deletePlanningPeriodWithCascade(periodId);
+    console.log(`Période ${periodId} et toutes ses références supprimées avec succès`);
   } catch (error) {
     console.error('Error deleting planning period:', error);
     throw new Error('Erreur lors de la suppression de la période de planning');
@@ -786,6 +805,55 @@ export const updateAssignmentsStatus = (
   }
   
   return updatedAssignments;
+};
+
+/**
+ * Souscrire aux plannings d'un utilisateur en temps réel
+ * @param userId ID de l'utilisateur
+ * @param callback Fonction appelée à chaque mise à jour des données
+ * @returns Fonction pour annuler la souscription
+ */
+export const subscribeToUserPlanning = (
+  userId: string,
+  callback: (assignments: Record<string, any>) => void
+): (() => void) => {
+  try {
+    console.log('Mise en place de la souscription au planning de l\'utilisateur:', userId);
+    
+    // Référence au document de planning de l'utilisateur
+    const planningRef = doc(db, 'generated_plannings', userId);
+    
+    // Souscrire aux changements
+    const unsubscribe = onSnapshot(planningRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        
+        // Extraire les assignations de toutes les périodes
+        const allAssignments: Record<string, any> = {};
+        
+        if (data.periods) {
+          // Parcourir toutes les périodes
+          Object.values(data.periods).forEach((periodData: any) => {
+            if (periodData && periodData.assignments) {
+              // Fusionner les assignations de cette période
+              Object.assign(allAssignments, periodData.assignments);
+            }
+          });
+        }
+        
+        // Appeler le callback avec les assignations
+        callback(allAssignments);
+      } else {
+        // Si le document n'existe pas, appeler le callback avec un objet vide
+        callback({});
+      }
+    });
+    
+    return unsubscribe;
+  } catch (error) {
+    console.error('Erreur lors de la souscription au planning de l\'utilisateur:', error);
+    return () => {}; // Retourner une fonction vide en cas d'erreur
+  }
 };
 
 /**

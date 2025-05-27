@@ -4,6 +4,7 @@ import { getAuthErrorMessage } from './errors';
 import { getUserByLogin } from '../../../lib/firebase/users';
 import { ensureUserRoles } from '../../../features/users/utils/userUtils';
 import type { User } from '../../../features/users/types';
+import { ASSOCIATIONS } from '../../../constants/associations';
 
 /**
  * Connecte un utilisateur avec son login et son mot de passe
@@ -14,8 +15,13 @@ import type { User } from '../../../features/users/types';
  */
 export const signInUser = async (login: string, password: string): Promise<User> => {
   try {
-    // Récupérer l'utilisateur par son login
-    const userData = await getUserByLogin(login.toUpperCase());
+    // Essayer d'abord avec l'association Rive Droite
+    let userData = await getUserByLogin(login.toUpperCase(), ASSOCIATIONS.RIVE_DROITE);
+    
+    // Si l'utilisateur n'est pas trouvé dans Rive Droite, essayer avec Rive Gauche
+    if (!userData) {
+      userData = await getUserByLogin(login.toUpperCase(), ASSOCIATIONS.RIVE_GAUCHE);
+    }
     
     if (!userData) {
       throw new Error('Identifiants invalides');
@@ -59,7 +65,14 @@ export const signOutUser = async (): Promise<void> => {
  */
 export const resetPassword = async (login: string): Promise<void> => {
   try {
-    const userData = await getUserByLogin(login.toUpperCase());
+    // Essayer d'abord avec l'association Rive Droite
+    let userData = await getUserByLogin(login.toUpperCase(), ASSOCIATIONS.RIVE_DROITE);
+    
+    // Si l'utilisateur n'est pas trouvé dans Rive Droite, essayer avec Rive Gauche
+    if (!userData) {
+      userData = await getUserByLogin(login.toUpperCase(), ASSOCIATIONS.RIVE_GAUCHE);
+    }
+    
     if (!userData) {
       throw new Error('Aucun compte trouvé avec cet identifiant. Vérifiez que vous avez saisi les 4 premières lettres de votre NOM en majuscules.');
     }
