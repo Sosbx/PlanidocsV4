@@ -12,6 +12,7 @@ interface DesktopTableProps {
   onCellMouseDown: (key: string) => void;
   onCellMouseEnter: (key: string) => void;
   onComment: (key: string, comment: string) => void;
+  onDateClick?: (date: string) => void;
   onOpenModal: (key: string, position: { x: number; y: number }) => void;
   activeModal: { cellKey: string; position: { x: number; y: number } } | null;
   onCloseModal: () => void;
@@ -26,6 +27,7 @@ const DesktopTable: React.FC<DesktopTableProps> = ({
   onCellMouseDown,
   onCellMouseEnter,
   onComment,
+  onDateClick,
   onOpenModal,
   activeModal,
   onCloseModal,
@@ -77,7 +79,10 @@ const DesktopTable: React.FC<DesktopTableProps> = ({
               const grayedOut = isGrayedOut(day);
               return (
                 <tr key={dateStr}>
-                  <td className={`border px-2 py-1 text-sm ${grayedOut ? 'text-gray-500 bg-gray-100' : ''}`}>
+                  <td 
+                    className={`border px-2 py-1 text-sm cursor-pointer hover:bg-gray-100 transition-colors ${grayedOut ? 'text-gray-500 bg-gray-100' : ''}`}
+                    onClick={() => onDateClick && onDateClick(dateStr)}
+                  >
                     <div className="flex justify-start items-center">
                       <span>{format(day, 'd', { locale: fr })}</span>
                       <span className="text-gray-500 ml-1">

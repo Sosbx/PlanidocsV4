@@ -122,7 +122,9 @@ export const generateCredentials = async (data: { email: string } | ExternalUser
         firstName,
         lastName,
         login: uniqueLogin,
-        password: `${firstName.slice(0, 4).toUpperCase()}33`,
+        password: `${firstName.length < 4 
+          ? (firstName + lastName.slice(0, 4 - firstName.length)).toUpperCase() 
+          : firstName.slice(0, 4).toUpperCase()}33`,
         associationId, // Ajouter l'associationId
         roles: {
           isAdmin: false,
@@ -152,7 +154,9 @@ export const generateCredentials = async (data: { email: string } | ExternalUser
       firstName: firstName.charAt(0).toUpperCase() + firstName.slice(1),
       lastName: lastName.charAt(0).toUpperCase() + lastName.slice(1),
       login: uniqueLogin,
-      password: `${firstName.slice(0, 4).toUpperCase()}33`, // Même format de mot de passe
+      password: `${firstName.length < 4 
+        ? (firstName + lastName.slice(0, 4 - firstName.length)).toUpperCase() 
+        : firstName.slice(0, 4).toUpperCase()}33`, // Même format de mot de passe
       associationId, // Ajouter l'associationId
       roles: {
         isAdmin: false,

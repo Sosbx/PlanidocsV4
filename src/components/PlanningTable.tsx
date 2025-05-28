@@ -80,6 +80,7 @@ const PlanningTable = forwardRef<PlanningTableRef, PlanningTableProps>(({
     handleCellMouseDown,
     handleCellMouseEnter,
     handleComment,
+    handleDateClick,
     resetSelections,
     saveSelections,
     isLoading,
@@ -212,6 +213,7 @@ const PlanningTable = forwardRef<PlanningTableRef, PlanningTableProps>(({
             onCellMouseDown={handleCellMouseDown}
             onCellMouseEnter={handleCellMouseEnter}
             onComment={handleComment}
+            onDateClick={handleDateClick}
             onOpenModal={handleOpenModal}
             activeModal={activeModal}
             onCloseModal={handleCloseModal}
@@ -227,6 +229,7 @@ const PlanningTable = forwardRef<PlanningTableRef, PlanningTableProps>(({
             onCellMouseDown={handleCellMouseDown}
             onCellMouseEnter={handleCellMouseEnter}
             onComment={handleComment}
+            onDateClick={handleDateClick}
             onOpenModal={handleOpenModal}
             activeModal={activeModal}
             onCloseModal={handleCloseModal}

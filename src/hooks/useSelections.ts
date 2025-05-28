@@ -130,6 +130,61 @@ export const useSelections = ({
     updateSelection(dateKey, dragAction);
   }, [isDragging, activeDesiderata, dragAction, updateSelection]);
 
+  // Nouvelle fonction pour sélectionner tous les créneaux d'un jour
+  const handleDateClick = useCallback((date: string) => {
+    if (!activeDesiderata) {
+      onNoDesiderataSelected();
+      return;
+    }
+
+    // Créer les clés pour M, AM et S
+    const periods = ['M', 'AM', 'S'];
+    const dateKeys = periods.map(period => `${date}-${period}`);
+    
+    setLocalSelections(prev => {
+      const newSelections = { ...prev };
+      
+      // Vérifier si tous les créneaux sont déjà sélectionnés avec le même type
+      const allSelected = dateKeys.every(key => 
+        prev[key]?.type === activeDesiderata
+      );
+      
+      if (allSelected) {
+        // Si tous sont sélectionnés, on les désélectionne
+        dateKeys.forEach(key => {
+          delete newSelections[key];
+        });
+      } else {
+        // Sinon, on sélectionne tous les créneaux
+        // D'abord, vérifier si on ne dépasse pas la limite
+        const tempSelections = { ...newSelections };
+        dateKeys.forEach(key => {
+          tempSelections[key] = { 
+            ...tempSelections[key],
+            type: activeDesiderata 
+          };
+        });
+        
+        const limit = activeDesiderata === 'primary' ? primaryLimit : secondaryLimit;
+        if (wouldExceedLimit(tempSelections, startDate, endDate, activeDesiderata, limit)) {
+          onLimitExceeded(`Limite de ${limit}% atteinte pour sélectionner toute la journée`);
+          return prev;
+        }
+        
+        // Si on ne dépasse pas la limite, appliquer les sélections
+        dateKeys.forEach(key => {
+          newSelections[key] = { 
+            ...newSelections[key],
+            type: activeDesiderata 
+          };
+        });
+      }
+      
+      setHasUnsavedChanges(true);
+      return newSelections;
+    });
+  }, [activeDesiderata, onNoDesiderataSelected, startDate, endDate, primaryLimit, secondaryLimit, onLimitExceeded]);
+
   useEffect(() => {
     // Gestionnaire pour terminer la sélection au relâchement du clic ou du toucher
     const handleDragEnd = () => {
@@ -176,6 +231,7 @@ export const useSelections = ({
     handleCellMouseDown,
     handleCellMouseEnter,
     handleComment,
+    handleDateClick,
     resetSelections,
     saveSelections,
     isLoading,

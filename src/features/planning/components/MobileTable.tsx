@@ -12,6 +12,7 @@ interface MobileTableProps {
   onCellMouseDown: (key: string) => void;
   onCellMouseEnter: (key: string) => void;
   onComment: (key: string, comment: string) => void;
+  onDateClick?: (date: string) => void;
   onOpenModal: (key: string, position: { x: number; y: number }) => void;
   activeModal: { cellKey: string; position: { x: number; y: number } } | null;
   onCloseModal: () => void;
@@ -25,6 +26,7 @@ const MobileTable: React.FC<MobileTableProps> = ({
   onCellMouseDown,
   onCellMouseEnter,
   onComment,
+  onDateClick,
   onOpenModal,
   activeModal,
   onCloseModal,
@@ -62,7 +64,10 @@ const MobileTable: React.FC<MobileTableProps> = ({
                     const isGrayed = isGrayedOut(day);
                     return (
                       <tr key={dateStr} className={isGrayed ? 'bg-gray-50' : ''}>
-                        <td className="border px-2 py-1 text-sm">
+                        <td 
+                          className="border px-2 py-1 text-sm cursor-pointer hover:bg-gray-100 transition-colors"
+                          onClick={() => onDateClick && onDateClick(dateStr)}
+                        >
                           <div className="flex justify-start items-center">
                             <span>{day.getDate()}</span>
                             <span className="text-gray-500 ml-1">
