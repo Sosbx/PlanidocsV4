@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { 
   initializeFirestore, 
   CACHE_SIZE_UNLIMITED,
@@ -50,6 +50,12 @@ export const db = initializeFirestore(app, {
 });
 
 export const functions = getFunctions(app, 'europe-west1');
+
+// Configuration Google Auth Provider
+export const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({
+  prompt: 'select_account'
+});
 
 // Instance séparée pour la création d'utilisateurs
 export const userCreationApp = initializeApp(firebaseConfig, 'userCreation');

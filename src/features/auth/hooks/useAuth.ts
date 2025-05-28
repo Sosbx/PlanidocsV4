@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../../../lib/firebase/config';
 import { onAuthStateChanged } from 'firebase/auth';
-import { signInUser, signOutUser } from '../utils/session';
+import { signInUser, signOutUser, signInWithGoogle } from '../utils/session';
 import { getUserByEmail } from '../../../lib/firebase/users';
 import { ensureUserRoles } from '../../../features/users/utils/userUtils';
 import type { User } from '../../../features/users/types';
@@ -89,5 +89,21 @@ export const useAuth = () => {
     }
   };
 
-  return { user, loading, error, login, logout };
+  const loginWithGoogle = async () => {
+    try {
+      setError(null);
+      setLoading(true);
+      const userData = await signInWithGoogle();
+      setUser(userData);
+      return userData;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Une erreur est survenue';
+      setError(errorMessage);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return { user, loading, error, login, logout, loginWithGoogle };
 };

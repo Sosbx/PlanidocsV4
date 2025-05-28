@@ -64,6 +64,9 @@ export default defineConfig({
   // Server config pour le développement
   server: {
     port: 5173,
-    host: true
+    host: true,
+    headers: {
+      'Cross-Origin-Opener-Policy': 'unsafe-none'
+    }
   }
 });
