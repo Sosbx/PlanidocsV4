@@ -5,6 +5,7 @@ import { getUserByLogin, getUserByEmail } from '../../../lib/firebase/users';
 import { ensureUserRoles } from '../../../features/users/utils/userUtils';
 import type { User } from '../../../features/users/types';
 import { ASSOCIATIONS } from '../../../constants/associations';
+import { deleteUnauthorizedUser } from './deleteUnauthorizedUser';
 
 /**
  * Connecte un utilisateur avec son login et son mot de passe
@@ -117,8 +118,19 @@ export const signInWithGoogle = async (): Promise<User> => {
     
     if (!userData) {
       // L'utilisateur n'existe pas dans la base de données
-      // On doit se déconnecter de Firebase Auth
+      // On tente de supprimer le compte Firebase Auth créé automatiquement
+      await deleteUnauthorizedUser(googleUser);
+      
+      // S'assurer que l'utilisateur est déconnecté
       await signOut(auth);
+      
+      // Logger la tentative pour le suivi
+      console.warn('Tentative de connexion Google non autorisée:', {
+        email: googleUser.email,
+        displayName: googleUser.displayName,
+        timestamp: new Date().toISOString()
+      });
+      
       throw new Error('Compte non autorisé. Veuillez contacter l\'administrateur pour obtenir l\'accès.');
     }
     

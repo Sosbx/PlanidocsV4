@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
-import { User, Lock, X, Info, Eye, EyeOff } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { User, Lock, X, Info, Eye, EyeOff, Shield, ChevronDown } from 'lucide-react';
 import ForgotPasswordModal from './ForgotPasswordModal';
+import HelpButton from './HelpButton';
+import '../../../styles/LoginAnimations.css';
 
 interface LoginFormProps {
-  onSubmit: (login: string, password: string) => void;
+  onSubmit: (login: string, password: string) => Promise<void>;
   onGoogleSignIn?: () => void;
   error?: string;
   isLoading?: boolean;
@@ -15,85 +17,170 @@ interface LoginFormProps {
 const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, onGoogleSignIn, error, isLoading = false }) => {
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
-  const [showInfoBanner, setShowInfoBanner] = useState(true);
+  const [showInfoBanner, setShowInfoBanner] = useState(false);
   const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [isFormVisible, setIsFormVisible] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+  const [loginSuccess, setLoginSuccess] = useState(false);
+
+  useEffect(() => {
+    setIsFormVisible(true);
+    // Auto-transformer l'identifiant en majuscules
+    const savedLogin = localStorage.getItem('rememberedLogin');
+    if (savedLogin) {
+      setLogin(savedLogin);
+      setRememberMe(true);
+    }
+  }, []);
+
+  // Réinitialiser le succès quand il y a une erreur
+  useEffect(() => {
+    if (error) {
+      setLoginSuccess(false);
+    }
+  }, [error]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isLoading) {
-      onSubmit(login, password);
+      try {
+        // Sauvegarder les préférences avant la tentative de connexion
+        if (rememberMe) {
+          localStorage.setItem('rememberedLogin', login.toUpperCase());
+        } else {
+          localStorage.removeItem('rememberedLogin');
+        }
+        
+        // Attendre la réponse de la connexion
+        await onSubmit(login.toUpperCase(), password);
+        
+        // Si on arrive ici, la connexion a réussi
+        setLoginSuccess(true);
+      } catch (err) {
+        // L'erreur est gérée par le parent, on ne fait rien ici
+        setLoginSuccess(false);
+      }
     }
   };
 
-  return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-indigo-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-      {/* Footer avec liens de confidentialité */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-sm border-t border-gray-200 p-4">
-        <div className="max-w-7xl mx-auto flex justify-center gap-8 text-sm">
-          <a
-            href="/terms"
-            className="text-gray-600 hover:text-gray-900 transition-colors"
-          >
-            Règles d'utilisation
-          </a>
-          <a
-            href="/privacy"
-            className="text-gray-600 hover:text-gray-900 transition-colors"
-          >
-            Politique de confidentialité
-          </a>
-        </div>
-      </div>
+  const handleLoginChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setLogin(e.target.value.toUpperCase());
+  };
 
-      {showInfoBanner && (
-        <div className="fixed top-0 left-0 right-0 bg-yellow-50 border-b border-yellow-200 p-4 z-[9999] shadow-md">
-          <div className="max-w-7xl mx-auto relative px-4 sm:px-6 lg:px-8">
-            <button
-              onClick={() => setShowInfoBanner(false)}
-              className="absolute top-1/2 right-4 -translate-y-1/2 text-yellow-600 hover:text-yellow-800 transition-colors z-[9999]"
-            >
-              <X className="h-5 w-5" />
-            </button>
-            <div className="flex items-center pr-8">
-              <Info className="h-6 w-6 text-yellow-600 flex-shrink-0 mr-3" />
-              <div className="text-sm text-red-600 font-medium">
-                <span className="font-bold"> Pour vous connecter : EN MAJUSCULES</span>
-                <ul className="list-disc list-inside mt-1">
-                  <li><span className="font-medium">Id :</span> 4 1ères lettres du NOM <span className="font-bold">(ex: Dupont → DUPO)</span></li>
-                  <li><span className="font-medium">Mdp :</span> 4 1ères lettres du PRÉNOM + "33" <span className="font-bold">(ex: Marcel → MARC33)</span></li>
-                </ul>
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-teal-50 flex flex-col justify-center py-4 sm:py-6 sm:px-6 lg:px-8 relative overflow-hidden">
+      {/* Éléments décoratifs d'arrière-plan */}
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-teal-200 rounded-full mix-blend-multiply filter blur-xl opacity-30 animate-blob"></div>
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-blue-200 rounded-full mix-blend-multiply filter blur-xl opacity-30 animate-blob animation-delay-2000"></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-cyan-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-4000"></div>
+      </div>
+      {/* Footer avec liens de confidentialité */}
+      <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-white to-white/95 backdrop-blur-md border-t border-gray-100 shadow-lg">
+        <div className="max-w-7xl mx-auto px-4 py-3">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <Shield className="h-3.5 w-3.5 text-teal-500" />
+              <span>© 2024 PlaniDocs - Tous droits réservés</span>
+            </div>
+            <div className="flex items-center gap-6">
+              <a
+                href="/terms"
+                className="group flex items-center gap-1.5 text-xs text-gray-600 hover:text-teal-600 transition-all duration-200"
+              >
+                <svg className="h-3.5 w-3.5 text-gray-400 group-hover:text-teal-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span className="font-medium">Règles d'utilisation</span>
+              </a>
+              <a
+                href="/privacy"
+                className="group flex items-center gap-1.5 text-xs text-gray-600 hover:text-teal-600 transition-all duration-200"
+              >
+                <svg className="h-3.5 w-3.5 text-gray-400 group-hover:text-teal-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+                <span className="font-medium">Politique de confidentialité</span>
+              </a>
+              <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                <svg className="h-3.5 w-3.5 text-green-500" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                </svg>
+                <span>Site sécurisé</span>
               </div>
             </div>
           </div>
         </div>
-      )}
+      </div>
 
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="flex flex-col items-center">
-          <div className="w-56 h-56 relative mb-2">
-            <img 
-              src="/Logo.png" 
-              alt="PlaniDoc Logo" 
-              className="w-full h-full object-contain drop-shadow-xl"
-            />
+      {/* Bannière d'aide collapsible */}
+      <div className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${showInfoBanner ? 'translate-y-0' : '-translate-y-full'}`}>
+        <div className="bg-gradient-to-r from-blue-600 to-teal-600 text-white shadow-lg">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between py-3">
+              <div className="flex items-center flex-1">
+                <Info className="h-5 w-5 flex-shrink-0 mr-3 animate-pulse" />
+                <p className="text-sm font-medium">
+                  <span className="hidden sm:inline">Besoin d'aide pour vous connecter ? </span>
+                  <span className="font-bold">ID: 4 lettres du NOM | MDP: 4 lettres du PRÉNOM + 33</span>
+                </p>
+              </div>
+              <button
+                onClick={() => setShowInfoBanner(false)}
+                className="ml-4 text-white/80 hover:text-white transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
           </div>
-          <h2 className="text-5xl font-black flex items-start tracking-tight">
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 drop-shadow-[0_2px_2px_rgba(0,0,0,0.2)]">PlaniDoc</span>
-            <span className="text-2xl font-bold text-blue-600 drop-shadow-sm">s</span>
-          </h2>
-          <p className="mt-2 text-xl text-gray-600 font-light">
-            Planification des desiderata
-          </p>
         </div>
       </div>
 
-      <div className="mt-10 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-4 shadow-2xl sm:rounded-xl sm:px-10 border border-gray-100">
-          <form className="space-y-6" onSubmit={handleSubmit}>
+
+      <div className={`sm:mx-auto sm:w-full sm:max-w-md relative z-10 transition-all duration-1000 ${isFormVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
+        <div className="flex flex-col items-center">
+          {/* Logo avec animation */}
+          <div className="w-32 h-32 sm:w-40 sm:h-40 relative mb-2">
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-400 to-teal-400 rounded-full opacity-20 blur-2xl animate-pulse"></div>
+            <img 
+              src="/Logo.png" 
+              alt="PlaniDoc Logo" 
+              className="relative w-full h-full object-contain drop-shadow-xl animate-logo-float"
+            />
+          </div>
+          
+          {/* Titre avec animation */}
+          <div className="text-center">
+            <h2 className="text-3xl sm:text-4xl font-black flex items-start justify-center tracking-tight mb-1">
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 via-teal-600 to-cyan-600 animate-gradient">PlaniDoc</span>
+              <span className="text-lg sm:text-xl font-bold text-teal-600 ml-1">s</span>
+            </h2>
+            <p className="text-sm sm:text-base text-gray-600 font-light">
+              Planification des desiderata
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className={`mt-4 sm:mt-6 sm:mx-auto sm:w-full sm:max-w-md relative z-10 transition-all duration-1000 delay-300 ${isFormVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
+        <div className="bg-white/95 backdrop-blur-sm py-6 px-4 shadow-2xl sm:rounded-2xl sm:px-10 border border-gray-100 relative overflow-hidden">
+          {/* Effet de brillance */}
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -skew-x-12 translate-x-[-200%] animate-shimmer"></div>
+          <form className="space-y-4" onSubmit={handleSubmit}>
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg relative" role="alert">
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg relative animate-shake" role="alert">
                 <span className="block sm:inline">{error}</span>
+              </div>
+            )}
+
+            {loginSuccess && !error && (
+              <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg relative animate-fade-in-up flex items-center gap-2" role="alert">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" className="checkmark-animation" />
+                </svg>
+                <span>Connexion réussie, redirection...</span>
               </div>
             )}
 
@@ -110,9 +197,11 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, onGoogleSignIn, error, 
                   type="text"
                   required
                   value={login}
-                  onChange={(e) => setLogin(e.target.value)}
+                  onChange={handleLoginChange}
                   disabled={isLoading}
-                  className="block w-full pl-10 pr-3 py-2 sm:text-sm border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  placeholder="DUPO"
+                  className="block w-full pl-10 pr-3 py-2.5 sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed transition-all duration-300 input-transition"
+                  autoComplete="username"
                 />
               </div>
             </div>
@@ -143,16 +232,30 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, onGoogleSignIn, error, 
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={isLoading}
-                  className="block w-full pl-10 pr-10 py-2 sm:text-sm border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  placeholder="MARC33"
+                  className="block w-full pl-10 pr-10 py-2.5 sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed transition-all duration-300 input-transition"
+                  autoComplete="current-password"
                 />
               </div>
             </div>
 
-            <div className="flex items-center justify-end">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <input
+                  id="remember-me"
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded"
+                />
+                <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-700">
+                  Se souvenir de moi
+                </label>
+              </div>
               <button
                 type="button"
                 onClick={() => setIsForgotPasswordOpen(true)}
-                className="text-sm font-medium text-indigo-600 hover:text-indigo-500 transition-colors"
+                className="text-sm font-medium text-teal-600 hover:text-teal-500 transition-colors"
               >
                 Mot de passe oublié ?
               </button>
@@ -161,14 +264,22 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, onGoogleSignIn, error, 
             <div>
               <button
                 type="submit"
-                disabled={isLoading}
-                className={`w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white 
-                  ${isLoading 
-                    ? 'bg-indigo-400 cursor-not-allowed' 
-                    : 'bg-indigo-600 hover:bg-indigo-700'} 
-                  focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors`}
+                disabled={isLoading || loginSuccess}
+                className={`w-full flex justify-center items-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white 
+                  ${isLoading || loginSuccess
+                    ? 'bg-teal-400 cursor-not-allowed' 
+                    : 'bg-gradient-to-r from-blue-600 to-teal-600 hover:from-blue-700 hover:to-teal-700 hover-lift'} 
+                  focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 transition-all duration-300 ripple`}
               >
-                {isLoading ? 'Connexion...' : 'Se connecter'}
+                {isLoading ? (
+                  <div className="loading-spinner"></div>
+                ) : loginSuccess ? (
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                ) : (
+                  'Se connecter'
+                )}
               </button>
             </div>
 
@@ -187,12 +298,12 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, onGoogleSignIn, error, 
                   <button
                     type="button"
                     onClick={onGoogleSignIn}
-                    disabled={isLoading}
+                    disabled={isLoading || loginSuccess}
                     className={`w-full flex items-center justify-center gap-3 py-2.5 px-4 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white
-                      ${isLoading 
+                      ${isLoading || loginSuccess
                         ? 'cursor-not-allowed opacity-50' 
-                        : 'hover:bg-gray-50'} 
-                      focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors`}
+                        : 'hover:bg-gray-50 hover-lift'} 
+                      focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 transition-all duration-300`}
                   >
                     <svg className="w-5 h-5" viewBox="0 0 24 24">
                       <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -206,6 +317,12 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, onGoogleSignIn, error, 
               </>
             )}
           </form>
+
+          {/* Badge de sécurité */}
+          <div className="mt-4 flex items-center justify-center text-xs text-gray-500">
+            <Shield className="h-4 w-4 mr-1 text-green-500" />
+            Connexion sécurisée et chiffrée
+          </div>
         </div>
       </div>
 
@@ -213,6 +330,58 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, onGoogleSignIn, error, 
         isOpen={isForgotPasswordOpen}
         onClose={() => setIsForgotPasswordOpen(false)}
       />
+
+      {/* Bouton d'aide flottant */}
+      <HelpButton />
+
+      {/* Styles additionnels */}
+      <style>{`
+        @keyframes blob {
+          0% {
+            transform: translate(0px, 0px) scale(1);
+          }
+          33% {
+            transform: translate(30px, -50px) scale(1.1);
+          }
+          66% {
+            transform: translate(-20px, 20px) scale(0.9);
+          }
+          100% {
+            transform: translate(0px, 0px) scale(1);
+          }
+        }
+        .animate-blob {
+          animation: blob 7s infinite;
+        }
+        .animation-delay-2000 {
+          animation-delay: 2s;
+        }
+        .animation-delay-4000 {
+          animation-delay: 4s;
+        }
+        @keyframes shimmer {
+          100% {
+            transform: translateX(200%) skewX(-12deg);
+          }
+        }
+        .animate-shimmer {
+          animation: shimmer 8s infinite;
+        }
+        @keyframes shake {
+          0%, 100% {
+            transform: translateX(0);
+          }
+          10%, 30%, 50%, 70%, 90% {
+            transform: translateX(-2px);
+          }
+          20%, 40%, 60%, 80% {
+            transform: translateX(2px);
+          }
+        }
+        .animate-shake {
+          animation: shake 0.5s;
+        }
+      `}</style>
     </div>
   );
 };
