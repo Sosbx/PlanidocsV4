@@ -25,7 +25,8 @@ export default defineConfig({
       'react/jsx-runtime',
       'react/jsx-dev-runtime',
       'react-router-dom',
-      '@remix-run/router'
+      '@remix-run/router',
+      'zod'
     ],
     // Force le pre-bundling
     force: true

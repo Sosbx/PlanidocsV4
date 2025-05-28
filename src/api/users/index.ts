@@ -22,7 +22,7 @@ export {
 };
 
 // Alias pour maintenir la compatibilité avec les anciens noms de fonctions
-export const getUserById = async (id: string) => {
+export const getUserById = async () => {
   // Cette fonction sera implémentée plus tard
   // Pour l'instant, elle retourne null
   return null;

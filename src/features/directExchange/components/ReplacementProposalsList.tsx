@@ -22,12 +22,27 @@ export const ReplacementProposalsList: React.FC<ReplacementProposalsListProps> =
     loading: serviceLoading 
   } = useReplacementService();
   
-  const [proposals, setProposals] = useState<any[]>([]);
+  interface Proposal {
+    id: string;
+    shiftDate: string;
+    period: string;
+    shiftType: string;
+    timeSlot: string;
+    proposingUser: {
+      id: string;
+      name: string;
+    };
+    comment?: string;
+    status: 'pending' | 'accepted' | 'rejected';
+    createdAt: string;
+  }
+  
+  const [proposals, setProposals] = useState<Proposal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
   const [commentModalOpen, setCommentModalOpen] = useState(false);
-  const [currentProposal, setCurrentProposal] = useState<any>(null);
+  const [currentProposal, setCurrentProposal] = useState<Proposal | null>(null);
   const [responseComment, setResponseComment] = useState('');
   const [responseAction, setResponseAction] = useState<'accept' | 'reject' | null>(null);
   

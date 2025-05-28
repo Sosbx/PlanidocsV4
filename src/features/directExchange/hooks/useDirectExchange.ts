@@ -5,8 +5,7 @@ import {
   addDirectExchange, 
   addDirectCession, 
   addDirectReplacement, 
-  removeDirectExchange, 
-  getCollectionByOperationType 
+  removeDirectExchange
 } from '../../../lib/firebase/directExchange';
 import { useAuth } from '../../auth/hooks';
 

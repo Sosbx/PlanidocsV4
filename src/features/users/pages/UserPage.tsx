@@ -1,6 +1,7 @@
 // Pages Mes Désiderata
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Calendar, Save, Download, HelpCircle, Clock, Columns, LayoutList } from 'lucide-react';
+import FloatingControlBar from '../../../components/FloatingControlBar';
 import { format } from 'date-fns';
 import PlanningTable from '../../../components/PlanningTable';
 import { usePlanningConfig } from '../../../context/planning/PlanningContext';
@@ -21,9 +22,18 @@ const UserPage: React.FC = () => {
   const [validatedSelections, setValidatedSelections] = useState<Record<string, PeriodSelection>>({});
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' as 'success' | 'error' });
   const [isDeadlineExpired, setIsDeadlineExpired] = useState(false);
-  const [planningRef, setPlanningRef] = useState<{ saveSelections: () => Promise<void> } | null>(null);
+  const [planningRef, setPlanningRef] = useState<{
+    saveSelections: () => Promise<void>;
+    activeDesiderata: 'primary' | 'secondary' | null;
+    setActiveDesiderata: (type: 'primary' | 'secondary' | null) => void;
+    primaryPercentage: number;
+    secondaryPercentage: number;
+    isSaving: boolean;
+  } | null>(null);
   const [currentSelections, setCurrentSelections] = useState<Record<string, 'primary' | 'secondary' | null>>({});
   const [viewMode, setViewMode] = useState<'multiColumn' | 'singleColumn'>('multiColumn');
+  const [isControlsVisible, setIsControlsVisible] = useState(true);
+  const desiderataControlsRef = useRef<HTMLDivElement>(null);
 
   const handleResetComplete = useCallback(() => {
     setIsValidated(false);
@@ -67,6 +77,42 @@ const UserPage: React.FC = () => {
       setIsValidated(user.hasValidatedPlanning);
     }
   }, [user?.hasValidatedPlanning]);
+
+  // Configuration de l'Intersection Observer pour détecter la visibilité des contrôles
+  useEffect(() => {
+    let observer: IntersectionObserver | null = null;
+    let timeoutId: NodeJS.Timeout | null = null;
+
+    const setupObserver = () => {
+      if (!desiderataControlsRef.current || !planningRef) {
+        // Réessayer après un court délai si le ref n'est pas encore disponible
+        timeoutId = setTimeout(setupObserver, 100);
+        return;
+      }
+
+      observer = new IntersectionObserver(
+        ([entry]) => {
+          setIsControlsVisible(entry.isIntersecting);
+        },
+        { 
+          threshold: 0, // Déclencher dès que les contrôles ne sont plus visibles du tout
+          rootMargin: "-10px 0px 0px 0px" // Marge négative en haut pour déclencher un peu avant que les contrôles ne sortent complètement
+        }
+      );
+
+      observer.observe(desiderataControlsRef.current);
+    };
+
+    setupObserver();
+
+    // Cleanup
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      if (observer && desiderataControlsRef.current) {
+        observer.unobserve(desiderataControlsRef.current);
+      }
+    };
+  }, [planningRef]);
 
   useEffect(() => {
     const checkDeadline = () => {
@@ -426,6 +472,23 @@ const UserPage: React.FC = () => {
           </div>
         </div>
 
+        {/* Barre de contrôle flottante qui apparaît lorsque les contrôles originaux ne sont plus visibles */}
+        {planningRef && (
+          <FloatingControlBar
+            activeDesiderata={planningRef.activeDesiderata}
+            setActiveDesiderata={planningRef.setActiveDesiderata}
+            primaryPercentage={planningRef.primaryPercentage}
+            secondaryPercentage={planningRef.secondaryPercentage}
+            primaryLimit={config.primaryDesiderataLimit}
+            secondaryLimit={config.secondaryDesiderataLimit}
+            isDeadlineExpired={isDeadlineExpired}
+            isSaving={isSaving}
+            isValidated={isValidated}
+            onValidate={handleValidate}
+            isVisible={!isControlsVisible}
+          />
+        )}
+
         <div data-tutorial="planning-grid">
           <PlanningTable 
             ref={setPlanningRef}
@@ -436,6 +499,7 @@ const UserPage: React.FC = () => {
             secondaryLimit={config.secondaryDesiderataLimit}
             isDeadlineExpired={isDeadlineExpired}
             viewMode={viewMode}
+            desiderataControlsRef={desiderataControlsRef}
           />
         </div>
 

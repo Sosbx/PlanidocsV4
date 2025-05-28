@@ -2,7 +2,6 @@ import { useCallback, useState } from 'react';
 import { useDirectExchange } from './useDirectExchange';
 import type { OperationType } from '../../../types/exchange';
 import type { ShiftExchange as ExchangeShiftExchange } from '../../../types/exchange';
-import { createCombinedExchange } from '../../../lib/firebase/directExchange/core';
 
 /**
  * Type pour les options du hook

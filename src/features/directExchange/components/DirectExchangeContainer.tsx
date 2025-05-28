@@ -24,7 +24,7 @@ import type { OperationType } from '../types';
 const DirectExchangeContainer: React.FC = () => {
   const { user } = useAuth();
   const { users } = useUsers();
-  const { currentPeriod } = usePlanningPeriod();
+  const { } = usePlanningPeriod();
   
   // Hooks pour la gestion des données et des filtres
   const { filterOptions, filterProps } = useDirectExchangeFilters();

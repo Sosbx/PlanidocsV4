@@ -31,7 +31,12 @@ export const ReplacementRequestModal: React.FC<ReplacementRequestModalProps> = (
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [selectedOption, setSelectedOption] = useState<'specific' | 'all'>('all');
   const [selectedReplacementId, setSelectedReplacementId] = useState<string>('');
-  const [remplacements, setRemplacements] = useState<any[]>([]);
+  const [remplacements, setRemplacements] = useState<{
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+  }[]>([]);
   
   // Simuler la récupération des remplaçants disponibles
   // Dans une implémentation réelle, cette liste viendrait d'une requête à la base de données

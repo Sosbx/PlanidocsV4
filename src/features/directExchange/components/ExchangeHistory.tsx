@@ -19,7 +19,19 @@ export const ExchangeHistory: React.FC<ExchangeHistoryProps> = ({
   limit = 10,
   className = ''
 }) => {
-  const [history, setHistory] = useState<any[]>([]);
+  const [history, setHistory] = useState<{
+    id: string;
+    date: string;
+    type: string;
+    status: string;
+    otherUser: string;
+    shift: {
+      date: string;
+      period: string;
+      shiftType: string;
+      timeSlot: string;
+    };
+  }[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Utiliser le hook de transactions pour récupérer l'historique

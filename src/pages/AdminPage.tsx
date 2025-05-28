@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Percent, Save, RotateCcw, Users, CheckSquare, Settings, ChevronDown, ChevronLeft, ChevronRight, Archive } from 'lucide-react';
+import { Calendar, Percent, Save, RotateCcw, Users, CheckSquare, Settings, ChevronDown, ChevronLeft, ChevronRight, Archive, Search, X } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { usePlanningConfig } from '../context/planning/PlanningContext';
 import ConfigurationDisplay from '../components/ConfigurationDisplay';
@@ -56,6 +56,9 @@ const AdminPage: React.FC = () => {
   
   // États pour la partie périodes archivées
   const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(null);
+  
+  // État pour la recherche d'utilisateurs dans le blocage des fêtes
+  const [holidayBlockSearchTerm, setHolidayBlockSearchTerm] = useState('');
   
   // Adapter les utilisateurs pour les composants
 
@@ -670,6 +673,14 @@ const AdminPage: React.FC = () => {
   };
 
   // Rendu conditionnel du contenu de l'onglet Configuration
+  // Fonction pour normaliser le texte (retirer les accents pour la recherche)
+  const normalizeText = (text: string): string => {
+    return text
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+  };
+
   const renderConfigurationTab = () => (
     <>
       <div className="border-b border-gray-200">
@@ -799,9 +810,31 @@ const AdminPage: React.FC = () => {
 
         {/* Section Blocage des fêtes par utilisateur */}
         <div className="bg-white p-6 rounded-lg shadow-md">
-          <div className="flex items-center mb-6">
-            <Users className="h-6 w-6 text-indigo-600 mr-2" />
-            <h2 className="text-xl font-semibold">Blocage des fêtes par utilisateur</h2>
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center">
+              <Users className="h-6 w-6 text-indigo-600 mr-2" />
+              <h2 className="text-xl font-semibold">Blocage des fêtes par utilisateur</h2>
+            </div>
+            
+            {/* Barre de recherche alignée à droite */}
+            <div className="relative w-64">
+              <input
+                type="text"
+                placeholder="Rechercher..."
+                value={holidayBlockSearchTerm}
+                onChange={(e) => setHolidayBlockSearchTerm(e.target.value)}
+                className="w-full px-3 py-1.5 pl-9 pr-9 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              />
+              <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              {holidayBlockSearchTerm && (
+                <button
+                  onClick={() => setHolidayBlockSearchTerm('')}
+                  className="absolute right-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
           </div>
           
           <div className="mb-4 flex items-center justify-center space-x-8">
@@ -814,11 +847,28 @@ const AdminPage: React.FC = () => {
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {users
-              .filter(user => 
-                user.roles?.isUser || user.roles?.isManager
-              )
-              .map(user => (
+            {(() => {
+              const filteredUsers = users
+                .filter(user => 
+                  user.roles?.isUser || user.roles?.isManager
+                )
+                .filter(user => {
+                  if (!holidayBlockSearchTerm) return true;
+                  const searchNormalized = normalizeText(holidayBlockSearchTerm);
+                  const fullName = `${user.lastName || ''} ${user.firstName || ''}`;
+                  const fullNameNormalized = normalizeText(fullName);
+                  return fullNameNormalized.includes(searchNormalized);
+                })
+                .sort((a, b) => {
+                  // Tri par nom de famille puis par prénom
+                  const lastNameComparison = (a.lastName || '').localeCompare(b.lastName || '', 'fr');
+                  if (lastNameComparison !== 0) return lastNameComparison;
+                  return (a.firstName || '').localeCompare(b.firstName || '', 'fr');
+                });
+
+              return (
+                <>
+                  {filteredUsers.map(user => (
                 <div key={user.id} className="bg-gray-50 p-3 rounded-lg">
                   <div className="flex justify-between items-center">
                     <div className="font-medium text-sm truncate mr-2">
@@ -875,8 +925,32 @@ const AdminPage: React.FC = () => {
                     </div>
                   </div>
                 </div>
-              ))}
+                  ))}
+                  {filteredUsers.length === 0 && (
+                    <div className="col-span-full text-center py-8 text-gray-500">
+                      Aucun utilisateur trouvé pour "{holidayBlockSearchTerm}"
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
+          
+          {holidayBlockSearchTerm && (
+            <div className="mt-4 text-sm text-gray-600 text-center">
+              {(() => {
+                const count = users
+                  .filter(user => user.roles?.isUser || user.roles?.isManager)
+                  .filter(user => {
+                    const searchNormalized = normalizeText(holidayBlockSearchTerm);
+                    const fullName = `${user.lastName || ''} ${user.firstName || ''}`;
+                    const fullNameNormalized = normalizeText(fullName);
+                    return fullNameNormalized.includes(searchNormalized);
+                  }).length;
+                return `${count} utilisateur${count > 1 ? 's' : ''} trouvé${count > 1 ? 's' : ''}`;
+              })()}
+            </div>
+          )}
         </div>
       </div>
     </>

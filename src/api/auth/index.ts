@@ -31,6 +31,10 @@ export interface AuthCredentials {
 
 export interface AuthResponse {
   success: boolean;
-  user?: any;
+  user?: {
+    id: string;
+    email: string;
+    displayName?: string;
+  };
   error?: string;
 }

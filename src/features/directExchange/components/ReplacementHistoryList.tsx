@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, User, MessageSquare, CheckCircle, XCircle, HistoryIcon } from 'lucide-react';
+import { Calendar, User, MessageSquare, CheckCircle, XCircle, HistoryIcon } from 'lucide-react';
 import { useReplacementService } from '../hooks/useReplacementService';
 import { format, isAfter, isBefore, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';

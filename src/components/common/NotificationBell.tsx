@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Bell } from 'lucide-react';
 import Badge from './Badge';
-import { useAuth } from '../../features/auth';
 
 export interface Notification {
   id: string;
@@ -40,7 +39,7 @@ const NotificationBell: React.FC<NotificationBellProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const { user } = useAuth();
+  // Authentification vérifiée dans le composant parent
 
   // Filtrer les notifications non lues
   const unreadNotifications = notifications.filter(notification => !notification.read);

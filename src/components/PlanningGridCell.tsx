@@ -12,7 +12,11 @@ interface PlanningGridCellProps {
   assignment?: ShiftAssignment;
   exchange?: ShiftExchange;
   directExchange?: ShiftExchange;
-  replacement?: any;
+  replacement?: {
+    replacementUserId: string;
+    originalUserId: string;
+    status: 'pending' | 'accepted' | 'rejected';
+  };
   desideratum?: { type: 'primary' | 'secondary' | null };
   receivedShift?: {
     originalUserId: string;

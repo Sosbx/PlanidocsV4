@@ -1,5 +1,5 @@
-import React, { useMemo, useEffect, useState } from 'react';
-import { FixedSizeList as List } from 'react-window';
+import React, { useMemo, useState } from 'react';
+// import { FixedSizeList as List } from 'react-window'; // Désactivé temporairement pour la virtualisation
 import { getMonthsInRange } from '../utils/dateUtils';
 import MonthTable from './MonthTable';
 import type { ShiftAssignment } from '../types/planning';

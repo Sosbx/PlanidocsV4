@@ -2,7 +2,6 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from '../../features/auth/hooks';
 import { Notification } from '../../components/common/NotificationBell';
 import { 
-  getNotificationsForUser, 
   markNotificationAsRead, 
   markAllNotificationsAsRead as markAllAsReadFirebase,
   addNotification as addNotificationFirebase,

@@ -31,7 +31,7 @@ export const signInUser = async (login: string, password: string): Promise<User>
     try {
       // Essayer d'abord avec le mot de passe tel quel (pour les mots de passe réinitialisés)
       await signInWithEmailAndPassword(auth, userData.email, password);
-    } catch (error) {
+    } catch {
       // Si ça échoue, essayer avec le mot de passe en majuscules (pour la compatibilité)
       try {
         await signInWithEmailAndPassword(auth, userData.email, password.toUpperCase());

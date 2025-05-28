@@ -91,6 +91,7 @@ export const ExchangeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   useEffect(() => {
     loadExchanges();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   /**

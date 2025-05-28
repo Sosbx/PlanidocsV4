@@ -9,8 +9,8 @@ import type { AuthError } from 'firebase/auth';
 export const getAuthErrorMessage = (error: unknown): string => {
   if (!error) return 'Une erreur inattendue est survenue';
 
-  const isFirebaseError = (err: any): err is AuthError => 
-    err && typeof err === 'object' && 'code' in err;
+  const isFirebaseError = (err: unknown): err is AuthError => 
+    err !== null && typeof err === 'object' && 'code' in err;
 
   if (isFirebaseError(error)) {
     switch (error.code) {

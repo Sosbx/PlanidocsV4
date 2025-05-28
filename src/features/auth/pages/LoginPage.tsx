@@ -15,11 +15,11 @@ const LoginPage: React.FC = () => {
     setIsLoading(true);
     
     try {
-      const user = await login(email, password);
-      const from = (location.state as any)?.from?.pathname || '/dashboard';
+      await login(email, password);
+      const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/dashboard';
       navigate(from, { replace: true });
-    } catch (err: any) {
-      setError(err.message || 'Une erreur est survenue lors de la connexion');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Une erreur est survenue lors de la connexion');
     } finally {
       setIsLoading(false);
     }

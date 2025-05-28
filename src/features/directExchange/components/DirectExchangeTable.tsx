@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { format, isWeekend, isToday } from 'date-fns';
+import { format, isToday } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { isGrayedOut } from '../../../utils/dateUtils';
 import { standardizePeriod } from '../../../utils/periodUtils';

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Calendar, Clock, Repeat, Trash2 } from 'lucide-react';
-import { removeShiftExchange, getShiftExchanges, subscribeToShiftExchanges } from '../../lib/firebase/exchange';
+import { subscribeToShiftExchanges } from '../../lib/firebase/exchange';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useAuth } from '../../features/auth';

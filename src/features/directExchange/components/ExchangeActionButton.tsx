@@ -93,7 +93,7 @@ export const ExchangeActionButton: React.FC<ExchangeActionButtonProps> = ({
   
   // Définir les classes CSS en fonction du type d'action
   const getButtonClasses = () => {
-    let baseClasses = `px-4 py-2 rounded-md transition-colors ${className} `;
+    const baseClasses = `px-4 py-2 rounded-md transition-colors ${className} `;
     
     if (loading) {
       return baseClasses + 'bg-gray-300 text-gray-700 cursor-not-allowed';

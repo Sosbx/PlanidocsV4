@@ -64,8 +64,9 @@ export const useAuth = () => {
       const userData = await signInUser(email, password);
       setUser(userData);
       return userData;
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Une erreur est survenue';
+      setError(errorMessage);
       throw err;
     } finally {
       setLoading(false);
@@ -79,8 +80,9 @@ export const useAuth = () => {
       setUser(null);
       setError(null);
       navigate('/login');
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Une erreur est survenue';
+      setError(errorMessage);
       console.error('Error signing out:', err);
     } finally {
       setLoading(false);

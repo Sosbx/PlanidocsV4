@@ -3,8 +3,7 @@ import { doc, onSnapshot, collection, setDoc } from 'firebase/firestore';
 import { db } from "../../lib/firebase/config";
 import { useBagPhase } from '../shiftExchange';
 import { 
-  PlanningPeriod as PlanningPeriodType, 
-  BagPhaseConfig 
+  PlanningPeriod as PlanningPeriodType
 } from '../../types/planning';
 import { 
   getPlanningPeriods, 

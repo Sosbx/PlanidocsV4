@@ -13,7 +13,11 @@ interface MonthTableProps {
   assignments: Record<string, ShiftAssignment>;
   exchanges: Record<string, ShiftExchange>;
   directExchanges: Record<string, ShiftExchange>;
-  replacements: Record<string, any>;
+  replacements: Record<string, {
+    replacementUserId: string;
+    originalUserId: string;
+    status: 'pending' | 'accepted' | 'rejected';
+  }>;
   desiderata?: Record<string, { type: 'primary' | 'secondary' | null }>;
   receivedShifts?: Record<string, {
     originalUserId: string;

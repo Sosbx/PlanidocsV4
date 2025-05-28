@@ -140,13 +140,11 @@ export const PlanningProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
     });
 
-    // Charger les périodes archivées au démarrage
-    loadArchivedPeriods();
-
     return () => {
       console.log(`PlanningContext: Désabonnement pour l'association ${currentAssociation}`);
       unsubscribe();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentAssociation]);  // Réagir aux changements d'association
 
   /**

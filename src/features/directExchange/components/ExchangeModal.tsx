@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Repeat, Gift, Users } from 'lucide-react';
 import type { ShiftAssignment } from '../../planning/types';
 import '../../../styles/BadgeStyles.css';
-import { format, parse } from 'date-fns';
+import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
 interface ExchangeModalProps {

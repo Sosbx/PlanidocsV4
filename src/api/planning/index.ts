@@ -24,7 +24,7 @@ export {
 };
 
 // Alias pour maintenir la compatibilité avec les anciens noms de fonctions
-export const getGeneratedPlanning = async (userId: string) => {
+export const getGeneratedPlanning = async () => {
   // Cette fonction sera implémentée plus tard
   // Pour l'instant, elle retourne null
   return null;
@@ -58,7 +58,14 @@ export const updatePlanningPeriods = async (config: PlanningConfig): Promise<voi
   }
 };
 
-export const getValidatedPlannings = async (): Promise<any[]> => {
+interface ValidatedPlanning {
+  userId: string;
+  period: PlanningPeriod;
+  assignments: Record<string, string>;
+  validatedAt: Date;
+}
+
+export const getValidatedPlannings = async (): Promise<ValidatedPlanning[]> => {
   // Cette fonction sera implémentée plus tard
   return [];
 };
@@ -75,7 +82,14 @@ export const getBagPhaseConfig = async () => {
   };
 };
 
-export const updateBagPhaseConfig = async (config: any): Promise<void> => {
+interface BagPhaseConfig {
+  phase: string;
+  submissionDeadline: Date;
+  isValidated: boolean;
+  isConfigured: boolean;
+}
+
+export const updateBagPhaseConfig = async (_config: BagPhaseConfig): Promise<void> => {
   // Cette fonction sera implémentée plus tard
   // Pour l'instant, elle ne fait rien
 };

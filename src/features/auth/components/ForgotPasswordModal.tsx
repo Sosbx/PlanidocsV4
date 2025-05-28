@@ -28,8 +28,8 @@ const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({ isOpen, onClo
       await resetPassword(login.toUpperCase());
       setSuccess('Un email de réinitialisation a été envoyé à votre adresse email.');
       setLogin('');
-    } catch (err: any) {
-      setError(err.message || 'Une erreur est survenue');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Une erreur est survenue');
     } finally {
       setIsSubmitting(false);
     }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../auth/hooks';
 import { useDirectExchangeData } from './useDirectExchangeData';
 import type { User } from '../../users/types';

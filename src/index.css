@@ -1,7 +1,8 @@
-@tailwind base;
-/* Import des styles personnalisés */
+/* Import des styles personnalisés - doit être en premier */
 @import './styles/PlanningStyles.css';
+@import './styles/FloatingControlBar.css';
 
+@tailwind base;
 @tailwind components;
 @tailwind utilities;
 

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { doc, onSnapshot, setDoc, collection, query, where, onSnapshot as onCollectionSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, collection, onSnapshot as onCollectionSnapshot } from 'firebase/firestore';
 import { db } from "../../lib/firebase/config";
 import { BagPhaseConfig, defaultBagPhaseConfig } from '../../types/planning';
 import { finalizeAllExchanges, restorePendingExchanges } from '../../lib/firebase/exchange';

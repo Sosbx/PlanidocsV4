@@ -19,6 +19,7 @@ interface PlanningTableProps {
   isDeadlineExpired?: boolean;
   onResetComplete?: () => void;
   viewMode?: 'multiColumn' | 'singleColumn';
+  desiderataControlsRef?: React.RefObject<HTMLDivElement>;
 }
 
 export interface PlanningTableRef {
@@ -37,7 +38,8 @@ const PlanningTable = forwardRef<PlanningTableRef, PlanningTableProps>(({
   secondaryLimit,
   isDeadlineExpired = false,
   onResetComplete,
-  viewMode = 'multiColumn'
+  viewMode = 'multiColumn',
+  desiderataControlsRef
 }, ref) => {
   const [toast, setToast] = useState({ visible: false, message: '', type: 'error' as 'error' | 'success' });
   const [activeModal, setActiveModal] = useState<{
@@ -185,19 +187,21 @@ const PlanningTable = forwardRef<PlanningTableRef, PlanningTableProps>(({
         </div>
       )}
 
-      <DesiderataControls
-        activeDesiderata={activeDesiderata}
-        setActiveDesiderata={setActiveDesiderata}
-        primaryPercentage={primaryPercentage}
-        secondaryPercentage={secondaryPercentage}
-        primaryLimit={primaryLimit}
-        secondaryLimit={secondaryLimit}
-        isDeadlineExpired={isDeadlineExpired}
-        isSaving={isSaving}
-        onReset={handleReset}
-        startDate={startDate}
-        endDate={endDate}
-      />
+      <div ref={desiderataControlsRef}>
+        <DesiderataControls
+          activeDesiderata={activeDesiderata}
+          setActiveDesiderata={setActiveDesiderata}
+          primaryPercentage={primaryPercentage}
+          secondaryPercentage={secondaryPercentage}
+          primaryLimit={primaryLimit}
+          secondaryLimit={secondaryLimit}
+          isDeadlineExpired={isDeadlineExpired}
+          isSaving={isSaving}
+          onReset={handleReset}
+          startDate={startDate}
+          endDate={endDate}
+        />
+      </div>
 
       {viewMode === 'multiColumn' ? (
         <div>

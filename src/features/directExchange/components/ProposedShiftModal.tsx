@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, CheckCircle, Repeat, Gift, Calendar, Clock, User } from 'lucide-react';
+import { X, Repeat, Gift, Calendar, Clock, User } from 'lucide-react';
 import { useAuth } from '../../auth/hooks';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
