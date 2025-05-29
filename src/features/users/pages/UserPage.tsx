@@ -442,11 +442,11 @@ const UserPage: React.FC = () => {
               className={`inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white flex-1 sm:flex-none justify-center ${
                 isValidated ? 'bg-green-600' : 'bg-indigo-600 hover:bg-indigo-700'
               } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed`}
-              title="Valider et envoyer les desiderata (modifiable jusqu'à la date limite)"
+              title={isValidated ? "Mettre à jour les desiderata" : "Valider et envoyer les desiderata (modifiable jusqu'à la date limite)"}
             >
               <Save className="h-4 w-4 sm:mr-2" />
               <span className="inline">
-                {isSaving ? 'Validation...' : 'Valider'}
+                {isSaving ? 'Validation...' : isValidated ? 'Mettre à jour' : 'Valider'}
               </span>
             </button>
             <div className="flex gap-2 flex-1 sm:flex-none">

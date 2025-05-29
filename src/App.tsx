@@ -1,6 +1,7 @@
 import React, { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, createBrowserRouter, RouterProvider } from 'react-router-dom';
-import Navbar from './components/Navbar';
+// import Navbar from './components/Navbar';
+import ModernNavbar from './components/ModernNavbar';
 import { ProtectedRoute, FeatureProtectedRoute } from './features/auth';
 import { FEATURES } from './types/featureFlags';
 import { PlanningProvider } from './context/planning';
@@ -72,7 +73,7 @@ const App: React.FC = () => {
                             {/* Ne pas afficher la navbar sur le dashboard */}
                             <Routes>
                               <Route path="/dashboard" element={null} />
-                              <Route path="*" element={<Navbar />} />
+                              <Route path="*" element={<ModernNavbar />} />
                             </Routes>
                             <Routes>
                               <Route 

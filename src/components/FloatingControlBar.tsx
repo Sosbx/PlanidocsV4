@@ -29,6 +29,42 @@ const FloatingControlBar = memo<FloatingControlBarProps>(({
   isVisible
 }) => {
   const [isAnimating, setIsAnimating] = useState(false);
+  const [navbarVisible, setNavbarVisible] = useState(true);
+  const [lastScrollY, setLastScrollY] = useState(0);
+  const [isMobile, setIsMobile] = useState(false);
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  useEffect(() => {
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+      
+      // On mobile, track navbar visibility
+      if (isMobile) {
+        if (currentScrollY > lastScrollY && currentScrollY > 80) {
+          setNavbarVisible(false);
+        } else {
+          setNavbarVisible(true);
+        }
+      } else {
+        setNavbarVisible(true);
+      }
+      
+      setLastScrollY(currentScrollY);
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [lastScrollY, isMobile]);
   
   useEffect(() => {
     if (isVisible) {
@@ -49,8 +85,10 @@ const FloatingControlBar = memo<FloatingControlBarProps>(({
 
   return (
     <div 
-      className={`fixed top-0 left-0 right-0 z-[60] transition-all duration-300 ease-in-out ${
+      className={`fixed left-0 right-0 z-[30] transition-all duration-300 ease-in-out ${
         isVisible ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0'
+      } ${
+        isMobile && !navbarVisible ? 'top-0' : 'top-16'
       }`}
     >
       <div className="mx-auto max-w-7xl px-2 sm:px-4">
@@ -116,8 +154,8 @@ const FloatingControlBar = memo<FloatingControlBarProps>(({
                     ? 'bg-green-600 text-white hover:bg-green-700 shadow-md' 
                     : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-md'
               }`}
-              title={isValidated ? "Désidérata validés" : "Valider et envoyer les désidérata"}
-              aria-label={isSaving ? "Validation en cours..." : isValidated ? "Désidérata validés" : "Valider les désidérata"}
+              title={isValidated ? "Mettre à jour les désidérata" : "Valider et envoyer les désidérata"}
+              aria-label={isSaving ? "Validation en cours..." : isValidated ? "Mettre à jour les désidérata" : "Valider les désidérata"}
             >
               {isSaving ? (
                 <>
@@ -126,8 +164,8 @@ const FloatingControlBar = memo<FloatingControlBarProps>(({
                 </>
               ) : isValidated ? (
                 <>
-                  <Check className="h-5 w-5 sm:h-5 sm:w-5" />
-                  <span className="hidden sm:inline">Validé</span>
+                  <Save className="h-5 w-5 sm:h-5 sm:w-5" />
+                  <span className="hidden sm:inline">Mettre à jour</span>
                 </>
               ) : (
                 <>

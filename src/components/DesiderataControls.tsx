@@ -44,7 +44,7 @@ const DesiderataControls = memo<DesiderataControlsProps>(({
   const isDisabled = isDeadlineExpired || isSaving;
 
   return (
-    <div className="sticky top-16 bg-white z-40 p-2 sm:p-4 shadow-md rounded-md mb-4">
+    <div className="sticky top-20 bg-white z-20 p-2 sm:p-4 shadow-md rounded-md mb-4">
       <div className="flex flex-col gap-1">
         {startDate && endDate && (
           <div className="text-xs text-gray-600 text-left">
