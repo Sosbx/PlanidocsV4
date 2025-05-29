@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Calendar, Settings, Users, LogOut, Menu, X, UserCircle, CalendarClock, Repeat, ChevronDown, RefreshCw, FileSpreadsheet } from 'lucide-react';
+import { Calendar, Settings, Users, LogOut, Menu, X, UserCircle, CalendarClock, Repeat, ChevronDown, RefreshCw, FileSpreadsheet, Shield, Eye } from 'lucide-react';
 import { useAuth } from '../features/auth/hooks';
 import { useNotifications } from '../context/notifications/NotificationContext';
+import { useFeatureFlags } from '../context/featureFlags/FeatureFlagsContext';
+import { useSuperAdmin } from '../context/superAdmin/SuperAdminContext';
+import { FEATURES } from '../types/featureFlags';
 import Logo from './common/Logo';
 import NotificationBell from './common/NotificationBell';
 import { Link, NavLink } from 'react-router-dom';
@@ -66,6 +69,10 @@ const AdminMenu: React.FC<AdminMenuProps & { links: NavLinkDefinition[] }> = ({ 
 const navItemRecentToasts: Record<string, number> = {};
 
 const NavItem: React.FC<NavItemProps & { disabled?: boolean }> = ({ to, icon: Icon, children, onClick, className = '', disabled }) => {
+  const { getFeatureStatus } = useFeatureFlags();
+  const featureKey = to.substring(1).replace(/-/g, ''); // Convertir le path en feature key
+  const status = getFeatureStatus(featureKey as any);
+  
   const handleDisabledClick = (e: React.MouseEvent, label?: string) => {
     e.preventDefault();
     const featureName = label || 'Cette fonctionnalité';
@@ -100,7 +107,7 @@ const NavItem: React.FC<NavItemProps & { disabled?: boolean }> = ({ to, icon: Ic
       >
         <Icon className="h-4 w-4 mr-1 transition-transform duration-200" />
         {children}
-        <span className="text-xs ml-1 text-red-400">(Dev)</span>
+        {status === 'dev' && <span className="text-xs ml-1 text-red-400">(Dev)</span>}
       </div>
     );
   }
@@ -135,30 +142,32 @@ interface NavLinkDefinition {
 const Navbar = () => {
   const { user, logout } = useAuth();
   const { notifications, markAsRead, markAllAsRead } = useNotifications();
+  const { isFeatureEnabled, getFeatureStatus, isSuperAdmin } = useFeatureFlags();
+  const { canAccessSuperAdmin, isSuperAdminMode } = useSuperAdmin();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isAdminMenuOpen, setIsAdminMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
 
   // Définition des liens communs à tous les utilisateurs
   const commonLinks: NavLinkDefinition[] = useMemo(() => [
-    { to: "/planning", icon: CalendarClock, label: "Planning", requiredRoles: ['isUser', 'isManager', 'isAdmin'], disabled: true },
-    { to: "/user", icon: Calendar, label: "Desiderata", requiredRoles: ['isUser', 'isManager', 'isAdmin'] },
-  ], []);
+    { to: "/user", icon: Calendar, label: "Desiderata", requiredRoles: ['isUser', 'isManager', 'isAdmin'], disabled: getFeatureStatus(FEATURES.DESIDERATA) === 'dev' },
+    { to: "/planning", icon: CalendarClock, label: "Mon Planning", requiredRoles: ['isUser', 'isManager', 'isAdmin'], disabled: getFeatureStatus(FEATURES.PLANNING) === 'dev' },
+  ], [getFeatureStatus]);
 
   // Liens spécifiques pour le menu d'administration (uniquement pour les administrateurs)
   const adminMenuLinks: NavLinkDefinition[] = useMemo(() => [
-    { to: "/admin", icon: Settings, label: "Gestion des désidérata", requiredRoles: ['isAdmin', 'isManager'] },
-    { to: "/users", icon: Users, label: "Utilisateurs", requiredRoles: ['isAdmin'] },
-    { to: "/generated-planning", icon: FileSpreadsheet, label: "Gestion Planning", requiredRoles: ['isAdmin'] },
-    { to: "/admin-shift-exchange", icon: Repeat, label: "Gestion BaG", requiredRoles: ['isAdmin'] },
-    { to: "/remplacements", icon: Users, label: "Remplacements", requiredRoles: ['isAdmin'], disabled: true },
-  ], []);
+    { to: "/admin", icon: Settings, label: "Gestion des désidérata", requiredRoles: ['isAdmin', 'isManager'], disabled: getFeatureStatus(FEATURES.ADMIN_DESIDERATA) === 'dev' },
+    { to: "/users", icon: Users, label: "Utilisateurs", requiredRoles: ['isAdmin'], disabled: getFeatureStatus(FEATURES.USER_MANAGEMENT) === 'dev' },
+    { to: "/generated-planning", icon: FileSpreadsheet, label: "Gestion Planning", requiredRoles: ['isAdmin'], disabled: getFeatureStatus(FEATURES.GENERATED_PLANNING) === 'dev' },
+    { to: "/admin-shift-exchange", icon: Repeat, label: "Gestion BaG", requiredRoles: ['isAdmin'], disabled: getFeatureStatus(FEATURES.ADMIN_SHIFT_EXCHANGE) === 'dev' },
+    { to: "/remplacements", icon: Users, label: "Remplacements", requiredRoles: ['isAdmin'], disabled: getFeatureStatus(FEATURES.REPLACEMENTS) === 'dev' },
+  ], [getFeatureStatus]);
 
   // Liens pour les fonctionnalités en développement (communs à tous les utilisateurs)
   const devFeatureLinks: NavLinkDefinition[] = useMemo(() => [
-    { to: "/shift-exchange", icon: Repeat, label: "BaG", requiredRoles: ['isUser', 'isManager', 'isAdmin'], disabled: true },
-    { to: "/direct-exchange", icon: RefreshCw, label: "Échanges", requiredRoles: ['isUser', 'isManager', 'isAdmin'], disabled: true },
-  ], []);
+    { to: "/shift-exchange", icon: Repeat, label: "Bourse aux Gardes", requiredRoles: ['isUser', 'isManager', 'isAdmin'], disabled: getFeatureStatus(FEATURES.SHIFT_EXCHANGE) === 'dev' },
+    { to: "/direct-exchange", icon: RefreshCw, label: "Échanges", requiredRoles: ['isUser', 'isManager', 'isAdmin'], disabled: getFeatureStatus(FEATURES.DIRECT_EXCHANGE) === 'dev' },
+  ], [getFeatureStatus]);
 
   // Déterminer les liens à afficher dans la barre de navigation principale
   const userNavLinks = useMemo(() => {
@@ -167,23 +176,70 @@ const Navbar = () => {
     // Liens de base pour tous les utilisateurs
     const links = [...commonLinks];
     
-    // Ajouter les liens pour les fonctionnalités en développement pour les admins uniquement
-    if (user.roles.isAdmin) {
-      links.push(...devFeatureLinks);
+    // Ajouter les liens pour les fonctionnalités avancées
+    links.push(...devFeatureLinks);
+    
+    // En mode super admin, afficher tous les liens sans restriction
+    if (canAccessSuperAdmin && isSuperAdminMode) {
+      return links.map(link => ({
+        ...link,
+        disabled: false // Forcer tous les liens à être actifs
+      }));
     }
     
-    return links;
-  }, [user, commonLinks, devFeatureLinks]);
+    // Sinon, filtrer les liens complètement désactivés
+    return links.filter(link => {
+      // Déterminer la feature associée au lien
+      let featureKey;
+      switch (link.to) {
+        case '/user': featureKey = FEATURES.DESIDERATA; break;
+        case '/planning': featureKey = FEATURES.PLANNING; break;
+        case '/shift-exchange': featureKey = FEATURES.SHIFT_EXCHANGE; break;
+        case '/direct-exchange': featureKey = FEATURES.DIRECT_EXCHANGE; break;
+        default: return true; // Garder les liens sans feature associée
+      }
+      
+      const status = getFeatureStatus(featureKey);
+      return status !== 'disabled';
+    });
+  }, [user, commonLinks, devFeatureLinks, canAccessSuperAdmin, isSuperAdminMode, getFeatureStatus]);
   
   // Filtrer les liens d'administration en fonction des rôles de l'utilisateur
   const filteredAdminLinks = useMemo(() => {
     if (!user || !user.roles) return [];
     
-    return adminMenuLinks.filter(link => {
+    // En mode super admin, afficher tous les liens admin sans restriction
+    if (canAccessSuperAdmin && isSuperAdminMode) {
+      return adminMenuLinks.map(link => ({
+        ...link,
+        disabled: false // Forcer tous les liens à être actifs
+      }));
+    }
+    
+    let links = adminMenuLinks.filter(link => {
       // Vérifier si l'utilisateur a au moins un des rôles requis
       return link.requiredRoles.some(role => user.roles && user.roles[role] === true);
     });
-  }, [user, adminMenuLinks]);
+    
+    // Filtrer les liens complètement désactivés
+    links = links.filter(link => {
+      // Déterminer la feature associée au lien
+      let featureKey;
+      switch (link.to) {
+        case '/admin': featureKey = FEATURES.ADMIN_DESIDERATA; break;
+        case '/users': featureKey = FEATURES.USER_MANAGEMENT; break;
+        case '/generated-planning': featureKey = FEATURES.GENERATED_PLANNING; break;
+        case '/admin-shift-exchange': featureKey = FEATURES.ADMIN_SHIFT_EXCHANGE; break;
+        case '/remplacements': featureKey = FEATURES.REPLACEMENTS; break;
+        default: return true; // Garder les liens sans feature associée
+      }
+      
+      const status = getFeatureStatus(featureKey);
+      return status !== 'disabled';
+    });
+    
+    return links;
+  }, [user, adminMenuLinks, canAccessSuperAdmin, isSuperAdminMode, getFeatureStatus]);
 
   // Vérifier si l'utilisateur a accès au menu d'administration
   const hasAdminAccess = useMemo(() => {
@@ -243,6 +299,21 @@ const Navbar = () => {
             ))}
             
             {/* Menu d'administration pour les administrateurs */}
+            {/* Lien Super Admin pour le super administrateur */}
+            {canAccessSuperAdmin && (
+              <NavItem to="/super-admin" icon={Shield}>
+                <span className="hidden md:inline">Super Admin</span>
+              </NavItem>
+            )}
+            
+            {/* Badge Mode Incognito */}
+            {canAccessSuperAdmin && !isSuperAdminMode && (
+              <div className="flex items-center px-3 py-1.5 bg-orange-500 text-white rounded-full text-sm font-medium">
+                <Eye className="h-4 w-4 mr-1" />
+                <span className="hidden lg:inline">Mode Incognito</span>
+              </div>
+            )}
+            
             {hasAdminAccess && (
               <div className="relative inline-block flex-shrink-0">
                 {/* Overlay pour fermer le menu en cliquant en dehors - déplacé après le bouton */}
@@ -317,6 +388,25 @@ const Navbar = () => {
                 <span className="inline">{link.label}</span>
               </NavItem>
             ))}
+            
+            {/* Lien Super Admin pour le super administrateur */}
+            {canAccessSuperAdmin && (
+              <NavItem 
+                to="/super-admin" 
+                icon={Shield} 
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <span className="inline">Super Admin</span>
+              </NavItem>
+            )}
+            
+            {/* Badge Mode Incognito Mobile */}
+            {canAccessSuperAdmin && !isSuperAdminMode && (
+              <div className="mx-2 mt-2 flex items-center justify-center px-3 py-1.5 bg-orange-500 text-white rounded-full text-sm font-medium">
+                <Eye className="h-4 w-4 mr-1" />
+                <span>Mode Incognito</span>
+              </div>
+            )}
             
             {/* Section d'administration pour les administrateurs */}
             {hasAdminAccess && (

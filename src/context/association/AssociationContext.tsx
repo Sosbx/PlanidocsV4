@@ -59,6 +59,15 @@ export const AssociationProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   // Mettre à jour l'association courante en fonction de l'utilisateur connecté
   useEffect(() => {
+    // Ne pas mettre à jour automatiquement si le super-admin a déjà sélectionné une association
+    const manuallySelectedAssociation = localStorage.getItem('manualAssociationSelection');
+    const isSuperAdmin = user?.email === 'arkane.hilal@h24scm.com';
+    
+    if (isSuperAdmin && manuallySelectedAssociation === 'true') {
+      // Le super-admin a manuellement sélectionné une association, ne pas la changer
+      return;
+    }
+    
     if (user?.associationId) {
       console.log('AssociationContext: Utilisateur connecté:', user.id, 'Association:', user.associationId);
       // Vérifier si l'association a changé pour éviter les mises à jour inutiles
@@ -74,7 +83,9 @@ export const AssociationProvider: React.FC<{ children: React.ReactNode }> = ({ c
       }
     } else if (user) {
       console.log('AssociationContext: Aucune association définie pour l\'utilisateur, utilisation de l\'association par défaut:', ASSOCIATIONS.RIVE_DROITE);
-      updateAssociation(ASSOCIATIONS.RIVE_DROITE as 'RD');
+      if (!isSuperAdmin) {
+        updateAssociation(ASSOCIATIONS.RIVE_DROITE as 'RD');
+      }
     }
   }, [user, currentAssociation]);
 
@@ -90,9 +101,18 @@ export const AssociationProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const isRiveDroite = currentAssociation === ASSOCIATIONS.RIVE_DROITE;
   const isRiveGauche = currentAssociation === ASSOCIATIONS.RIVE_GAUCHE;
 
+  // Fonction pour définir manuellement l'association (pour le super-admin)
+  const setCurrentAssociationManual = (associationId: 'RD' | 'RG') => {
+    const isSuperAdmin = user?.email === 'arkane.hilal@h24scm.com';
+    if (isSuperAdmin) {
+      localStorage.setItem('manualAssociationSelection', 'true');
+    }
+    updateAssociation(associationId);
+  };
+
   const value = {
     currentAssociation,
-    setCurrentAssociation,
+    setCurrentAssociation: setCurrentAssociationManual,
     associationName,
     getCollectionName: getCollectionNameForCurrentAssociation,
     isRiveDroite,

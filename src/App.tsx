@@ -1,7 +1,8 @@
 import React, { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, createBrowserRouter, RouterProvider } from 'react-router-dom';
 import Navbar from './components/Navbar';
-import { ProtectedRoute } from './features/auth';
+import { ProtectedRoute, FeatureProtectedRoute } from './features/auth';
+import { FEATURES } from './types/featureFlags';
 import { PlanningProvider } from './context/planning';
 import { UserProvider } from './context/auth';
 import { BagPhaseProvider } from './context/shiftExchange';
@@ -10,6 +11,8 @@ import { NotificationProvider } from './context/notifications';
 import { ExchangeProvider } from './context/exchange';
 import { ConnectionStatus, LoadingSpinner } from './components/common';
 import { AssociationProvider } from './context/association/AssociationContext';
+import { FeatureFlagsProvider } from './context/featureFlags/FeatureFlagsContext';
+import { SuperAdminProvider } from './context/superAdmin/SuperAdminContext';
 import NotificationPermissionManager from './components/notifications/NotificationPermissionManager';
 
 // Import des pages critiques directement (utiles dès le début)
@@ -32,17 +35,20 @@ const DirectExchangePage = lazy(() => import('./features/directExchange/pages/Di
 // Import des pages migrées
 const ShiftExchangePage = lazy(() => import('./features/shiftExchange/pages/ShiftExchangePage'));
 const AdminShiftExchangePage = lazy(() => import('./features/shiftExchange/pages/AdminShiftExchangePage'));
+const SuperAdminPage = lazy(() => import('./pages/SuperAdminPage'));
 
 const App: React.FC = () => {
   return (
     <Router>
       <AssociationProvider>
         <UserProvider>
-        <PlanningProvider>
-          <BagPhaseProvider>
-            <PlanningPeriodProvider>
-              <NotificationProvider>
-                <ExchangeProvider>
+          <SuperAdminProvider>
+            <FeatureFlagsProvider>
+              <PlanningProvider>
+                <BagPhaseProvider>
+                  <PlanningPeriodProvider>
+                    <NotificationProvider>
+                      <ExchangeProvider>
                   <Routes>
                     {/* Routes publiques accessibles sans authentification */}
                     <Route path="/login" element={<LoginPage />} />
@@ -73,9 +79,11 @@ const App: React.FC = () => {
                                 path="/admin" 
                                 element={
                                   <ProtectedRoute requiredRoles={['isAdmin', 'isManager']}>
-                                    <Suspense fallback={<div className="flex justify-center items-center h-screen"><LoadingSpinner /></div>}>
-                                      <AdminPage />
-                                    </Suspense>
+                                    <FeatureProtectedRoute feature={FEATURES.ADMIN_DESIDERATA}>
+                                      <Suspense fallback={<div className="flex justify-center items-center h-screen"><LoadingSpinner /></div>}>
+                                        <AdminPage />
+                                      </Suspense>
+                                    </FeatureProtectedRoute>
                                   </ProtectedRoute>
                                 } 
                               />
@@ -87,9 +95,11 @@ const App: React.FC = () => {
                                 path="/generated-planning" 
                                 element={
                                   <ProtectedRoute requiredRoles={['isAdmin']}>
-                                    <Suspense fallback={<div className="flex justify-center items-center h-screen"><LoadingSpinner /></div>}>
-                                      <GeneratedPlanningPage />
-                                    </Suspense>
+                                    <FeatureProtectedRoute feature={FEATURES.GENERATED_PLANNING}>
+                                      <Suspense fallback={<div className="flex justify-center items-center h-screen"><LoadingSpinner /></div>}>
+                                        <GeneratedPlanningPage />
+                                      </Suspense>
+                                    </FeatureProtectedRoute>
                                   </ProtectedRoute>
                                 }
                               />
@@ -97,9 +107,11 @@ const App: React.FC = () => {
                                 path="/users" 
                                 element={
                                   <ProtectedRoute requiredRoles={['isAdmin']}>
-                                    <Suspense fallback={<div className="flex justify-center items-center h-screen"><LoadingSpinner /></div>}>
-                                      <UsersManagementPage />
-                                    </Suspense>
+                                    <FeatureProtectedRoute feature={FEATURES.USER_MANAGEMENT}>
+                                      <Suspense fallback={<div className="flex justify-center items-center h-screen"><LoadingSpinner /></div>}>
+                                        <UsersManagementPage />
+                                      </Suspense>
+                                    </FeatureProtectedRoute>
                                   </ProtectedRoute>
                                 }
                               />
@@ -107,9 +119,11 @@ const App: React.FC = () => {
                                 path="/admin-shift-exchange" 
                                 element={
                                   <ProtectedRoute requiredRoles={['isAdmin']}>
-                                    <Suspense fallback={<div className="flex justify-center items-center h-screen"><LoadingSpinner /></div>}>
-                                      <AdminShiftExchangePage />
-                                    </Suspense>
+                                    <FeatureProtectedRoute feature={FEATURES.ADMIN_SHIFT_EXCHANGE}>
+                                      <Suspense fallback={<div className="flex justify-center items-center h-screen"><LoadingSpinner /></div>}>
+                                        <AdminShiftExchangePage />
+                                      </Suspense>
+                                    </FeatureProtectedRoute>
                                   </ProtectedRoute>
                                 }
                               />
@@ -127,9 +141,11 @@ const App: React.FC = () => {
                                 path="/remplacements" 
                                 element={
                                   <ProtectedRoute requiredRoles={['isAdmin']}>
-                                    <Suspense fallback={<div className="flex justify-center items-center h-screen"><LoadingSpinner /></div>}>
-                                      <ReplacementsPage />
-                                    </Suspense>
+                                    <FeatureProtectedRoute feature={FEATURES.REPLACEMENTS}>
+                                      <Suspense fallback={<div className="flex justify-center items-center h-screen"><LoadingSpinner /></div>}>
+                                        <ReplacementsPage />
+                                      </Suspense>
+                                    </FeatureProtectedRoute>
                                   </ProtectedRoute>
                                 }
                               />
@@ -147,9 +163,11 @@ const App: React.FC = () => {
                                 path="/user" 
                                 element={
                                   <ProtectedRoute requiredRoles={['isUser']}>
-                                    <Suspense fallback={<div className="flex justify-center items-center h-screen"><LoadingSpinner /></div>}>
-                                      <UserPage />
-                                    </Suspense>
+                                    <FeatureProtectedRoute feature={FEATURES.DESIDERATA}>
+                                      <Suspense fallback={<div className="flex justify-center items-center h-screen"><LoadingSpinner /></div>}>
+                                        <UserPage />
+                                      </Suspense>
+                                    </FeatureProtectedRoute>
                                   </ProtectedRoute>
                                 } 
                               />
@@ -157,9 +175,11 @@ const App: React.FC = () => {
                                 path="/planning" 
                                 element={
                                   <ProtectedRoute requiredRoles={['isUser']}>
-                                    <Suspense fallback={<div className="flex justify-center items-center h-screen"><LoadingSpinner /></div>}>
-                                      <UserPlanningPage />
-                                    </Suspense>
+                                    <FeatureProtectedRoute feature={FEATURES.PLANNING}>
+                                      <Suspense fallback={<div className="flex justify-center items-center h-screen"><LoadingSpinner /></div>}>
+                                        <UserPlanningPage />
+                                      </Suspense>
+                                    </FeatureProtectedRoute>
                                   </ProtectedRoute>
                                 } 
                               />
@@ -167,9 +187,11 @@ const App: React.FC = () => {
                                 path="/shift-exchange" 
                                 element={
                                   <ProtectedRoute requiredRoles={['isUser']}>
-                                    <Suspense fallback={<div className="flex justify-center items-center h-screen"><LoadingSpinner /></div>}>
-                                      <ShiftExchangePage />
-                                    </Suspense>
+                                    <FeatureProtectedRoute feature={FEATURES.SHIFT_EXCHANGE}>
+                                      <Suspense fallback={<div className="flex justify-center items-center h-screen"><LoadingSpinner /></div>}>
+                                        <ShiftExchangePage />
+                                      </Suspense>
+                                    </FeatureProtectedRoute>
                                   </ProtectedRoute>
                                 } 
                               />
@@ -177,9 +199,11 @@ const App: React.FC = () => {
                                 path="/direct-exchange" 
                                 element={
                                   <ProtectedRoute requiredRoles={['isUser']}>
-                                    <Suspense fallback={<div className="flex justify-center items-center h-screen"><LoadingSpinner /></div>}>
-                                      <DirectExchangePage />
-                                    </Suspense>
+                                    <FeatureProtectedRoute feature={FEATURES.DIRECT_EXCHANGE}>
+                                      <Suspense fallback={<div className="flex justify-center items-center h-screen"><LoadingSpinner /></div>}>
+                                        <DirectExchangePage />
+                                      </Suspense>
+                                    </FeatureProtectedRoute>
                                   </ProtectedRoute>
                                 } 
                               />
@@ -188,6 +212,14 @@ const App: React.FC = () => {
                                 element={
                                   <Suspense fallback={<div className="flex justify-center items-center h-screen"><LoadingSpinner /></div>}>
                                     <ProfilePage />
+                                  </Suspense>
+                                } 
+                              />
+                              <Route 
+                                path="/super-admin" 
+                                element={
+                                  <Suspense fallback={<div className="flex justify-center items-center h-screen"><LoadingSpinner /></div>}>
+                                    <SuperAdminPage />
                                   </Suspense>
                                 } 
                               />
@@ -201,12 +233,14 @@ const App: React.FC = () => {
                       }
                     />
                   </Routes>
-                </ExchangeProvider>
-              </NotificationProvider>
-            </PlanningPeriodProvider>
-          </BagPhaseProvider>
-        </PlanningProvider>
-      </UserProvider>
+                      </ExchangeProvider>
+                    </NotificationProvider>
+                  </PlanningPeriodProvider>
+                </BagPhaseProvider>
+              </PlanningProvider>
+            </FeatureFlagsProvider>
+          </SuperAdminProvider>
+        </UserProvider>
       </AssociationProvider>
     </Router>
   );
