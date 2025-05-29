@@ -92,7 +92,7 @@ const FloatingControlBar = memo<FloatingControlBarProps>(({
       }`}
     >
       <div className="mx-auto max-w-7xl px-2 sm:px-4">
-        <div className="bg-white rounded-b-lg shadow-lg border border-gray-200 border-t-0 p-2 sm:p-3">
+        <div className="bg-white rounded-b-lg shadow-lg border border-gray-200 border-t-0 p-2">
           <div className="flex items-center gap-2 sm:gap-3">
             {/* Container pour les boutons de désidérata - 2/3 de la largeur sur mobile */}
             <div className="flex gap-2 w-2/3 sm:w-auto">
@@ -101,7 +101,7 @@ const FloatingControlBar = memo<FloatingControlBarProps>(({
                 type="button"
                 onClick={() => handleTypeClick('primary')}
                 disabled={isDisabled}
-                className={`group flex-1 sm:flex-none flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                className={`group flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-5 py-1.5 sm:py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                   isDisabled ? 'opacity-50 cursor-not-allowed bg-gray-100 text-gray-500' :
                   activeDesiderata === 'primary' 
                     ? 'bg-red-600 text-white shadow-md transform scale-105' 
@@ -111,10 +111,7 @@ const FloatingControlBar = memo<FloatingControlBarProps>(({
                 aria-label={`Désidérata primaires - ${primaryPercentage.toFixed(1)}%`}
               >
                 <span className="text-base sm:text-lg font-bold">I</span>
-                <div className="flex flex-col items-start">
-                  <span className="text-[10px] sm:text-xs opacity-90 hidden sm:block">Primaire</span>
-                  <span className="text-xs sm:text-sm font-semibold">{primaryPercentage.toFixed(1)}%</span>
-                </div>
+                <span className="text-xs sm:text-sm font-semibold">{primaryPercentage.toFixed(1)}%</span>
               </button>
               
               {/* Bouton Désidérata Secondaire */}
@@ -122,7 +119,7 @@ const FloatingControlBar = memo<FloatingControlBarProps>(({
                 type="button"
                 onClick={() => handleTypeClick('secondary')}
                 disabled={isDisabled}
-                className={`group flex-1 sm:flex-none flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                className={`group flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-5 py-1.5 sm:py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                   isDisabled ? 'opacity-50 cursor-not-allowed bg-gray-100 text-gray-500' :
                   activeDesiderata === 'secondary' 
                     ? 'bg-blue-600 text-white shadow-md transform scale-105' 
@@ -132,15 +129,12 @@ const FloatingControlBar = memo<FloatingControlBarProps>(({
                 aria-label={`Désidérata secondaires - ${secondaryPercentage.toFixed(1)}%`}
               >
                 <span className="text-base sm:text-lg font-bold">II</span>
-                <div className="flex flex-col items-start">
-                  <span className="text-[10px] sm:text-xs opacity-90 hidden sm:block">Secondaire</span>
-                  <span className="text-xs sm:text-sm font-semibold">{secondaryPercentage.toFixed(1)}%</span>
-                </div>
+                <span className="text-xs sm:text-sm font-semibold">{secondaryPercentage.toFixed(1)}%</span>
               </button>
             </div>
             
             {/* Séparateur vertical */}
-            <div className="h-10 w-px bg-gray-300 mx-2 hidden sm:block" />
+            <div className="h-8 w-px bg-gray-300 mx-2 hidden sm:block" />
             
             {/* Bouton de validation */}
             <button

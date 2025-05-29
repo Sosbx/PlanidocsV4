@@ -12,11 +12,13 @@ import { getDesiderata } from '../../../lib/firebase/desiderata';
 import { loadPdfExporter, loadCsvPlanningExporter } from '../../../utils/lazyExporters';
 import Tutorial from '../../../components/Tutorial';
 import { Selections, PeriodSelection } from '../../../types/planning';
+import { useBottomNavPadding } from '../../../hooks/useBottomNavPadding';
 
 const UserPage: React.FC = () => {
   const { config } = usePlanningConfig();
   const { user } = useAuth();
   const { validateDesiderata, isSaving } = useDesiderata();
+  const bottomNavPadding = useBottomNavPadding({ extraPadding: true });
   const [isValidated, setIsValidated] = useState(user?.hasValidatedPlanning || false);
   const [showTutorial, setShowTutorial] = useState(false);
   const [validatedSelections, setValidatedSelections] = useState<Record<string, PeriodSelection>>({});
@@ -335,7 +337,7 @@ const UserPage: React.FC = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
+    <div className={`max-w-7xl mx-auto px-4 py-8 ${bottomNavPadding}`}>
       <Toast 
         message={toast.message}
         isVisible={toast.visible}
@@ -489,7 +491,7 @@ const UserPage: React.FC = () => {
           />
         )}
 
-        <div data-tutorial="planning-grid">
+        <div data-tutorial="planning-grid" className="pb-20 md:pb-0">
           <PlanningTable 
             ref={setPlanningRef}
             onResetComplete={handleResetComplete}

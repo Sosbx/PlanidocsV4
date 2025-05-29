@@ -12,7 +12,7 @@ import {
   User,
   Shield,
   ChevronRight,
-  Home,
+  CalendarOff,
   Users,
   FileSpreadsheet,
   Repeat
@@ -72,8 +72,20 @@ const ModernNavbar: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [navbarVisible, setNavbarVisible] = useState(true);
   const [lastScrollY, setLastScrollY] = useState(0);
+  const [isMobile, setIsMobile] = useState(false);
   
   const profileRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -113,13 +125,13 @@ const ModernNavbar: React.FC = () => {
 
   // Navigation principale adaptative selon le rôle
   const mainNavItems = [
-    { to: '/planning', icon: Calendar, label: 'Mon Planning' },
-    { to: '/shift-exchange', icon: Repeat, label: 'Bourse aux Gardes' },
+    { to: '/planning', icon: Calendar, label: 'Planning' },
+    { to: '/shift-exchange', icon: Repeat, label: 'BaG' },
     { to: '/direct-exchange', icon: RefreshCw, label: 'Échanges' },
   ];
 
   if (user.roles?.isUser) {
-    mainNavItems.unshift({ to: '/user', icon: Home, label: 'Desiderata' });
+    mainNavItems.unshift({ to: '/user', icon: CalendarOff, label: 'Désidérata' });
   }
 
   return (
@@ -127,7 +139,7 @@ const ModernNavbar: React.FC = () => {
       {/* Desktop Navbar - Always visible */}
       <nav className={`
         fixed top-0 left-0 right-0 z-[9999]
-        bg-gradient-to-r from-blue-600 via-blue-500 to-teal-500
+        bg-gradient-to-r from-blue-600 to-teal-600
         backdrop-blur-md shadow-lg
         transition-transform duration-300
         ${navbarVisible || window.innerWidth >= 768 ? 'translate-y-0' : '-translate-y-full'}
@@ -136,8 +148,8 @@ const ModernNavbar: React.FC = () => {
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
             <div className="flex items-center">
-              <Link to="/dashboard" className="flex-shrink-0 bg-white/10 backdrop-blur-sm rounded-lg px-3 py-1.5 hover:bg-white/20 transition-all">
-                <Logo showText={true} className="h-8 hover:scale-105 transition-transform" />
+              <Link to="/dashboard" className="flex-shrink-0 hover:scale-105 transition-transform">
+                <Logo showText={true} className="h-8" />
               </Link>
             </div>
 
@@ -171,8 +183,8 @@ const ModernNavbar: React.FC = () => {
                 )}
               </button>
 
-              {/* Profile Menu */}
-              <div className="relative" ref={profileRef}>
+              {/* Profile Menu - Desktop only */}
+              <div className="hidden md:block relative" ref={profileRef}>
                 <button
                   onClick={() => setIsProfileOpen(!isProfileOpen)}
                   className="
@@ -188,7 +200,7 @@ const ModernNavbar: React.FC = () => {
                     {getUserInitials(user)}
                   </div>
                   <ChevronRight className={`
-                    hidden sm:block h-4 w-4 text-white/80 transition-transform
+                    h-4 w-4 text-white/80 transition-transform
                     ${isProfileOpen ? 'rotate-90' : ''}
                   `} />
                 </button>
@@ -234,63 +246,6 @@ const ModernNavbar: React.FC = () => {
                           Mon Profil
                         </Link>
 
-                        {isAdmin && (
-                          <>
-                            <div className="my-2 border-t border-gray-100" />
-                            <div className="px-4 py-1 text-xs font-medium text-gray-500 uppercase">
-                              Administration
-                            </div>
-                            <Link
-                              to="/admin"
-                              onClick={() => setIsProfileOpen(false)}
-                              className="
-                                flex items-center gap-3 px-4 py-2
-                                text-gray-700 hover:bg-gray-50
-                                transition-colors
-                              "
-                            >
-                              <Settings className="h-4 w-4" />
-                              Gestion Desiderata
-                            </Link>
-                            <Link
-                              to="/users"
-                              onClick={() => setIsProfileOpen(false)}
-                              className="
-                                flex items-center gap-3 px-4 py-2
-                                text-gray-700 hover:bg-gray-50
-                                transition-colors
-                              "
-                            >
-                              <Users className="h-4 w-4" />
-                              Utilisateurs
-                            </Link>
-                            <Link
-                              to="/generated-planning"
-                              onClick={() => setIsProfileOpen(false)}
-                              className="
-                                flex items-center gap-3 px-4 py-2
-                                text-gray-700 hover:bg-gray-50
-                                transition-colors
-                              "
-                            >
-                              <FileSpreadsheet className="h-4 w-4" />
-                              Gestion Planning
-                            </Link>
-                            <Link
-                              to="/admin-shift-exchange"
-                              onClick={() => setIsProfileOpen(false)}
-                              className="
-                                flex items-center gap-3 px-4 py-2
-                                text-gray-700 hover:bg-gray-50
-                                transition-colors
-                              "
-                            >
-                              <Repeat className="h-4 w-4" />
-                              Gestion BaG
-                            </Link>
-                          </>
-                        )}
-
                         {canAccessSuperAdmin && (
                           <>
                             <div className="my-2 border-t border-gray-100" />
@@ -331,17 +286,25 @@ const ModernNavbar: React.FC = () => {
                 </AnimatePresence>
               </div>
 
-              {/* Mobile Menu Toggle */}
+              {/* Mobile Menu Toggle - Same as profile button */}
               <button
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
                 className="
-                  md:hidden flex items-center justify-center
-                  w-9 h-9 rounded-full
-                  text-white hover:bg-white/10
-                  transition-all duration-200
+                  md:hidden flex items-center gap-2 px-2 py-1.5 rounded-full
+                  hover:bg-white/10 transition-all duration-200
                 "
               >
-                {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+                <div className="
+                  w-8 h-8 rounded-full bg-white/20 backdrop-blur-sm
+                  flex items-center justify-center text-white text-sm font-medium
+                  shadow-md
+                ">
+                  {getUserInitials(user)}
+                </div>
+                <ChevronRight className={`
+                  h-4 w-4 text-white/80 transition-transform
+                  ${isMobileMenuOpen ? 'rotate-90' : ''}
+                `} />
               </button>
             </div>
           </div>
@@ -351,18 +314,22 @@ const ModernNavbar: React.FC = () => {
       {/* Mobile Bottom Navigation - Only show when navbar is hidden */}
       <AnimatePresence>
         {!navbarVisible && window.innerWidth < 768 && (
-          <motion.nav
-            initial={{ y: 100 }}
-            animate={{ y: 0 }}
-            exit={{ y: 100 }}
-            transition={{ type: 'spring', damping: 25 }}
-            className="
-              fixed bottom-0 left-0 right-0 z-[9998]
-              bg-gradient-to-r from-blue-600 via-blue-500 to-teal-500
-              shadow-lg md:hidden
-            "
-          >
-            <div className="flex items-center justify-around h-16 px-2">
+          <>
+            {/* Spacer to prevent content from being hidden behind bottom nav */}
+            <div className="h-14 md:hidden" />
+            
+            <motion.nav
+              initial={{ y: 100 }}
+              animate={{ y: 0 }}
+              exit={{ y: 100 }}
+              transition={{ type: 'spring', damping: 25 }}
+              className="
+                fixed bottom-0 left-0 right-0 z-[9998]
+                bg-gradient-to-r from-blue-600 to-teal-600
+                shadow-lg md:hidden
+              "
+            >
+            <div className="flex items-center justify-around h-14 px-2">
               {mainNavItems.slice(0, 4).map(item => (
                 <NavLink
                   key={item.to}
@@ -378,8 +345,8 @@ const ModernNavbar: React.FC = () => {
                 >
                   {({ isActive }) => (
                     <>
-                      <item.icon className={`h-5 w-5 ${isActive ? 'scale-110' : ''}`} />
-                      <span className="text-xs">{item.label}</span>
+                      <item.icon className={`h-4 w-4 ${isActive ? 'scale-110' : ''}`} />
+                      <span className="text-[10px]">{item.label}</span>
                     </>
                   )}
                 </NavLink>
@@ -392,11 +359,12 @@ const ModernNavbar: React.FC = () => {
                 }}
                 className="flex flex-col items-center gap-1 p-2 rounded-lg text-white/70"
               >
-                <Menu className="h-5 w-5" />
-                <span className="text-xs">Menu</span>
+                <User className="h-4 w-4" />
+                <span className="text-[10px]">Profil</span>
               </button>
             </div>
           </motion.nav>
+          </>
         )}
       </AnimatePresence>
 
@@ -428,7 +396,7 @@ const ModernNavbar: React.FC = () => {
             >
               <div className="sticky top-0 bg-white border-b border-gray-200 p-4">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-semibold">Menu</h2>
+                  <h2 className="text-lg font-semibold">Mon compte</h2>
                   <button
                     onClick={() => setIsMobileMenuOpen(false)}
                     className="p-2 rounded-full hover:bg-gray-100"
@@ -457,6 +425,9 @@ const ModernNavbar: React.FC = () => {
 
                 {/* Navigation */}
                 <div className="space-y-1">
+                  <div className="px-4 py-2 text-xs font-medium text-gray-500 uppercase">
+                    Navigation
+                  </div>
                   {mainNavItems.map(item => (
                     <NavLink
                       key={item.to}
@@ -490,7 +461,7 @@ const ModernNavbar: React.FC = () => {
                         className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-gray-50"
                       >
                         <Settings className="h-5 w-5" />
-                        <span>Gestion Desiderata</span>
+                        <span>Gestion Désidérata</span>
                       </NavLink>
                       <NavLink
                         to="/users"
@@ -530,6 +501,17 @@ const ModernNavbar: React.FC = () => {
                     <User className="h-5 w-5" />
                     <span>Mon Profil</span>
                   </Link>
+                  
+                  {canAccessSuperAdmin && (
+                    <Link
+                      to="/super-admin"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-gray-50"
+                    >
+                      <Shield className="h-5 w-5" />
+                      <span>Super Admin</span>
+                    </Link>
+                  )}
                   
                   <button
                     onClick={() => {

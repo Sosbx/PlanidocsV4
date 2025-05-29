@@ -14,7 +14,10 @@ import {
   UserCircle,
   HelpCircle,
   FileText,
-  Shield
+  Shield,
+  CalendarOff,
+  RefreshCw,
+  FileSpreadsheet
 } from 'lucide-react';
 import LogoImage from '../assets/images/Logo.png';
 
@@ -89,8 +92,8 @@ const DashboardPage: React.FC = () => {
   const allUserCards = [
     {
       to: "/user",
-      icon: <Calendar className="h-6 w-6 text-sky-600" />,
-      title: "Desiderata",
+      icon: <CalendarOff className="h-6 w-6 text-sky-600" />,
+      title: "Désidérata",
       description: "Saisir mes desiderata",
       color: "hover:border-sky-500 hover:bg-gradient-to-br hover:from-sky-50 hover:to-blue-50/50",
       disabled: (canAccessSuperAdmin && isSuperAdminMode) ? false : getFeatureStatus(FEATURES.DESIDERATA) === 'disabled',
@@ -98,8 +101,8 @@ const DashboardPage: React.FC = () => {
     },
     {
       to: "/planning",
-      icon: <CalendarClock className="h-6 w-6 text-teal-600" />,
-      title: "Mon Planning",
+      icon: <Calendar className="h-6 w-6 text-teal-600" />,
+      title: "Planning",
       description: "Consulter mon planning et échanger mes gardes",
       color: "hover:border-teal-500 hover:bg-gradient-to-br hover:from-teal-50 hover:to-emerald-50/50",
       disabled: (canAccessSuperAdmin && isSuperAdminMode) ? false : getFeatureStatus(FEATURES.PLANNING) === 'disabled',
@@ -108,7 +111,7 @@ const DashboardPage: React.FC = () => {
     {
       to: "/shift-exchange",
       icon: <Repeat className="h-6 w-6 text-violet-600" />,
-      title: "Bourse aux Gardes",
+      title: "BaG",
       description: "Interagir avec la bourse aux gardes",
       color: "hover:border-violet-500 hover:bg-gradient-to-br hover:from-violet-50 hover:to-purple-50/50",
       disabled: (canAccessSuperAdmin && isSuperAdminMode) ? false : getFeatureStatus(FEATURES.SHIFT_EXCHANGE) === 'disabled',
@@ -116,7 +119,7 @@ const DashboardPage: React.FC = () => {
     },
     {
       to: "/direct-exchange",
-      icon: <Repeat className="h-6 w-6 text-orange-600" />,
+      icon: <RefreshCw className="h-6 w-6 text-orange-600" />,
       title: "Échanges",
       description: "Céder, échanger ou se faire remplacer",
       color: "hover:border-orange-500 hover:bg-gradient-to-br hover:from-orange-50 hover:to-amber-50/50",
@@ -150,7 +153,7 @@ const DashboardPage: React.FC = () => {
     },
     {
       to: "/direct-exchange",
-      icon: <Repeat className="h-6 w-6 text-orange-600" />,
+      icon: <RefreshCw className="h-6 w-6 text-orange-600" />,
       title: "Échanges",
       description: "Gérer les cessions, échanges et remplacements entre médecins",
       color: "hover:border-orange-500 hover:bg-gradient-to-br hover:from-orange-50 hover:to-amber-50/50",
@@ -159,7 +162,7 @@ const DashboardPage: React.FC = () => {
     },
     {
       to: "/generated-planning",
-      icon: <CalendarClock className="h-6 w-6 text-cyan-600" />,
+      icon: <FileSpreadsheet className="h-6 w-6 text-cyan-600" />,
       title: "Gestion Planning",
       description: "Importer et visualiser les plannings",
       color: "hover:border-cyan-500 hover:bg-gradient-to-br hover:from-cyan-50 hover:to-sky-50/50",
@@ -197,23 +200,26 @@ const DashboardPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
-      {/* En-tête avec logo */}
-      <div className="bg-gradient-to-r from-blue-600 to-blue-700 py-4 sm:py-6">
+      {/* En-tête avec logo - même style que navbar */}
+      <div className="bg-gradient-to-r from-blue-600 to-teal-600 backdrop-blur-md shadow-lg py-2 sm:py-3">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center">
               <img 
                 src={LogoImage} 
                 alt="PlaniDoc Logo" 
-                className="h-8 w-8 sm:h-12 sm:w-12 object-contain"
+                className="h-16 w-16 sm:h-20 sm:w-20 object-contain"
               />
-              <h1 className="ml-2 sm:ml-3 text-xl sm:text-3xl font-bold text-white flex items-start">
-                PlaniDoc<span className="text-sm">s</span>
+              <h1 className="ml-2 sm:ml-3 text-2xl sm:text-4xl font-bold text-white flex items-start tracking-wide" style={{ fontFamily: 'Georgia, Cambria, "Times New Roman", serif' }}>
+                <span className="bg-gradient-to-r from-white to-teal-100 bg-clip-text text-transparent drop-shadow-md">
+                  PlaniDoc
+                </span>
+                <span className="text-sm sm:text-base text-teal-100 font-semibold">s</span>
               </h1>
             </div>
             <Link
               to="/profile"
-              className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-blue-700 bg-white rounded-lg hover:bg-blue-50 shadow-sm transition-all duration-200"
+              className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 text-sm font-medium text-white bg-white/20 backdrop-blur-sm rounded-full hover:bg-white/30 shadow-md transition-all duration-200"
             >
               <UserCircle className="h-5 w-5" />
               <span className="hidden sm:inline">{user.firstName} {user.lastName}</span>

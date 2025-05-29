@@ -13,6 +13,7 @@ import { useDirectExchangeFilters } from '../hooks/useDirectExchangeFilters';
 import { useDirectExchangeModals } from '../hooks/useDirectExchangeModals';
 import { useDirectExchangeActions } from '../hooks/useDirectExchangeActions';
 import { useDirectProposalActions } from '../hooks/useDirectProposalActions';
+import { useBottomNavPadding } from '../../../hooks/useBottomNavPadding';
 import type { ShiftExchange as PlanningShiftExchange } from '../../../types/planning';
 import type { ShiftExchange as ExchangeShiftExchange } from '../../../types/exchange';
 import type { OperationType } from '../types';
@@ -25,6 +26,7 @@ const DirectExchangeContainer: React.FC = () => {
   const { user } = useAuth();
   const { users } = useUsers();
   const { } = usePlanningPeriod();
+  const bottomNavPadding = useBottomNavPadding();
   
   // Hooks pour la gestion des données et des filtres
   const { filterOptions, filterProps } = useDirectExchangeFilters();
@@ -731,6 +733,7 @@ const DirectExchangeContainer: React.FC = () => {
         onRetry={loadDirectExchanges}
         filterOptions={filterProps}
         renderCustomContent={renderCustomContent}
+        className={bottomNavPadding}
         isMobile={isMobile}
         isSmallScreen={isSmallScreen}
       />

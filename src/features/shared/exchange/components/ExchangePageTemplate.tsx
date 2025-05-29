@@ -48,6 +48,7 @@ interface ExchangePageTemplateProps {
   };
   renderCustomHeader?: () => React.ReactNode;
   renderCustomContent?: () => React.ReactNode;
+  className?: string;
   renderCalendarView?: () => React.ReactNode;
   isMobile?: boolean;
   isSmallScreen?: boolean;
@@ -79,6 +80,7 @@ const ExchangePageTemplate: React.FC<ExchangePageTemplateProps> = ({
   filterOptions,
   renderCustomHeader,
   renderCustomContent,
+  className,
   renderCalendarView,
   isMobile = false,
   isSmallScreen = false,
@@ -129,7 +131,7 @@ const ExchangePageTemplate: React.FC<ExchangePageTemplateProps> = ({
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6">
+    <div className={`max-w-7xl mx-auto px-4 py-6 ${className || ''}`}>
       <Toast 
         message={toast.message}
         isVisible={toast.visible}

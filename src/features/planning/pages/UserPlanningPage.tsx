@@ -17,6 +17,7 @@ import type { GeneratedPlanning, ExchangeHistory, ShiftAssignment } from "../typ
 import Toast from "../../../components/Toast";
 import { getAllDesiderata } from "../../../lib/firebase/desiderata";
 import { useAssociation } from "../../../context/association/AssociationContext";
+import { useBottomNavPadding } from "../../../hooks/useBottomNavPadding";
 
 // Importation dynamique des fonctions d'export volumineuses
 import { 
@@ -34,6 +35,7 @@ const UserPlanningPage: React.FC = () => {
   const { config: bagPhaseConfig } = useBagPhase();
   const { allPeriods } = usePlanningPeriod();
   const { currentAssociation } = useAssociation();
+  const bottomNavPadding = useBottomNavPadding();
   const [planning, setPlanning] = useState<GeneratedPlanning | null>(null);
   const [planningsByPeriod, setPlanningsByPeriod] = useState<Record<string, GeneratedPlanning>>({});
   const todayRef = useRef<HTMLDivElement>(null);
@@ -635,7 +637,7 @@ const UserPlanningPage: React.FC = () => {
 
   if (!user?.roles.isUser) {
     return (
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className={`max-w-7xl mx-auto px-4 py-8 ${bottomNavPadding}`}>
         <div className="bg-yellow-50 p-6 rounded-lg shadow-md">
           <h2 className="text-xl font-semibold text-yellow-800 mb-2">Accès non autorisé</h2>
           <p className="text-yellow-700">
@@ -648,7 +650,7 @@ const UserPlanningPage: React.FC = () => {
 
   if (!config.isConfigured) {
     return (
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className={`max-w-7xl mx-auto px-4 py-8 ${bottomNavPadding}`}>
         <div className="bg-yellow-50 p-6 rounded-lg shadow-md">
           <h2 className="text-xl font-semibold text-yellow-800 mb-2">Planning non configuré</h2>
           <p className="text-yellow-700">
@@ -665,7 +667,7 @@ const UserPlanningPage: React.FC = () => {
 
   if (error) {
     return (
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className={`max-w-7xl mx-auto px-4 py-8 ${bottomNavPadding}`}>
         <div className="bg-red-50 p-6 rounded-lg shadow-md">
           <h2 className="text-xl font-semibold text-red-800 mb-2">Erreur</h2>
           <p className="text-red-700">{error}</p>

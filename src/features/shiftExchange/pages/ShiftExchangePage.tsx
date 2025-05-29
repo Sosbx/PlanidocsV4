@@ -6,6 +6,7 @@ import { useBagPhase } from '../../../context/shiftExchange';
 import { useShiftExchangeData } from '../hooks/useShiftExchangeData';
 import { useShiftInteraction, useCalendarNavigation } from '../hooks';
 import { ShiftPeriod } from '../types';
+import { useBottomNavPadding } from '../../../hooks/useBottomNavPadding';
 
 // Composants
 import Toast from '../../../components/common/Toast';
@@ -28,6 +29,7 @@ const ShiftExchangePage: React.FC = () => {
   // Hooks d'authentification et contexte
   const { user } = useAuth();
   const { users } = useUsers();
+  const bottomNavPadding = useBottomNavPadding();
   const { config: bagPhaseConfig } = useBagPhase();
 
   // États pour les modals
@@ -321,6 +323,7 @@ const ShiftExchangePage: React.FC = () => {
         bagPhaseConfig={bagPhaseConfig}
         isInteractionDisabled={isInteractionDisabled}
         onToggleInterest={(exchange) => handleToggleInterest(exchange as unknown as import('../types').ShiftExchange)}
+        className={bottomNavPadding}
         filterOptions={{
           showOwnShifts: filterOptions.showOwnShifts,
           setShowOwnShifts: (value) => updateFilterOption('showOwnShifts', value),
