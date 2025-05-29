@@ -33,7 +33,7 @@ const MobileControlBar = memo<MobileControlBarProps>(({
   const isDisabled = isDeadlineExpired || isSaving;
 
   return (
-    <div className="fixed top-0 left-0 right-0 bg-white z-50 shadow-md py-2 px-3 flex items-center justify-between md:hidden">
+    <div className="fixed top-0 left-0 right-0 bg-white/95 backdrop-blur-sm z-50 border-b border-gray-200/50 shadow-lg py-2 px-3 flex items-center justify-between md:hidden">
       <div className="flex gap-2 items-center w-2/3">
         <button
           type="button"
@@ -74,8 +74,8 @@ const MobileControlBar = memo<MobileControlBarProps>(({
         onClick={onValidate}
         disabled={isDisabled}
         className={`flex items-center justify-center px-4 py-1.5 border border-transparent text-base font-medium rounded-md text-white ${
-          isValidated ? 'bg-green-600' : 'bg-indigo-600'
-        } disabled:opacity-50 disabled:cursor-not-allowed`}
+          isValidated ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'
+        } disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
         title={isValidated ? "Mettre à jour les desiderata" : "Valider les desiderata"}
       >
         <Save className="h-5 w-5" />

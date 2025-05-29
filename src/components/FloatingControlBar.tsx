@@ -92,7 +92,7 @@ const FloatingControlBar = memo<FloatingControlBarProps>(({
       }`}
     >
       <div className="mx-auto max-w-7xl px-2 sm:px-4">
-        <div className="bg-white rounded-b-lg shadow-lg border border-gray-200 border-t-0 p-2">
+        <div className="bg-white/95 backdrop-blur-sm rounded-b-lg shadow-lg border border-gray-200/50 border-t-0 p-2">
           <div className="flex items-center gap-2 sm:gap-3">
             {/* Container pour les boutons de désidérata - 2/3 de la largeur sur mobile */}
             <div className="flex gap-2 w-2/3 sm:w-auto">
@@ -146,7 +146,7 @@ const FloatingControlBar = memo<FloatingControlBarProps>(({
                   ? 'opacity-50 cursor-not-allowed bg-gray-100 text-gray-500' 
                   : isValidated 
                     ? 'bg-green-600 text-white hover:bg-green-700 shadow-md' 
-                    : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-md'
+                    : 'bg-blue-600 text-white hover:bg-blue-700 shadow-md'
               }`}
               title={isValidated ? "Mettre à jour les désidérata" : "Valider et envoyer les désidérata"}
               aria-label={isSaving ? "Validation en cours..." : isValidated ? "Mettre à jour les désidérata" : "Valider les désidérata"}

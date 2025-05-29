@@ -1,6 +1,7 @@
 /* Import des styles personnalisés - doit être en premier */
 @import './styles/PlanningStyles.css';
 @import './styles/FloatingControlBar.css';
+@import './styles/GradientTheme.css';
 
 @tailwind base;
 @tailwind components;

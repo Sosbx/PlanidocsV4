@@ -36,7 +36,7 @@ const DashboardCard: React.FC<DashboardCardProps> = ({ to, icon, title, descript
   if (isDev) {
     return (
       <div
-        className={`relative group p-6 bg-white rounded-xl shadow-sm border-2 border-gray-100 overflow-hidden cursor-not-allowed opacity-60`}
+        className={`relative group p-6 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden cursor-not-allowed opacity-60`}
       >
         <div className="relative z-10">
           <div className="flex items-center gap-4 mb-3">
@@ -51,7 +51,7 @@ const DashboardCard: React.FC<DashboardCardProps> = ({ to, icon, title, descript
           <p className="text-sm text-gray-600 leading-relaxed">{description}</p>
           <p className="text-xs text-orange-500 mt-2 font-medium">En développement</p>
         </div>
-        <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-gray-50/50 opacity-0 transition-all duration-500" />
+        <div className="absolute inset-0 bg-gray-50/30" />
       </div>
     );
   }
@@ -65,18 +65,18 @@ const DashboardCard: React.FC<DashboardCardProps> = ({ to, icon, title, descript
   return (
     <Link
       to={to}
-      className={`relative group p-6 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 border-2 border-gray-100 ${color} overflow-hidden transform hover:-translate-y-0.5`}
+      className={`relative group p-6 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 border border-gray-200 ${color} overflow-hidden`}
     >
       <div className="relative z-10">
         <div className="flex items-center gap-4 mb-3">
-          <div className="p-2.5 bg-gray-50/50 rounded-lg group-hover:bg-white transition-colors">
+          <div className="p-2.5 bg-gray-50 rounded-lg group-hover:bg-gray-100 transition-colors">
             {icon}
           </div>
           <h3 className="text-lg font-medium text-gray-900">{title}</h3>
         </div>
         <p className="text-sm text-gray-600 leading-relaxed">{description}</p>
       </div>
-      <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-gray-50/50 opacity-0 group-hover:opacity-100 transition-all duration-500" />
+      <div className="absolute inset-0 bg-gradient-to-br from-transparent to-gray-50/30 opacity-0 group-hover:opacity-100 transition-all duration-300" />
     </Link>
   );
 };
@@ -199,9 +199,9 @@ const DashboardPage: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
+    <div className="min-h-screen bg-gray-50">
       {/* En-tête avec logo - même style que navbar */}
-      <div className="bg-gradient-to-r from-blue-600 to-teal-600 backdrop-blur-md shadow-lg py-2 sm:py-3">
+      <div className="bg-gradient-to-r from-blue-600 to-blue-500 backdrop-blur-md shadow-lg py-2 sm:py-3">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center">
@@ -210,11 +210,8 @@ const DashboardPage: React.FC = () => {
                 alt="PlaniDoc Logo" 
                 className="h-16 w-16 sm:h-20 sm:w-20 object-contain"
               />
-              <h1 className="ml-2 sm:ml-3 text-2xl sm:text-4xl font-bold text-white flex items-start tracking-wide" style={{ fontFamily: 'Georgia, Cambria, "Times New Roman", serif' }}>
-                <span className="bg-gradient-to-r from-white to-teal-100 bg-clip-text text-transparent drop-shadow-md">
-                  PlaniDoc
-                </span>
-                <span className="text-sm sm:text-base text-teal-100 font-semibold">s</span>
+              <h1 className="ml-3 text-2xl sm:text-4xl font-bold text-white flex items-start">
+                PlaniDoc<span className="text-sm sm:text-base">s</span>
               </h1>
             </div>
             <Link
@@ -232,7 +229,7 @@ const DashboardPage: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 py-8 sm:py-16">
         <div className="flex flex-col gap-4 mb-12">
           <div>
-            <h1 className="text-2xl sm:text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-700">
+            <h1 className="text-2xl sm:text-4xl font-bold text-gray-900">
               Bienvenue, {user.firstName} <span className="text-yellow-500">👋</span>
             </h1>
             <p className="mt-2 sm:mt-3 text-gray-600 text-base sm:text-lg font-light">
@@ -262,7 +259,7 @@ const DashboardPage: React.FC = () => {
         )}
 
         <div className="mt-8 sm:mt-12 flex flex-col sm:flex-row gap-4">
-          <div className="flex-1 bg-gradient-to-br from-blue-50 to-indigo-50/50 border border-blue-100 rounded-xl p-6 flex items-start gap-4 shadow-sm hover:shadow-md transition-all">
+          <div className="flex-1 bg-blue-50 border border-blue-200 rounded-xl p-6 flex items-start gap-4 shadow-sm hover:shadow-md transition-all">
             <HelpCircle className="h-6 w-6 text-blue-500 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
               <h3 className="text-sm sm:text-base font-medium text-blue-900">Besoin d'aide ?</h3>
@@ -271,7 +268,7 @@ const DashboardPage: React.FC = () => {
               </p>
             </div>
           </div>
-          <div className="flex-1 bg-gradient-to-br from-green-50 to-emerald-50/50 border border-green-100 rounded-xl p-6 flex items-start gap-4 shadow-sm hover:shadow-md transition-all">
+          <div className="flex-1 bg-green-50 border border-green-200 rounded-xl p-6 flex items-start gap-4 shadow-sm hover:shadow-md transition-all">
             <Link to="/terms" className="flex-1 flex items-start gap-4 group">
               <FileText className="h-6 w-6 text-green-500 flex-shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
               <div>
@@ -282,7 +279,7 @@ const DashboardPage: React.FC = () => {
               </div>
             </Link>
           </div>
-          <div className="flex-1 bg-gradient-to-br from-blue-50 to-indigo-50/50 border border-blue-100 rounded-xl p-6 flex items-start gap-4 shadow-sm hover:shadow-md transition-all">
+          <div className="flex-1 bg-blue-50 border border-blue-200 rounded-xl p-6 flex items-start gap-4 shadow-sm hover:shadow-md transition-all">
             <Link to="/privacy" className="flex-1 flex items-start gap-4 group">
               <Shield className="h-6 w-6 text-blue-500 flex-shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
               <div>

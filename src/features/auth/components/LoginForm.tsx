@@ -78,28 +78,28 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, onGoogleSignIn, error, 
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-cyan-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-4000"></div>
       </div>
       {/* Footer avec liens de confidentialité */}
-      <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-white to-white/95 backdrop-blur-md border-t border-gray-100 shadow-lg">
+      <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-sm border-t border-gray-200/50 shadow-lg">
         <div className="max-w-7xl mx-auto px-4 py-3">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-xs text-gray-500">
-              <Shield className="h-3.5 w-3.5 text-teal-500" />
+              <Shield className="h-3.5 w-3.5 text-blue-500" />
               <span>© 2024 PlaniDocs - Tous droits réservés</span>
             </div>
             <div className="flex items-center gap-6">
               <a
                 href="/terms"
-                className="group flex items-center gap-1.5 text-xs text-gray-600 hover:text-teal-600 transition-all duration-200"
+                className="group flex items-center gap-1.5 text-xs text-gray-600 hover:text-blue-600 transition-all duration-200"
               >
-                <svg className="h-3.5 w-3.5 text-gray-400 group-hover:text-teal-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="h-3.5 w-3.5 text-gray-400 group-hover:text-blue-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
                 <span className="font-medium">Règles d'utilisation</span>
               </a>
               <a
                 href="/privacy"
-                className="group flex items-center gap-1.5 text-xs text-gray-600 hover:text-teal-600 transition-all duration-200"
+                className="group flex items-center gap-1.5 text-xs text-gray-600 hover:text-blue-600 transition-all duration-200"
               >
-                <svg className="h-3.5 w-3.5 text-gray-400 group-hover:text-teal-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="h-3.5 w-3.5 text-gray-400 group-hover:text-blue-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                 </svg>
                 <span className="font-medium">Politique de confidentialité</span>
@@ -117,7 +117,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, onGoogleSignIn, error, 
 
       {/* Bannière d'aide collapsible */}
       <div className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${showInfoBanner ? 'translate-y-0' : '-translate-y-full'}`}>
-        <div className="bg-gradient-to-r from-blue-600 to-teal-600 text-white shadow-lg">
+        <div className="bg-blue-600 text-white shadow-lg">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between py-3">
               <div className="flex items-center flex-1">
@@ -143,7 +143,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, onGoogleSignIn, error, 
         <div className="flex flex-col items-center">
           {/* Logo avec animation */}
           <div className="w-32 h-32 sm:w-40 sm:h-40 relative mb-2">
-            <div className="absolute inset-0 bg-gradient-to-r from-blue-400 to-teal-400 rounded-full opacity-20 blur-2xl animate-pulse"></div>
+            <div className="absolute inset-0 bg-blue-400 rounded-full opacity-20 blur-2xl animate-pulse"></div>
             <img 
               src="/Logo.png" 
               alt="PlaniDoc Logo" 
@@ -154,8 +154,8 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, onGoogleSignIn, error, 
           {/* Titre avec animation */}
           <div className="text-center">
             <h2 className="text-3xl sm:text-4xl font-black flex items-start justify-center tracking-tight mb-1">
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 via-teal-600 to-cyan-600 animate-gradient">PlaniDoc</span>
-              <span className="text-lg sm:text-xl font-bold text-teal-600 ml-1">s</span>
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-blue-500">PlaniDoc</span>
+              <span className="text-lg sm:text-xl font-bold text-blue-600 ml-1">s</span>
             </h2>
             <p className="text-sm sm:text-base text-gray-600 font-light">
               Planification des desiderata
@@ -200,7 +200,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, onGoogleSignIn, error, 
                   onChange={handleLoginChange}
                   disabled={isLoading}
                   placeholder="DUPO"
-                  className="block w-full pl-10 pr-3 py-2.5 sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed transition-all duration-300 input-transition"
+                  className="block w-full pl-10 pr-3 py-2.5 sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed transition-all duration-300"
                   autoComplete="username"
                 />
               </div>
@@ -233,7 +233,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, onGoogleSignIn, error, 
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={isLoading}
                   placeholder="MARC33"
-                  className="block w-full pl-10 pr-10 py-2.5 sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed transition-all duration-300 input-transition"
+                  className="block w-full pl-10 pr-10 py-2.5 sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed transition-all duration-300"
                   autoComplete="current-password"
                 />
               </div>
@@ -246,7 +246,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, onGoogleSignIn, error, 
                   type="checkbox"
                   checked={rememberMe}
                   onChange={(e) => setRememberMe(e.target.checked)}
-                  className="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded"
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                 />
                 <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-700">
                   Se souvenir de moi
@@ -255,7 +255,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, onGoogleSignIn, error, 
               <button
                 type="button"
                 onClick={() => setIsForgotPasswordOpen(true)}
-                className="text-sm font-medium text-teal-600 hover:text-teal-500 transition-colors"
+                className="text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors"
               >
                 Mot de passe oublié ?
               </button>
@@ -267,9 +267,9 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, onGoogleSignIn, error, 
                 disabled={isLoading || loginSuccess}
                 className={`w-full flex justify-center items-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white 
                   ${isLoading || loginSuccess
-                    ? 'bg-teal-400 cursor-not-allowed' 
-                    : 'bg-gradient-to-r from-blue-600 to-teal-600 hover:from-blue-700 hover:to-teal-700 hover-lift'} 
-                  focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 transition-all duration-300 ripple`}
+                    ? 'bg-blue-400 cursor-not-allowed' 
+                    : 'bg-blue-600 hover:bg-blue-700 hover-lift'} 
+                  focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-300`}
               >
                 {isLoading ? (
                   <div className="loading-spinner"></div>
@@ -303,7 +303,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, onGoogleSignIn, error, 
                       ${isLoading || loginSuccess
                         ? 'cursor-not-allowed opacity-50' 
                         : 'hover:bg-gray-50 hover-lift'} 
-                      focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 transition-all duration-300`}
+                      focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-300`}
                   >
                     <svg className="w-5 h-5" viewBox="0 0 24 24">
                       <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>

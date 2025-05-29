@@ -20,6 +20,8 @@ import {
 import { useAuth } from '../features/auth/hooks';
 import { useNotifications } from '../context/notifications/NotificationContext';
 import { useSuperAdmin } from '../context/superAdmin/SuperAdminContext';
+import { useFeatureFlags } from '../context/featureFlags/FeatureFlagsContext';
+import { FEATURES } from '../types/featureFlags';
 import Logo from './common/Logo';
 import { getUserInitials } from '../features/users/utils/userUtils';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -66,6 +68,7 @@ const ModernNavbar: React.FC = () => {
   const { user, logout } = useAuth();
   const { notifications, markAsRead, markAllAsRead } = useNotifications();
   const { canAccessSuperAdmin, isSuperAdminMode } = useSuperAdmin();
+  const { getFeatureStatus } = useFeatureFlags();
   const location = useLocation();
   
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -122,16 +125,53 @@ const ModernNavbar: React.FC = () => {
 
   const unreadCount = notifications.filter(n => !n.read).length;
   const isAdmin = user.roles?.isAdmin || user.roles?.isManager;
+  const isOnlyAdmin = isAdmin && !user.roles?.isUser;
 
   // Navigation principale adaptative selon le rôle
-  const mainNavItems = [
-    { to: '/planning', icon: Calendar, label: 'Planning' },
-    { to: '/shift-exchange', icon: Repeat, label: 'BaG' },
-    { to: '/direct-exchange', icon: RefreshCw, label: 'Échanges' },
-  ];
-
-  if (user.roles?.isUser) {
-    mainNavItems.unshift({ to: '/user', icon: CalendarOff, label: 'Désidérata' });
+  let mainNavItems = [];
+  
+  if (isOnlyAdmin) {
+    // Si uniquement admin, afficher les pages d'administration
+    const adminItems = [
+      { to: '/admin', icon: Settings, label: 'Gestion Désidérata', feature: FEATURES.ADMIN_DESIDERATA },
+      { to: '/users', icon: Users, label: 'Utilisateurs', feature: FEATURES.USER_MANAGEMENT },
+      { to: '/generated-planning', icon: FileSpreadsheet, label: 'Planning', feature: FEATURES.GENERATED_PLANNING },
+      { to: '/admin-shift-exchange', icon: Repeat, label: 'Gestion BaG', feature: FEATURES.ADMIN_SHIFT_EXCHANGE },
+      { to: '/remplacements', icon: Users, label: 'Remplacements', feature: FEATURES.REPLACEMENTS },
+    ];
+    
+    // Filtrer selon les feature flags sauf en mode super admin
+    mainNavItems = adminItems.filter(item => {
+      const status = getFeatureStatus(item.feature);
+      // En mode super admin, afficher tous les items
+      if (canAccessSuperAdmin && isSuperAdminMode) return true;
+      // Sinon, cacher les items désactivés ET en dev
+      return status !== 'disabled' && status !== 'dev';
+    });
+  } else {
+    // Sinon, afficher les pages utilisateur normales
+    const userItems = [
+      { to: '/planning', icon: Calendar, label: 'Planning', feature: FEATURES.PLANNING },
+      { to: '/shift-exchange', icon: Repeat, label: 'BaG', feature: FEATURES.SHIFT_EXCHANGE },
+      { to: '/direct-exchange', icon: RefreshCw, label: 'Échanges', feature: FEATURES.DIRECT_EXCHANGE },
+    ];
+    
+    // Filtrer selon les feature flags sauf en mode super admin
+    mainNavItems = userItems.filter(item => {
+      const status = getFeatureStatus(item.feature);
+      // En mode super admin, afficher tous les items
+      if (canAccessSuperAdmin && isSuperAdminMode) return true;
+      // Sinon, cacher les items désactivés ET en dev
+      return status !== 'disabled' && status !== 'dev';
+    });
+    
+    if (user.roles?.isUser) {
+      // Vérifier aussi le feature flag pour les désidérata
+      const desiderataStatus = getFeatureStatus(FEATURES.DESIDERATA);
+      if ((canAccessSuperAdmin && isSuperAdminMode) || (desiderataStatus !== 'disabled' && desiderataStatus !== 'dev')) {
+        mainNavItems.unshift({ to: '/user', icon: CalendarOff, label: 'Désidérata', feature: FEATURES.DESIDERATA });
+      }
+    }
   }
 
   return (
@@ -139,7 +179,7 @@ const ModernNavbar: React.FC = () => {
       {/* Desktop Navbar - Always visible */}
       <nav className={`
         fixed top-0 left-0 right-0 z-[9999]
-        bg-gradient-to-r from-blue-600 to-teal-600
+        bg-gradient-to-r from-blue-600 to-blue-500
         backdrop-blur-md shadow-lg
         transition-transform duration-300
         ${navbarVisible || window.innerWidth >= 768 ? 'translate-y-0' : '-translate-y-full'}
@@ -246,6 +286,122 @@ const ModernNavbar: React.FC = () => {
                           Mon Profil
                         </Link>
 
+                        {/* Admin Links for all admins */}
+                        {isAdmin && (() => {
+                          const adminLinks = [];
+                          
+                          // Vérifier chaque feature flag sauf en mode super admin
+                          const adminDesiderataStatus = getFeatureStatus(FEATURES.ADMIN_DESIDERATA);
+                          if ((canAccessSuperAdmin && isSuperAdminMode) || (adminDesiderataStatus !== 'disabled' && adminDesiderataStatus !== 'dev')) {
+                            adminLinks.push(
+                              <Link
+                                key="admin"
+                                to="/admin"
+                                onClick={() => setIsProfileOpen(false)}
+                                className="
+                                  flex items-center gap-3 px-4 py-2
+                                  text-gray-700 hover:bg-gray-50
+                                  transition-colors
+                                "
+                              >
+                                <Settings className="h-4 w-4" />
+                                Gestion Désidérata
+                              </Link>
+                            );
+                          }
+                          
+                          const userManagementStatus = getFeatureStatus(FEATURES.USER_MANAGEMENT);
+                          if ((canAccessSuperAdmin && isSuperAdminMode) || (userManagementStatus !== 'disabled' && userManagementStatus !== 'dev')) {
+                            adminLinks.push(
+                              <Link
+                                key="users"
+                                to="/users"
+                                onClick={() => setIsProfileOpen(false)}
+                                className="
+                                  flex items-center gap-3 px-4 py-2
+                                  text-gray-700 hover:bg-gray-50
+                                  transition-colors
+                                "
+                              >
+                                <Users className="h-4 w-4" />
+                                Utilisateurs
+                              </Link>
+                            );
+                          }
+                          
+                          const generatedPlanningStatus = getFeatureStatus(FEATURES.GENERATED_PLANNING);
+                          if ((canAccessSuperAdmin && isSuperAdminMode) || (generatedPlanningStatus !== 'disabled' && generatedPlanningStatus !== 'dev')) {
+                            adminLinks.push(
+                              <Link
+                                key="generated-planning"
+                                to="/generated-planning"
+                                onClick={() => setIsProfileOpen(false)}
+                                className="
+                                  flex items-center gap-3 px-4 py-2
+                                  text-gray-700 hover:bg-gray-50
+                                  transition-colors
+                                "
+                              >
+                                <FileSpreadsheet className="h-4 w-4" />
+                                Gestion Planning
+                              </Link>
+                            );
+                          }
+                          
+                          const adminShiftExchangeStatus = getFeatureStatus(FEATURES.ADMIN_SHIFT_EXCHANGE);
+                          if ((canAccessSuperAdmin && isSuperAdminMode) || (adminShiftExchangeStatus !== 'disabled' && adminShiftExchangeStatus !== 'dev')) {
+                            adminLinks.push(
+                              <Link
+                                key="admin-shift-exchange"
+                                to="/admin-shift-exchange"
+                                onClick={() => setIsProfileOpen(false)}
+                                className="
+                                  flex items-center gap-3 px-4 py-2
+                                  text-gray-700 hover:bg-gray-50
+                                  transition-colors
+                                "
+                              >
+                                <Repeat className="h-4 w-4" />
+                                Gestion BaG
+                              </Link>
+                            );
+                          }
+                          
+                          const replacementsStatus = getFeatureStatus(FEATURES.REPLACEMENTS);
+                          if ((canAccessSuperAdmin && isSuperAdminMode) || (replacementsStatus !== 'disabled' && replacementsStatus !== 'dev')) {
+                            adminLinks.push(
+                              <Link
+                                key="remplacements"
+                                to="/remplacements"
+                                onClick={() => setIsProfileOpen(false)}
+                                className="
+                                  flex items-center gap-3 px-4 py-2
+                                  text-gray-700 hover:bg-gray-50
+                                  transition-colors
+                                "
+                              >
+                                <Users className="h-4 w-4" />
+                                Remplacements
+                              </Link>
+                            );
+                          }
+                          
+                          // Afficher la section seulement s'il y a des liens
+                          if (adminLinks.length > 0) {
+                            return (
+                              <>
+                                <div className="my-2 border-t border-gray-100" />
+                                <div className="px-4 py-2 text-xs font-medium text-gray-500 uppercase">
+                                  Administration
+                                </div>
+                                {adminLinks}
+                              </>
+                            );
+                          }
+                          
+                          return null;
+                        })()}
+
                         {canAccessSuperAdmin && (
                           <>
                             <div className="my-2 border-t border-gray-100" />
@@ -325,7 +481,8 @@ const ModernNavbar: React.FC = () => {
               transition={{ type: 'spring', damping: 25 }}
               className="
                 fixed bottom-0 left-0 right-0 z-[9998]
-                bg-gradient-to-r from-blue-600 to-teal-600
+                bg-white/95 backdrop-blur-sm
+                border-t border-gray-200/50
                 shadow-lg md:hidden
               "
             >
@@ -338,8 +495,8 @@ const ModernNavbar: React.FC = () => {
                     flex flex-col items-center gap-1 p-2 rounded-lg
                     transition-all duration-200
                     ${isActive 
-                      ? 'text-white' 
-                      : 'text-white/70'
+                      ? 'text-blue-600' 
+                      : 'text-gray-600'
                     }
                   `}
                 >
@@ -357,10 +514,10 @@ const ModernNavbar: React.FC = () => {
                   setIsMobileMenuOpen(true);
                   setNavbarVisible(true);
                 }}
-                className="flex flex-col items-center gap-1 p-2 rounded-lg text-white/70"
+                className="flex flex-col items-center gap-1 p-2 rounded-lg text-gray-600"
               >
-                <User className="h-4 w-4" />
-                <span className="text-[10px]">Profil</span>
+                <Menu className="h-4 w-4" />
+                <span className="text-[10px]">Menu</span>
               </button>
             </div>
           </motion.nav>
@@ -411,7 +568,7 @@ const ModernNavbar: React.FC = () => {
                 <div className="mb-6 p-4 bg-gray-50 rounded-xl">
                   <div className="flex items-center gap-3">
                     <div className="
-                      w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-teal-500
+                      w-12 h-12 rounded-full bg-blue-600
                       flex items-center justify-center text-white font-medium shadow-md
                     ">
                       {getUserInitials(user)}
@@ -448,48 +605,140 @@ const ModernNavbar: React.FC = () => {
                   ))}
                 </div>
 
-                {/* Admin Section */}
-                {isAdmin && (
-                  <div className="mt-6">
-                    <div className="px-4 py-2 text-xs font-medium text-gray-500 uppercase">
-                      Administration
-                    </div>
-                    <div className="space-y-1">
+                {/* Admin Section - only show items not already in mainNavItems */}
+                {isAdmin && !isOnlyAdmin && (() => {
+                  const adminLinks = [];
+                  
+                  // Create a set of main nav paths for quick lookup
+                  const mainNavPaths = new Set(mainNavItems.map(item => item.to));
+                  
+                  // Check each admin link
+                  const adminDesiderataStatus = getFeatureStatus(FEATURES.ADMIN_DESIDERATA);
+                  if (!mainNavPaths.has('/admin') && ((canAccessSuperAdmin && isSuperAdminMode) || (adminDesiderataStatus !== 'disabled' && adminDesiderataStatus !== 'dev'))) {
+                    adminLinks.push(
                       <NavLink
+                        key="admin"
                         to="/admin"
                         onClick={() => setIsMobileMenuOpen(false)}
-                        className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-gray-50"
+                        className={({ isActive }) => `
+                          flex items-center gap-3 px-4 py-3 rounded-xl
+                          transition-all duration-200
+                          ${isActive 
+                            ? 'bg-blue-50 text-blue-600' 
+                            : 'text-gray-700 hover:bg-gray-50'
+                          }
+                        `}
                       >
                         <Settings className="h-5 w-5" />
                         <span>Gestion Désidérata</span>
                       </NavLink>
+                    );
+                  }
+                  
+                  const userManagementStatus = getFeatureStatus(FEATURES.USER_MANAGEMENT);
+                  if (!mainNavPaths.has('/users') && ((canAccessSuperAdmin && isSuperAdminMode) || (userManagementStatus !== 'disabled' && userManagementStatus !== 'dev'))) {
+                    adminLinks.push(
                       <NavLink
+                        key="users"
                         to="/users"
                         onClick={() => setIsMobileMenuOpen(false)}
-                        className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-gray-50"
+                        className={({ isActive }) => `
+                          flex items-center gap-3 px-4 py-3 rounded-xl
+                          transition-all duration-200
+                          ${isActive 
+                            ? 'bg-blue-50 text-blue-600' 
+                            : 'text-gray-700 hover:bg-gray-50'
+                          }
+                        `}
                       >
                         <Users className="h-5 w-5" />
                         <span>Utilisateurs</span>
                       </NavLink>
+                    );
+                  }
+                  
+                  const generatedPlanningStatus = getFeatureStatus(FEATURES.GENERATED_PLANNING);
+                  if (!mainNavPaths.has('/generated-planning') && ((canAccessSuperAdmin && isSuperAdminMode) || (generatedPlanningStatus !== 'disabled' && generatedPlanningStatus !== 'dev'))) {
+                    adminLinks.push(
                       <NavLink
+                        key="generated-planning"
                         to="/generated-planning"
                         onClick={() => setIsMobileMenuOpen(false)}
-                        className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-gray-50"
+                        className={({ isActive }) => `
+                          flex items-center gap-3 px-4 py-3 rounded-xl
+                          transition-all duration-200
+                          ${isActive 
+                            ? 'bg-blue-50 text-blue-600' 
+                            : 'text-gray-700 hover:bg-gray-50'
+                          }
+                        `}
                       >
                         <FileSpreadsheet className="h-5 w-5" />
                         <span>Gestion Planning</span>
                       </NavLink>
+                    );
+                  }
+                  
+                  const adminShiftExchangeStatus = getFeatureStatus(FEATURES.ADMIN_SHIFT_EXCHANGE);
+                  if (!mainNavPaths.has('/admin-shift-exchange') && ((canAccessSuperAdmin && isSuperAdminMode) || (adminShiftExchangeStatus !== 'disabled' && adminShiftExchangeStatus !== 'dev'))) {
+                    adminLinks.push(
                       <NavLink
+                        key="admin-shift-exchange"
                         to="/admin-shift-exchange"
                         onClick={() => setIsMobileMenuOpen(false)}
-                        className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-gray-50"
+                        className={({ isActive }) => `
+                          flex items-center gap-3 px-4 py-3 rounded-xl
+                          transition-all duration-200
+                          ${isActive 
+                            ? 'bg-blue-50 text-blue-600' 
+                            : 'text-gray-700 hover:bg-gray-50'
+                          }
+                        `}
                       >
                         <Repeat className="h-5 w-5" />
                         <span>Gestion BaG</span>
                       </NavLink>
-                    </div>
-                  </div>
-                )}
+                    );
+                  }
+                  
+                  const replacementsStatus = getFeatureStatus(FEATURES.REPLACEMENTS);
+                  if (!mainNavPaths.has('/remplacements') && ((canAccessSuperAdmin && isSuperAdminMode) || (replacementsStatus !== 'disabled' && replacementsStatus !== 'dev'))) {
+                    adminLinks.push(
+                      <NavLink
+                        key="remplacements"
+                        to="/remplacements"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className={({ isActive }) => `
+                          flex items-center gap-3 px-4 py-3 rounded-xl
+                          transition-all duration-200
+                          ${isActive 
+                            ? 'bg-blue-50 text-blue-600' 
+                            : 'text-gray-700 hover:bg-gray-50'
+                          }
+                        `}
+                      >
+                        <Users className="h-5 w-5" />
+                        <span>Remplacements</span>
+                      </NavLink>
+                    );
+                  }
+                  
+                  // Only show the section if there are links
+                  if (adminLinks.length > 0) {
+                    return (
+                      <div className="mt-6">
+                        <div className="px-4 py-2 text-xs font-medium text-gray-500 uppercase">
+                          Administration
+                        </div>
+                        <div className="space-y-1">
+                          {adminLinks}
+                        </div>
+                      </div>
+                    );
+                  }
+                  
+                  return null;
+                })()}
 
                 {/* Actions */}
                 <div className="mt-6 pt-6 border-t border-gray-200 space-y-2">
