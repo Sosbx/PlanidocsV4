@@ -403,25 +403,71 @@ export const exportPlanningToPDF = ({
   const prefix = showAssignmentsOnly ? 'Planning' : 'Planning_avec_desiderata';
   const fileName = `${prefix}_${userName.toUpperCase()}_${format(startDate, 'yyyy-MM-dd')}.pdf`;
   
-  // Solution pour forcer le téléchargement sur tous les appareils, y compris iOS et mobile
-  const pdfOutput = doc.output('blob');
-  const blobUrl = URL.createObjectURL(new Blob([pdfOutput], { type: 'application/pdf' }));
-  
-  // Créer un élément de lien temporaire pour le téléchargement
-  const downloadLink = document.createElement('a');
-  downloadLink.href = blobUrl;
-  downloadLink.download = fileName; // Spécifie que le fichier doit être téléchargé
-  downloadLink.style.display = 'none';
-  document.body.appendChild(downloadLink);
-  
-  // Déclencher le téléchargement
-  downloadLink.click();
-  
-  // Nettoyer
-  setTimeout(() => {
-    document.body.removeChild(downloadLink);
-    URL.revokeObjectURL(blobUrl);
-  }, 100);
+  try {
+    console.log('Début de la génération du PDF...');
+    
+    // Générer le PDF avec différentes méthodes selon le navigateur
+    let pdfOutput;
+    try {
+      // Essayer d'abord la méthode blob qui fonctionne sur la plupart des navigateurs modernes
+      pdfOutput = doc.output('blob');
+      console.log('PDF généré avec la méthode blob');
+    } catch (e) {
+      console.error('Erreur avec la méthode blob, tentative avec arraybuffer:', e);
+      // Fallback pour les navigateurs qui ne supportent pas bien les blobs
+      const rawOutput = doc.output();
+      pdfOutput = new Blob([rawOutput], { type: 'application/pdf' });
+    }
+    
+    // Créer l'URL pour le téléchargement
+    const blobUrl = URL.createObjectURL(pdfOutput);
+    console.log('URL Blob créée:', blobUrl.substring(0, 30) + '...');
+    
+    // Créer un élément de lien temporaire pour le téléchargement
+    const downloadLink = document.createElement('a');
+    downloadLink.href = blobUrl;
+    downloadLink.download = fileName; // Spécifie que le fichier doit être téléchargé
+    downloadLink.target = '_blank'; // Ouvre dans un nouvel onglet si le téléchargement direct échoue
+    downloadLink.style.display = 'none';
+    document.body.appendChild(downloadLink);
+    
+    console.log('Lien de téléchargement créé, tentative de clic...');
+    
+    // Déclencher le téléchargement
+    downloadLink.click();
+    
+    // Nettoyer après un délai plus long pour s'assurer que le téléchargement a commencé
+    setTimeout(() => {
+      if (document.body.contains(downloadLink)) {
+        document.body.removeChild(downloadLink);
+      }
+      URL.revokeObjectURL(blobUrl);
+      console.log('Nettoyage effectué');
+    }, 2000); // Augmenté à 2 secondes pour donner plus de temps au navigateur
+    
+    console.log('Téléchargement PDF initié avec succès');
+  } catch (error) {
+    console.error('Erreur lors du téléchargement du PDF:', error);
+    
+    // Tentative de récupération en cas d'échec
+    try {
+      console.log('Tentative de récupération avec une méthode alternative...');
+      // Méthode alternative pour les cas où la première approche échoue
+      const dataUri = doc.output('datauristring');
+      const newWindow = window.open();
+      if (newWindow) {
+        newWindow.document.write(`<iframe width='100%' height='100%' src='${dataUri}'></iframe>`);
+        newWindow.document.title = fileName;
+        console.log('PDF ouvert dans un nouvel onglet');
+      } else {
+        console.error('Impossible d\'ouvrir une nouvelle fenêtre, blocage de popup?');
+        alert('Le téléchargement a échoué. Veuillez vérifier les paramètres de votre navigateur concernant les popups.');
+      }
+    } catch (fallbackError) {
+      console.error('Échec de la méthode de récupération:', fallbackError);
+      alert('Impossible de générer le PDF. Veuillez réessayer ou contacter le support.');
+    }
+  }
 };
 
 export const exportAllPlanningsToPDFZip = async (
