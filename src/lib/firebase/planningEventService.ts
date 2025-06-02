@@ -1,4 +1,4 @@
-import { doc, getDoc, setDoc, collection, getDocs, query, where, runTransaction } from 'firebase/firestore';
+import { doc, getDoc, collection, getDocs, query, where, runTransaction } from 'firebase/firestore';
 import { db } from './config';
 import { getGeneratedPlanning, saveGeneratedPlanning } from './planning';
 
@@ -11,7 +11,7 @@ import { getGeneratedPlanning, saveGeneratedPlanning } from './planning';
  */
 export const notifyExchangeSystem = async (
   userId: string,
-  periodId: string,
+  _periodId: string,
   assignments: Record<string, any>,
   action: 'add' | 'update' | 'delete'
 ): Promise<void> => {
@@ -29,10 +29,17 @@ export const notifyExchangeSystem = async (
     );
     
     const exchangesSnapshot = await getDocs(exchangesQuery);
-    const existingExchanges = exchangesSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    const existingExchanges = exchangesSnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        date: data.date,
+        period: data.period,
+        shiftType: data.shiftType,
+        timeSlot: data.timeSlot,
+        ...data
+      };
+    });
     
     await runTransaction(db, async (transaction) => {
       // Pour chaque assignation dans le planning
@@ -55,7 +62,7 @@ export const notifyExchangeSystem = async (
           }
         } else if (action === 'add' || action === 'update') {
           // Si la garde est ajoutée/modifiée
-          if (matchingExchange) {
+          if (matchingExchange && 'shiftType' in matchingExchange && 'timeSlot' in matchingExchange) {
             // Mettre à jour l'échange existant si nécessaire
             if (matchingExchange.shiftType !== assignment.shiftType || 
                 matchingExchange.timeSlot !== assignment.timeSlot) {

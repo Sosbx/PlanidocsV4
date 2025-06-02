@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../features/auth/hooks';
 import { useNotifications } from '../context/notifications/NotificationContext';
+import NotificationBell from './common/NotificationBell';
 import { useSuperAdmin } from '../context/superAdmin/SuperAdminContext';
 import { useFeatureFlags } from '../context/featureFlags/FeatureFlagsContext';
 import { FEATURES } from '../types/featureFlags';
@@ -203,25 +204,11 @@ const ModernNavbar: React.FC = () => {
             {/* Right Actions */}
             <div className="flex items-center gap-2">
               {/* Notifications */}
-              <button className="
-                relative flex items-center justify-center
-                w-9 h-9 rounded-full
-                text-white hover:bg-white/10
-                transition-all duration-200
-              ">
-                <Bell className="h-4 w-4" />
-                {unreadCount > 0 && (
-                  <span className="
-                    absolute -top-0.5 -right-0.5
-                    h-5 w-5 rounded-full
-                    bg-red-500 text-white text-xs
-                    flex items-center justify-center
-                    animate-pulse shadow-md
-                  ">
-                    {unreadCount}
-                  </span>
-                )}
-              </button>
+              <NotificationBell
+                notifications={notifications}
+                onMarkAsRead={markAsRead}
+                onMarkAllAsRead={markAllAsRead}
+              />
 
               {/* Profile Menu - Desktop only */}
               <div className="hidden md:block relative" ref={profileRef}>

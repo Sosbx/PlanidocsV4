@@ -160,7 +160,7 @@ export const verifyPlanningAssignment = async (
     // Parcourir toutes les périodes pour trouver l'assignment
     for (const periodId in planning.periods) {
       const periodData = planning.periods[periodId];
-      if (periodData.assignments && periodData.assignments[assignmentKey]) {
+      if (periodData && periodData.assignments && periodData.assignments[assignmentKey]) {
         const assignment = periodData.assignments[assignmentKey];
         
         if (assignment && options.expectedShiftType && options.expectedTimeSlot && !options.ignoreShiftTypeCheck) {

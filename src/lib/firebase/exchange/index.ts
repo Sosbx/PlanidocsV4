@@ -66,3 +66,14 @@ export {
 // Ces fonctions sont importées depuis un autre module
 import { createReplacement, deleteReplacement } from '../replacements';
 export { createReplacement, deleteReplacement };
+
+// Réexporter les fonctions optimisées
+export {
+  getOptimizedExchanges,
+  subscribeToOptimizedExchanges,
+  batchExchangeOperations,
+  getOptimizedHistory,
+  batchCheckConflicts,
+  startCacheCleanup,
+  invalidateCache
+} from './optimized';

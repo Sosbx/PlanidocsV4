@@ -4,6 +4,7 @@ import { useAuth } from '../features/auth/hooks';
 import { useFeatureFlags } from '../context/featureFlags/FeatureFlagsContext';
 import { useSuperAdmin } from '../context/superAdmin/SuperAdminContext';
 import { FEATURES } from '../types/featureFlags';
+import { getGreetingByTime } from '../utils/timeUtils';
 import {
   Calendar,
   Settings,
@@ -230,7 +231,7 @@ const DashboardPage: React.FC = () => {
         <div className="flex flex-col gap-4 mb-12">
           <div>
             <h1 className="text-2xl sm:text-4xl font-bold text-gray-900">
-              Bienvenue, {user.firstName} <span className="text-yellow-500">👋</span>
+              {getGreetingByTime()}, {user.firstName} <span className="text-yellow-500">👋</span>
             </h1>
             <p className="mt-2 sm:mt-3 text-gray-600 text-base sm:text-lg font-light">
               Que souhaitez-vous faire aujourd'hui ?

@@ -67,9 +67,9 @@ export const useSelections = ({
             return prev;
           }
           
-          // Vérifier Nouvel An (31 décembre)
-          if (userBlocks.blockNewYear && dayMonth === '31-12') {
-            onLimitExceeded('Vous ne pouvez pas sélectionner le jour de Nouvel An');
+          // Vérifier Nouvel An (31 décembre et 1er janvier)
+          if (userBlocks.blockNewYear && (dayMonth === '31-12' || dayMonth === '1-1')) {
+            onLimitExceeded('Vous ne pouvez pas sélectionner les jours de Nouvel An');
             return prev;
           }
         }

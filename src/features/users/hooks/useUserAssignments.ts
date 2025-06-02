@@ -41,7 +41,7 @@ export const useUserAssignments = (exchanges: ShiftExchange[]) => {
           if (data.periods) {
             // Parcourir toutes les périodes
             Object.values(data.periods).forEach((periodData: any) => {
-              if (periodData.assignments) {
+              if (periodData && periodData.assignments) {
                 // Fusionner les assignments de cette période
                 mergedAssignments = { ...mergedAssignments, ...periodData.assignments };
               }

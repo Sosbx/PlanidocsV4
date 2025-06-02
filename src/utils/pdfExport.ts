@@ -402,7 +402,26 @@ export const exportPlanningToPDF = ({
   // Génération du fichier
   const prefix = showAssignmentsOnly ? 'Planning' : 'Planning_avec_desiderata';
   const fileName = `${prefix}_${userName.toUpperCase()}_${format(startDate, 'yyyy-MM-dd')}.pdf`;
-  doc.save(fileName);
+  
+  // Solution pour forcer le téléchargement sur tous les appareils, y compris iOS et mobile
+  const pdfOutput = doc.output('blob');
+  const blobUrl = URL.createObjectURL(new Blob([pdfOutput], { type: 'application/pdf' }));
+  
+  // Créer un élément de lien temporaire pour le téléchargement
+  const downloadLink = document.createElement('a');
+  downloadLink.href = blobUrl;
+  downloadLink.download = fileName; // Spécifie que le fichier doit être téléchargé
+  downloadLink.style.display = 'none';
+  document.body.appendChild(downloadLink);
+  
+  // Déclencher le téléchargement
+  downloadLink.click();
+  
+  // Nettoyer
+  setTimeout(() => {
+    document.body.removeChild(downloadLink);
+    URL.revokeObjectURL(blobUrl);
+  }, 100);
 };
 
 export const exportAllPlanningsToPDFZip = async (

@@ -7,8 +7,7 @@ export interface Notification {
   userId: string;
   title: string;
   message: string;
-  type: 'exchange' | 'give' | 'interested' | 'accepted' | 'rejected' | 'completed' | 'system' | 
-         'replacement_proposed' | 'replacement_accepted' | 'replacement_rejected' | 'replacement_updated' | 'replacement_cancelled';
+  type: string; // Accepter tous les types de notifications
   read: boolean;
   createdAt: string;
   relatedId?: string; // ID de l'échange ou de la garde concernée
@@ -86,7 +85,7 @@ const NotificationBell: React.FC<NotificationBellProps> = ({
   };
 
   // Obtenir la couleur de fond en fonction du type de notification
-  const getNotificationBgColor = (type: Notification['type'], read: boolean) => {
+  const getNotificationBgColor = (type: string, read: boolean) => {
     const baseClass = read ? 'hover:bg-gray-50' : 'bg-blue-50 hover:bg-blue-100';
     
     switch (type) {
@@ -124,7 +123,7 @@ const NotificationBell: React.FC<NotificationBellProps> = ({
   };
 
   // Obtenir l'icône en fonction du type de notification
-  const getNotificationIcon = (type: Notification['type']) => {
+  const getNotificationIcon = (type: string) => {
     switch (type) {
       case 'exchange':
       case 'exchange_proposed':
@@ -163,18 +162,13 @@ const NotificationBell: React.FC<NotificationBellProps> = ({
     <div className={`relative ${className}`} ref={menuRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="p-2 rounded-full text-blue-50 hover:bg-blue-500/50 hover:text-white transition-all duration-200 relative"
+        className="relative flex items-center justify-center w-9 h-9 rounded-full text-white hover:bg-white/10 transition-all duration-200"
         title="Notifications"
       >
-        <Bell className="h-5 w-5" />
+        <Bell className="h-4 w-4" />
         {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1">
-            <Badge 
-              type="interested" 
-              count={unreadCount} 
-              size="sm" 
-              className="ring-2 ring-blue-600"
-            />
+          <span className="absolute -top-0.5 -right-0.5 h-5 w-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center animate-pulse shadow-md">
+            {unreadCount}
           </span>
         )}
       </button>

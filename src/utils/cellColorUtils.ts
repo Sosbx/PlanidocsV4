@@ -62,7 +62,7 @@ export function getCellBackgroundClass(context: CellColorContext): string {
   }
   
   // Autres phases (submission/distribution): appliquer les couleurs en fonction des types d'opérations
-  if (!isReceivedShift) {
+  if (!isReceivedShift && bagPhase !== 'completed') {
     // Calculer la classe de fond basée sur les opérations
     const operationBgClass = getOperationBackgroundClass(
       bagPhase !== 'completed',

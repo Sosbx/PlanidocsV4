@@ -842,7 +842,7 @@ const AdminPage: React.FC = () => {
               <span className="text-sm font-medium">Noël: 24-25 décembre</span>
             </div>
             <div className="text-center">
-              <span className="text-sm font-medium">Nouvel An: 31 décembre</span>
+              <span className="text-sm font-medium">Nouvel An: 31 déc - 1er jan</span>
             </div>
           </div>
           

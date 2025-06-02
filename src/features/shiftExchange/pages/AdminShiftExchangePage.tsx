@@ -1,19 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { Settings, History, BarChart as ChartBar } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { Settings, History, BarChart as ChartBar, BarChart3 } from 'lucide-react';
 import ConfirmationModal from '../../../components/ConfirmationModal';
-import { useAuth } from '../../../features/auth/hooks';
-import { getExchangeHistory, revertToExchange } from '../../../lib/firebase/exchange';
-import { useUsers } from '../../../features/auth/hooks';
 import Toast from '../../../components/Toast';
-import { useBagPhase } from '../../../context/shiftExchange';
+import { useShiftExchangeCore } from '../hooks';
+import { revertToExchange } from '../../../lib/firebase/exchange';
 import type { ExchangeHistory } from '../types';
-// Import depuis le fichier index.ts
 import { ValidatePlanningButton } from '../../../features/planning/components/admin';
 import { useUserAssignments } from '../../../features/users/hooks';
 import '../../../styles/BadgeStyles.css';
-
-// Import des hooks migrés
-import { useExchangeManagement, useConflictCheck } from '../hooks';
 
 // Import des composants migrés
 import { 
@@ -22,91 +16,119 @@ import {
   BagStatsViz
 } from '../components';
 
-// Import des composants d'administration migrés
+// Import des composants d'administration
 import {
   ExchangeList,
-  ExchangeHistoryList
+  ExchangeHistoryList,
+  ParticipationPanel
 } from '../components/admin';
 
+/**
+ * Page d'administration de la bourse aux gardes - Version optimisée
+ * Utilise le hook centralisé pour éviter les duplications
+ */
 const AdminShiftExchangePage: React.FC = () => {
-  const { user } = useAuth();
-  const { users } = useUsers();
-  const { config: bagPhaseConfig } = useBagPhase();
-  const [showHistory, setShowHistory] = useState(false);
-  const [exchangeHistory, setExchangeHistory] = useState<ExchangeHistory[]>([]);
-  const [loadingHistory, setLoadingHistory] = useState(false);
-  const [showPhaseConfig, setShowPhaseConfig] = useState(false);
-  const [showStats, setShowStats] = useState(false);
-  const [toast, setToast] = useState({ visible: false, message: '', type: 'success' as 'success' | 'error' | 'info' });
-  // Variables d'état pour la confirmation d'annulation d'échange
-  const [showRevertConfirmation, setShowRevertConfirmation] = useState(false);
-  const [exchangeToRevert, setExchangeToRevert] = useState<string | null>(null);
-
-  // Utiliser les hooks personnalisés
+  // Hook principal optimisé avec historique activé
   const {
+    user,
+    users,
+    bagPhaseConfig,
     exchanges,
     history,
     loading,
-    handleValidateExchange,
-    handleRejectExchange,
-    handleRemoveUser,
-    loadExchanges,
-    loadHistory,
+    conflictStates,
+    conflictDetails,
+    validateExchange,
+    rejectExchange,
+    removeUser,
+    checkForConflict,
     refreshData
-  } = useExchangeManagement(user);
+  } = useShiftExchangeCore({
+    enableHistory: true,
+    enableConflictCheck: true,
+    limitResults: 200 // Plus de résultats pour l'admin
+  });
 
-  const { checkUserConflict } = useConflictCheck(exchanges);
-  const [conflictStates, setConflictStates] = useState<Record<string, Record<string, boolean>>>({});
+  // États locaux pour l'interface admin
+  const [showHistory, setShowHistory] = useState(false);
+  const [showPhaseConfig, setShowPhaseConfig] = useState(false);
+  const [showStats, setShowStats] = useState(false);
+  const [showParticipationPanel, setShowParticipationPanel] = useState(false);
+  const [selectedForReplacements, setSelectedForReplacements] = useState<Set<string>>(new Set());
+  const [toast, setToast] = useState({ 
+    visible: false, 
+    message: '', 
+    type: 'success' as 'success' | 'error' | 'info' 
+  });
+  
+  // États pour la confirmation d'annulation
+  const [showRevertConfirmation, setShowRevertConfirmation] = useState(false);
+  const [exchangeToRevert, setExchangeToRevert] = useState<string | null>(null);
+  
+  // États pour les conflits détaillés par utilisateur
   const [conflictShiftTypes, setConflictShiftTypes] = useState<Record<string, Record<string, string>>>({});
   
-  // Effet pour vérifier manuellement les conflits pour chaque utilisateur intéressé
+  // Hook pour les assignations utilisateur
+  const { userAssignments } = useUserAssignments(exchanges);
+
+  // Vérification optimisée des conflits pour chaque utilisateur intéressé
   useEffect(() => {
-    const checkConflicts = async () => {
+    const checkAllConflicts = async () => {
       if (!exchanges.length) return;
       
-      const newConflictStates: Record<string, Record<string, boolean>> = {};
       const newConflictShiftTypes: Record<string, Record<string, string>> = {};
       
-      for (const exchange of exchanges) {
-        if (!exchange.interestedUsers?.length) continue;
-        
-        newConflictStates[exchange.id] = {};
-        newConflictShiftTypes[exchange.id] = {};
-        
-        for (const userId of exchange.interestedUsers) {
-          // Utiliser un cast pour résoudre le problème de type
-          const result = await checkUserConflict(userId, exchange as any);
-          newConflictStates[exchange.id][userId] = result.hasConflict;
+      // Utiliser Promise.all pour paralléliser les vérifications
+      await Promise.all(
+        exchanges.map(async (exchange) => {
+          if (!exchange.interestedUsers?.length) return;
           
-          if (result.hasConflict && result.shiftType) {
-            newConflictShiftTypes[exchange.id][userId] = result.shiftType;
-          }
+          newConflictShiftTypes[exchange.id] = {};
           
-          console.log(`Conflit vérifié pour ${userId} sur ${exchange.date}-${exchange.period}:`, result);
-        }
-      }
+          // Vérifier les conflits pour tous les utilisateurs intéressés en parallèle
+          await Promise.all(
+            exchange.interestedUsers.map(async (userId) => {
+              const result = await checkForConflict(exchange, userId);
+              
+              if (result.hasConflict && result.shiftType) {
+                newConflictShiftTypes[exchange.id][userId] = result.shiftType;
+              }
+            })
+          );
+        })
+      );
       
-      setConflictStates(newConflictStates);
       setConflictShiftTypes(newConflictShiftTypes);
     };
     
-    checkConflicts();
-  }, [exchanges, checkUserConflict]);
-  const { userAssignments } = useUserAssignments(exchanges);
+    checkAllConflicts();
+  }, [exchanges, checkForConflict]);
 
-  // Utiliser directement l'historique du hook qui utilise un abonnement temps réel
-  useEffect(() => {
-    if (showHistory) {
-      setExchangeHistory(history);
-      setLoadingHistory(false);
-    }
-  }, [showHistory, history]);
+  // Calcul mémorisé des conflits par échange et utilisateur
+  const adminConflictStates = useMemo(() => {
+    const states: Record<string, Record<string, boolean>> = {};
+    
+    exchanges.forEach(exchange => {
+      if (!exchange.interestedUsers?.length) return;
+      
+      states[exchange.id] = {};
+      exchange.interestedUsers.forEach(userId => {
+        // Vérifier si un conflit existe pour cet utilisateur
+        const hasConflict = Boolean(conflictShiftTypes[exchange.id]?.[userId]);
+        states[exchange.id][userId] = hasConflict;
+      });
+    });
+    
+    return states;
+  }, [exchanges, conflictShiftTypes]);
 
-  // L'historique est maintenant géré par le hook avec un abonnement temps réel
-  // Pas besoin de chargement supplémentaire
-
-  const handleValidateExchangeClick = async (exchangeId: string, interestedUserId: string, hasConflict: boolean) => {
-    if (!user) return;
+  // Gestion optimisée de la validation d'échange
+  const handleValidateExchangeClick = useCallback(async (
+    exchangeId: string, 
+    interestedUserId: string, 
+    hasConflict: boolean
+  ) => {
+    if (!user?.roles.isAdmin) return;
     
     if (bagPhaseConfig.phase !== 'distribution') {
       setToast({
@@ -118,21 +140,7 @@ const AdminShiftExchangePage: React.FC = () => {
     }
     
     try {
-      // Utiliser un try-catch pour capturer l'erreur spécifique
-      await handleValidateExchange(exchangeId, interestedUserId, hasConflict);
-      
-      // L'historique est déjà rechargé par handleValidateExchange via useExchangeManagement
-      
-      // Recharger l'historique si on est sur cette vue
-      if (showHistory) {
-        try {
-          const updatedHistory = await getExchangeHistory();
-          setExchangeHistory(updatedHistory);
-        } catch (historyError) {
-          console.warn('Failed to refresh history view:', historyError);
-          // Continue même en cas d'erreur car ce n'est pas critique
-        }
-      }
+      await validateExchange(exchangeId, interestedUserId, hasConflict);
       
       setToast({
         visible: true,
@@ -147,9 +155,10 @@ const AdminShiftExchangePage: React.FC = () => {
         type: 'error'
       });
     }
-  };
+  }, [user, bagPhaseConfig.phase, validateExchange]);
 
-  const handleRejectExchangeClick = async (exchangeId: string) => {
+  // Gestion du rejet d'échange
+  const handleRejectExchangeClick = useCallback(async (exchangeId: string) => {
     if (bagPhaseConfig.phase !== 'distribution') {
       setToast({
         visible: true,
@@ -160,9 +169,7 @@ const AdminShiftExchangePage: React.FC = () => {
     }
 
     try {
-      await handleRejectExchange(exchangeId);
-      
-      // L'historique est déjà rechargé par handleRejectExchange
+      await rejectExchange(exchangeId);
       
       setToast({
         visible: true,
@@ -177,9 +184,10 @@ const AdminShiftExchangePage: React.FC = () => {
         type: 'error'
       });
     }
-  };
+  }, [bagPhaseConfig.phase, rejectExchange]);
 
-  const handleRemoveUserClick = async (exchangeId: string, userId: string) => {
+  // Gestion du retrait d'utilisateur
+  const handleRemoveUserClick = useCallback(async (exchangeId: string, userId: string) => {
     if (bagPhaseConfig.phase !== 'distribution') {
       setToast({
         visible: true,
@@ -190,9 +198,7 @@ const AdminShiftExchangePage: React.FC = () => {
     }
 
     try {
-      await handleRemoveUser(exchangeId, userId);
-      
-      // L'historique est déjà rechargé par handleRemoveUser
+      await removeUser(exchangeId, userId);
       
       setToast({
         visible: true,
@@ -207,19 +213,18 @@ const AdminShiftExchangePage: React.FC = () => {
         type: 'error'
       });
     }
-  };
+  }, [bagPhaseConfig.phase, removeUser]);
 
-  const handleRevertExchange = async (historyId: string): Promise<void> => {
+  // Gestion de l'annulation d'échange
+  const handleRevertExchange = useCallback(async (historyId: string) => {
     setExchangeToRevert(historyId);
     setShowRevertConfirmation(true);
-  };
+  }, []);
 
-  const confirmRevertExchange = async () => {
+  const confirmRevertExchange = useCallback(async () => {
     if (!exchangeToRevert) return;
 
-    setToast({ visible: false, message: '', type: 'success' });
-
-    const exchange = exchangeHistory.find(h => h.id === exchangeToRevert);
+    const exchange = history.find(h => h.id === exchangeToRevert);
     if (!exchange) {
       setToast({
         visible: true,
@@ -232,89 +237,55 @@ const AdminShiftExchangePage: React.FC = () => {
     }
 
     try {
-      // Récupérer les noms des utilisateurs avant l'annulation
       const originalUser = users.find(u => u.id === exchange.originalUserId);
       const newUser = users.find(u => u.id === exchange.newUserId);
       const isPermutation = exchange.isPermutation;
       
-      console.log('Début de l\'annulation de l\'échange:', {
-        exchangeId: exchangeToRevert,
-        originalUser: originalUser?.lastName,
-        newUser: newUser?.lastName,
-        isPermutation
-      });
-      
-      // Effectuer l'annulation
       await revertToExchange(exchangeToRevert);
       
       const userNames = `${originalUser?.lastName || 'Inconnu'} ${isPermutation ? '↔' : '→'} ${newUser?.lastName || 'Inconnu'}`;
       const exchangeType = isPermutation ? 'Permutation' : 'Échange';
       
-      console.log('Annulation réussie, mise à jour des données...');
-      
-      // Attendre un court délai pour s'assurer que Firestore a eu le temps de propager les changements
+      // Attendre un peu pour la propagation
       await new Promise(resolve => setTimeout(resolve, 500));
       
-      try {
-        // Utiliser la fonction refreshData pour recharger toutes les données
-        // Cette fonction a été améliorée pour contourner le cache et forcer le rechargement
-        console.log('Rechargement forcé des données...');
-        const refreshSuccess = await refreshData();
-        console.log('Rechargement des données terminé:', refreshSuccess);
-        
-        // Recharger aussi l'historique spécifiquement pour la vue actuelle
-        if (showHistory) {
-          console.log('Rechargement spécifique de l\'historique pour la vue actuelle...');
-          const updatedHistory = await getExchangeHistory();
-          setExchangeHistory(updatedHistory);
-          console.log('Historique rechargé:', updatedHistory.length, 'entrées');
-        }
-        
-        setToast({
-          visible: true,
-          message: `${exchangeType} annulé(e) avec succès (${userNames}). ${isPermutation ? 'Les gardes ont été remises' : 'La garde a été remise'} dans leur état initial.`,
-          type: 'success'
-        });
-      } catch (refreshError) {
-        console.error('Error refreshing data after revert:', refreshError);
-        
-        // Même en cas d'erreur de rafraîchissement, afficher un message de succès
-        // car l'annulation a réussi, c'est juste le rafraîchissement qui a échoué
-        setToast({
-          visible: true,
-          message: `${exchangeType} annulé(e) avec succès (${userNames}), mais le rafraîchissement des données a échoué. Veuillez rafraîchir la page manuellement.`,
-          type: 'success'
-        });
-      }
+      // Rafraîchir les données
+      await refreshData();
+      
+      setToast({
+        visible: true,
+        message: `${exchangeType} annulé(e) avec succès (${userNames})`,
+        type: 'success'
+      });
     } catch (error) {
       console.error('Error reverting exchange:', error);
       const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
       setToast({
         visible: true,
-        message: `Erreur lors de l'annulation de l'échange : ${errorMessage}. Vérifiez que les plannings des deux médecins existent toujours.`,
+        message: `Erreur lors de l'annulation : ${errorMessage}`,
         type: 'error'
       });
     } finally {
       setShowRevertConfirmation(false);
       setExchangeToRevert(null);
     }
-  };
+  }, [exchangeToRevert, history, users, refreshData]);
 
-  // Calculer ou recalculer les statistiques à chaque fois
-  const renderStats = () => {
+  // Rendu optimisé des statistiques
+  const renderStats = useMemo(() => {
+    if (!showStats) return null;
+    
     return (
-      <>
-        <BagStatsViz
-          users={users}
-          exchanges={exchanges as any}
-          history={history as any}
-          className="mb-6"
-          key={`stats-${Date.now()}`} // Forcer un remontage du composant à chaque affichage
-        />
-      </>
+      <BagStatsViz
+        users={users}
+        exchanges={exchanges as any}
+        history={history as any}
+        className="mb-6"
+      />
     );
-  };
+  }, [showStats, users, exchanges, history]);
 
+  // Vérification des droits admin
   if (!user?.roles.isAdmin) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-8">
@@ -328,44 +299,12 @@ const AdminShiftExchangePage: React.FC = () => {
     );
   }
 
-  // Affichage pendant le chargement initial uniquement
+  // État de chargement initial
   if (loading && exchanges.length === 0) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-2xl font-bold">Gestion des Échanges de Gardes</h1>
-          <div className="flex gap-2">
-            <ValidatePlanningButton 
-              onSuccess={(message) => setToast({ visible: true, message, type: 'success' })}
-              onError={(message) => setToast({ visible: true, message, type: 'error' })}
-            />
-            <button
-              onClick={() => setShowPhaseConfig(true)}
-              className="flex items-center px-2 sm:px-4 py-2 border border-indigo-300 text-sm font-medium rounded-md text-indigo-700 bg-white hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-            >
-              <Settings className="h-4 w-4" />
-              <span className="hidden sm:inline ml-2">Configuration</span>
-            </button>
-            <button
-              onClick={() => setShowStats(!showStats)}
-              className="flex items-center px-2 sm:px-4 py-2 border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 text-sm font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            >
-              <ChartBar className="h-4 w-4" />
-              <span className="hidden sm:inline ml-2">Statistiques</span>
-            </button>
-            <button
-              onClick={() => setShowHistory(!showHistory)}
-              className="flex items-center px-2 sm:px-4 py-2 border rounded-md text-sm font-medium transition-colors bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
-            >
-              <History className="h-4 w-4" />
-              <span className="hidden sm:inline ml-2">Historique</span>
-            </button>
-          </div>
-        </div>
-
-        <BagPhaseIndicator />
-        
-        <div className="animate-pulse mt-6">
+        <div className="animate-pulse">
+          <div className="h-8 bg-gray-200 rounded w-1/3 mb-8"></div>
           <div className="space-y-4">
             {[...Array(5)].map((_, i) => (
               <div key={i} className="h-20 bg-gray-100 rounded"></div>
@@ -388,58 +327,76 @@ const AdminShiftExchangePage: React.FC = () => {
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-2xl font-bold">Gestion des Échanges de Gardes</h1>
         <div className="flex gap-2">
-          <div className="flex gap-2">
-            <ValidatePlanningButton 
-              onSuccess={(message) => setToast({ visible: true, message, type: 'success' })}
-              onError={(message) => setToast({ visible: true, message, type: 'error' })}
-            />
-            <button
-              onClick={() => setShowPhaseConfig(true)}
-              className="flex items-center px-2 sm:px-4 py-2 border border-indigo-300 text-sm font-medium rounded-md text-indigo-700 bg-white hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-              title="Configuration"
-            >
-              <Settings className="h-4 w-4" />
-              <span className="hidden sm:inline ml-2">Configuration</span>
-            </button>
-            <button
-              onClick={() => setShowStats(!showStats)}
-              className={`flex items-center px-2 sm:px-4 py-2 border ${
-                showStats
-                  ? 'border-blue-500 bg-blue-50 text-blue-700'
-                  : 'border-gray-300 text-gray-700 bg-white hover:bg-gray-50'
-              } text-sm font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500`}
-              title="Statistiques"
-            >
-              <ChartBar className="h-4 w-4" />
-              <span className="hidden sm:inline ml-2">Statistiques</span>
-            </button>
-            <button
-              onClick={() => {
-                setShowHistory(!showHistory);
-                // Recharger les échanges quand on revient à la liste principale
-                if (showHistory) {
-                  loadExchanges();
-                  loadHistory(); // Aussi recharger l'historique pour les statistiques
-                }
-              }}
-              className={`flex items-center px-2 sm:px-4 py-2 border rounded-md text-sm font-medium transition-colors ${
-                showHistory
-                  ? 'bg-indigo-100 text-indigo-700 border-indigo-300 hover:bg-indigo-200'
-                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-              }`}
-              title={showHistory ? "Voir les échanges en cours" : "Voir l'historique"}
-            >
-              <History className="h-4 w-4" />
-              <span className="hidden sm:inline ml-2">
-                {showHistory ? 'Échanges en cours' : 'Historique'}
-              </span>
-            </button>
-          </div>
+          <ValidatePlanningButton 
+            onSuccess={(message) => setToast({ visible: true, message, type: 'success' })}
+            onError={(message) => setToast({ visible: true, message, type: 'error' })}
+          />
+          <button
+            onClick={() => setShowPhaseConfig(true)}
+            className={`flex items-center px-2 sm:px-4 py-2 border text-sm font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors ${
+              bagPhaseConfig.phase === 'closed' 
+                ? 'border-gray-300 text-gray-700 bg-gray-50 hover:bg-gray-100 focus:ring-gray-500'
+                : bagPhaseConfig.phase === 'submission' 
+                ? 'border-blue-300 text-blue-700 bg-blue-50 hover:bg-blue-100 focus:ring-blue-500'
+                : bagPhaseConfig.phase === 'matching' 
+                ? 'border-purple-300 text-purple-700 bg-purple-50 hover:bg-purple-100 focus:ring-purple-500'
+                : bagPhaseConfig.phase === 'distribution' 
+                ? 'border-orange-300 text-orange-700 bg-orange-50 hover:bg-orange-100 focus:ring-orange-500'
+                : 'border-green-300 text-green-700 bg-green-50 hover:bg-green-100 focus:ring-green-500'
+            }`}
+            title="Cliquer pour configurer les phases"
+          >
+            <Settings className="h-4 w-4" />
+            <span className="hidden sm:inline ml-2">
+              Phase: {
+                bagPhaseConfig.phase === 'closed' ? 'Fermée' :
+                bagPhaseConfig.phase === 'submission' ? 'Position' :
+                bagPhaseConfig.phase === 'matching' ? 'Appariement' :
+                bagPhaseConfig.phase === 'distribution' ? 'Distribution' :
+                'Terminée'
+              }
+            </span>
+            <span className="sm:hidden ml-1 text-xs font-bold">
+              {
+                bagPhaseConfig.phase === 'closed' ? 'F' :
+                bagPhaseConfig.phase === 'submission' ? 'P' :
+                bagPhaseConfig.phase === 'matching' ? 'A' :
+                bagPhaseConfig.phase === 'distribution' ? 'D' :
+                'T'
+              }
+            </span>
+          </button>
+          <button
+            onClick={() => setShowStats(!showStats)}
+            className={`flex items-center px-2 sm:px-4 py-2 border ${
+              showStats
+                ? 'border-blue-500 bg-blue-50 text-blue-700'
+                : 'border-gray-300 text-gray-700 bg-white hover:bg-gray-50'
+            } text-sm font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500`}
+            title="Statistiques"
+          >
+            <ChartBar className="h-4 w-4" />
+            <span className="hidden sm:inline ml-2">Statistiques</span>
+          </button>
+          <button
+            onClick={() => setShowHistory(!showHistory)}
+            className={`flex items-center px-2 sm:px-4 py-2 border rounded-md text-sm font-medium transition-colors ${
+              showHistory
+                ? 'bg-indigo-100 text-indigo-700 border-indigo-300 hover:bg-indigo-200'
+                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+            }`}
+            title={showHistory ? "Voir les échanges en cours" : "Voir l'historique"}
+          >
+            <History className="h-4 w-4" />
+            <span className="hidden sm:inline ml-2">
+              {showHistory ? 'Échanges en cours' : 'Historique'}
+            </span>
+          </button>
         </div>
       </div>
 
       <BagPhaseIndicator />
-      {showStats && renderStats()}
+      {renderStats}
 
       <BagPhaseConfigModal
         isOpen={showPhaseConfig}
@@ -458,48 +415,63 @@ const AdminShiftExchangePage: React.FC = () => {
         }}
       />
 
-      <div className="bg-white rounded-lg shadow-md overflow-hidden">
+      <div className="bg-white rounded-lg shadow-md overflow-hidden mt-6">
         <div className="overflow-x-auto">
           {showHistory ? (
-            loadingHistory ? (
-              <div className="p-6">
-                <div className="animate-pulse space-y-4">
-                  {[...Array(3)].map((_, i) => (
-                    <div key={i} className="h-16 bg-gray-100 rounded"></div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <ExchangeHistoryList
-                history={exchangeHistory}
-                users={users}
-                bagPhaseConfig={bagPhaseConfig}
-                onRevertExchange={handleRevertExchange}
-                onNotify={(historyId: string) => {
-                  setToast({
-                    visible: true,
-                    message: 'Notification envoyée avec succès',
-                    type: 'success'
-                  });
-                }}
-              />
-            )
+            <ExchangeHistoryList
+              history={history}
+              users={users}
+              bagPhaseConfig={bagPhaseConfig}
+              onRevertExchange={handleRevertExchange}
+              onNotify={(historyId: string) => {
+                setToast({
+                  visible: true,
+                  message: 'Notification envoyée avec succès',
+                  type: 'success'
+                });
+              }}
+            />
           ) : (
             <ExchangeList
               exchanges={exchanges as any}
               users={users}
               history={history as any}
               bagPhaseConfig={bagPhaseConfig}
-              conflictStates={conflictStates}
+              conflictStates={adminConflictStates}
               conflictShiftTypes={conflictShiftTypes}
               userAssignments={userAssignments}
               onValidateExchange={handleValidateExchangeClick}
               onRejectExchange={handleRejectExchangeClick}
               onRemoveUser={handleRemoveUserClick}
+              selectedForReplacements={selectedForReplacements}
+              onSelectedForReplacementsChange={setSelectedForReplacements}
             />
           )}
         </div>
       </div>
+
+      {/* Panneau flottant de participation */}
+      <ParticipationPanel
+        exchanges={exchanges as any}
+        users={users}
+        history={history as any}
+        isOpen={showParticipationPanel}
+        onToggle={() => setShowParticipationPanel(!showParticipationPanel)}
+        onClose={() => setShowParticipationPanel(false)}
+      />
+
+      {/* Bouton flottant pour ouvrir le panneau de participation */}
+      <button
+        onClick={() => setShowParticipationPanel(!showParticipationPanel)}
+        className={`fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full shadow-lg transition-all duration-300 transform hover:scale-110 ${
+          showParticipationPanel
+            ? 'bg-purple-600 hover:bg-purple-700'
+            : 'bg-indigo-600 hover:bg-indigo-700'
+        } text-white flex items-center justify-center`}
+        title="Taux de participation"
+      >
+        <BarChart3 className="h-6 w-6" />
+      </button>
     </div>
   );
 };

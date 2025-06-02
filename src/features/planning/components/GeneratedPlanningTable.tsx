@@ -16,6 +16,8 @@ import { ExchangeModal } from '../../../features/directExchange/components';
 import { useAuth } from '../../../features/auth/hooks';
 import { useDirectExchange } from '../../../features/directExchange/hooks';
 import Toast from '../../../components/common/Toast';
+import { useFeatureFlags } from '../../../context/featureFlags/FeatureFlagsContext';
+import { FEATURES } from '../../../types/featureFlags';
 import { Badge } from '../../../components/common';
 import { OperationType } from '../../../types/exchange';
 import VirtualizedMonthList from '../../../components/VirtualizedMonthList';
@@ -68,6 +70,8 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
   const { config: bagPhaseConfig } = useBagPhase();
   const { isInCurrentPeriod, allPeriods } = usePlanningPeriod();
   const { currentAssociation } = useAssociation();
+  const { featureFlags, isFeatureEnabled } = useFeatureFlags();
+  const isDirectExchangeModalEnabled = isFeatureEnabled(FEATURES.DIRECT_EXCHANGE_MODAL);
   const lastViewModeRef = useRef(viewMode);
   
   // Mise à jour du viewMode
@@ -386,9 +390,22 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
     const isInPeriodWithoutBag = isPeriodWithoutBag(dateObj);
     console.log(`Vérification de la période pour ${formattedDate}: isInPeriodWithoutBag=${isInPeriodWithoutBag}`);
     
+    // Vérifier si le modal d'échange direct est activé
+    const isDirectExchangeModalEnabled = isFeatureEnabled(FEATURES.DIRECT_EXCHANGE_MODAL);
+    
     // Si la garde est dans une période importée sans BAG, toujours utiliser l'échange direct
     if (isInPeriodWithoutBag && !isAdminView) {
       console.log(`Garde du ${formattedDate} dans une période importée sans BAG - utilisation de l'échange direct`);
+      
+      // Vérifier si le modal est activé
+      if (!isDirectExchangeModalEnabled) {
+        setToast({
+          visible: true,
+          message: 'Les échanges directs ne sont pas disponibles actuellement.',
+          type: 'info'
+        });
+        return;
+      }
       
       // Forcer un rafraîchissement des données avant d'ouvrir la modale
       refreshDirectExchanges().then(() => {
@@ -444,6 +461,16 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
     // En Phase 3 (completed) - vérifier si la garde est dans la période courante
     if (bagPhaseConfig.phase === 'completed' && !isAdminView) {
       if (isCurrentPeriodDate) {
+        // Vérifier si le modal est activé
+        if (!isDirectExchangeModalEnabled) {
+          setToast({
+            visible: true,
+            message: 'Les échanges directs ne sont pas disponibles actuellement.',
+            type: 'info'
+          });
+          return;
+        }
+        
         // Forcer un rafraîchissement des données avant d'ouvrir la modale
         refreshDirectExchanges().then(() => {
           // Vérifier si cette garde a déjà des types d'opérations existants
@@ -521,6 +548,16 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
         });
       } else {
         // Pour les dates avant le début de la bourse aux gardes, ouvrir la modale d'échange direct
+        // Vérifier si le modal est activé
+        if (!isDirectExchangeModalEnabled) {
+          setToast({
+            visible: true,
+            message: 'Les échanges directs ne sont pas disponibles actuellement.',
+            type: 'info'
+          });
+          return;
+        }
+        
         refreshDirectExchanges().then(() => {
           // Vérifier si cette garde a déjà des types d'opérations existants
           const existingDirectExchange = Object.values(directExchanges).find(ex => 
@@ -570,7 +607,7 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
         period: period as 'M' | 'AM' | 'S'
       }
     });
-  }, [bagPhaseConfig.phase, isAdminView, isInCurrentPeriod, user, directExchanges, exchanges, replacements, setToast, setSelectedDirectExchangeCell, setSelectedCell, findBagStartDate, isPeriodWithoutBag]);
+  }, [bagPhaseConfig.phase, isAdminView, isInCurrentPeriod, user, directExchanges, exchanges, replacements, setToast, setSelectedDirectExchangeCell, setSelectedCell, findBagStartDate, isPeriodWithoutBag, isFeatureEnabled]);
   
   // Fonction pour gérer la soumission d'un échange direct
   const handleDirectExchangeSubmit = useCallback(async (comment: string, operationTypes: OperationType[]) => {

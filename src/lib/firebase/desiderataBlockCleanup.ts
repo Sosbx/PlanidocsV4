@@ -81,11 +81,12 @@ export async function removeBlockedDatesDesiderata(
             removed.push(`${dateKey} (Noël${period ? ' - ' + period : ''}) - ${collection}`);
           }
 
-          // Vérifier si c'est le Nouvel An bloqué
-          if (newBlocks.blockNewYear && dayMonth === '31-12') {
+          // Vérifier si c'est le Nouvel An bloqué (31 décembre et 1er janvier)
+          if (newBlocks.blockNewYear && (dayMonth === '31-12' || (dayMonth === '1-1' && year === parts[0]))) {
             shouldRemove = true;
             const period = parts[3] || '';
-            removed.push(`${dateKey} (Nouvel An${period ? ' - ' + period : ''}) - ${collection}`);
+            const dateLabel = dayMonth === '31-12' ? '31 déc' : '1er jan';
+            removed.push(`${dateKey} (Nouvel An - ${dateLabel}${period ? ' - ' + period : ''}) - ${collection}`);
           }
 
           // Conserver seulement les sélections non bloquées
@@ -154,8 +155,8 @@ export function isDateBlocked(
     return true;
   }
 
-  // Vérifier Nouvel An (31 décembre)
-  if (blocks.blockNewYear && dayMonth === '31-12') {
+  // Vérifier Nouvel An (31 décembre et 1er janvier)
+  if (blocks.blockNewYear && (dayMonth === '31-12' || dayMonth === '1-1')) {
     return true;
   }
 

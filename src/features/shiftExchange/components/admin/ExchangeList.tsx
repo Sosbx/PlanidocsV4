@@ -26,6 +26,8 @@ interface ExchangeListProps {
   onRejectExchange: (exchangeId: string) => void;
   onRemoveUser: (exchangeId: string, userId: string) => void;
   history: any[]; // Added history prop
+  selectedForReplacements?: Set<string>;
+  onSelectedForReplacementsChange?: (selected: Set<string>) => void;
 }
 
 const periodNames = {
@@ -44,11 +46,16 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
   onValidateExchange,
   onRejectExchange,
   onRemoveUser,
-  history // Added history prop
+  history, // Added history prop
+  selectedForReplacements: externalSelected,
+  onSelectedForReplacementsChange
 }) => {
   const [showRejectConfirmation, setShowRejectConfirmation] = useState(false);
   const [exchangeToReject, setExchangeToReject] = useState<string | null>(null);
   const [proposingToReplacements, setProposingToReplacements] = useState<string | null>(null);
+  const [selectedForReplacements, setSelectedForReplacements] = useState<Set<string>>(
+    externalSelected || new Set()
+  );
 
   const handleRejectClick = (exchangeId: string) => {
     setExchangeToReject(exchangeId);
@@ -60,6 +67,21 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
       onRejectExchange(exchangeToReject);
       setShowRejectConfirmation(false);
       setExchangeToReject(null);
+    }
+  };
+
+  const toggleReplacementSelection = (exchangeId: string) => {
+    const newSelection = new Set(selectedForReplacements);
+    if (newSelection.has(exchangeId)) {
+      newSelection.delete(exchangeId);
+    } else {
+      newSelection.add(exchangeId);
+    }
+    setSelectedForReplacements(newSelection);
+    
+    // Notifier le parent si la fonction callback est fournie
+    if (onSelectedForReplacementsChange) {
+      onSelectedForReplacementsChange(newSelection);
     }
   };
 
@@ -203,6 +225,8 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
                             bagPhaseConfig={bagPhaseConfig}
                             onValidateExchange={onValidateExchange}
                             onRemoveUser={onRemoveUser}
+                            exchanges={exchanges}
+                            history={history}
                           />
                         ))}
                       </div>
@@ -214,28 +238,42 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-right">
                     <div className="flex justify-end gap-2">
-                      <button
-                        onClick={() => handleRejectClick(exchange.id)}
-                        className={`inline-flex items-center px-2.5 py-1.5 border text-xs font-medium rounded ${
-                          bagPhaseConfig.phase !== 'distribution' || isUnavailable
-                            ? 'border-gray-300 text-gray-300 bg-gray-50 cursor-not-allowed'
-                            : 'border-red-300 text-red-700 bg-white hover:bg-red-50'
-                        }`}
-                        disabled={bagPhaseConfig.phase !== 'distribution' || isUnavailable}
-                      >
-                        <X className="h-3 w-3 mr-1" />
-                        Rejeter
-                      </button>
-                      
-                      {isEligibleForReplacement(exchange) && (
-                        <button
-                          onClick={() => handleProposeToReplacements(exchange)}
-                          className="inline-flex items-center px-2.5 py-1.5 border border-blue-300 text-xs font-medium rounded text-blue-700 bg-white hover:bg-blue-50"
-                          disabled={proposingToReplacements === exchange.id}
-                        >
-                          <UserPlus className="h-3 w-3 mr-1" />
-                          {proposingToReplacements === exchange.id ? 'En cours...' : 'Proposer aux remplaçants'}
-                        </button>
+                      {bagPhaseConfig.phase === 'completed' ? (
+                        <label className="flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedForReplacements.has(exchange.id)}
+                            onChange={() => toggleReplacementSelection(exchange.id)}
+                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">Remplaçants</span>
+                        </label>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => handleRejectClick(exchange.id)}
+                            className={`inline-flex items-center px-2.5 py-1.5 border text-xs font-medium rounded ${
+                              bagPhaseConfig.phase !== 'distribution' || isUnavailable
+                                ? 'border-gray-300 text-gray-300 bg-gray-50 cursor-not-allowed'
+                                : 'border-red-300 text-red-700 bg-white hover:bg-red-50'
+                            }`}
+                            disabled={bagPhaseConfig.phase !== 'distribution' || isUnavailable}
+                          >
+                            <X className="h-3 w-3 mr-1" />
+                            Rejeter
+                          </button>
+                          
+                          {isEligibleForReplacement(exchange) && (
+                            <button
+                              onClick={() => handleProposeToReplacements(exchange)}
+                              className="inline-flex items-center px-2.5 py-1.5 border border-blue-300 text-xs font-medium rounded text-blue-700 bg-white hover:bg-blue-50"
+                              disabled={proposingToReplacements === exchange.id}
+                            >
+                              <UserPlus className="h-3 w-3 mr-1" />
+                              {proposingToReplacements === exchange.id ? 'En cours...' : 'Proposer aux remplaçants'}
+                            </button>
+                          )}
+                        </>
                       )}
                     </div>
                   </td>
@@ -323,6 +361,8 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
                       bagPhaseConfig={bagPhaseConfig}
                       onValidateExchange={onValidateExchange}
                       onRemoveUser={onRemoveUser}
+                      exchanges={exchanges}
+                      history={history}
                     />
                   ))
                 ) : !isUnavailable ? (
@@ -335,28 +375,42 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
               {/* Actions */}
               {!isUnavailable && (
                 <div className="mt-4 flex justify-end gap-2">
-                  <button
-                    onClick={() => handleRejectClick(exchange.id)}
-                    className={`inline-flex items-center p-2 border rounded-full ${
-                      bagPhaseConfig.phase !== 'distribution'
-                        ? 'border-gray-300 text-gray-300 bg-gray-50 cursor-not-allowed'
-                        : 'border-red-300 text-red-700 bg-white hover:bg-red-50'
-                    }`}
-                    disabled={bagPhaseConfig.phase !== 'distribution'}
-                    title="Rejeter"
-                  >
-                    <X className="h-5 w-5" />
-                  </button>
-                  
-                  {isEligibleForReplacement(exchange) && (
-                    <button
-                      onClick={() => handleProposeToReplacements(exchange)}
-                      className="inline-flex items-center p-2 border border-blue-300 rounded-full text-blue-700 bg-white hover:bg-blue-50"
-                      disabled={proposingToReplacements === exchange.id}
-                      title="Proposer aux remplaçants"
-                    >
-                      <UserPlus className="h-5 w-5" />
-                    </button>
+                  {bagPhaseConfig.phase === 'completed' ? (
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedForReplacements.has(exchange.id)}
+                        onChange={() => toggleReplacementSelection(exchange.id)}
+                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                      />
+                      <span className="ml-2 text-sm text-gray-700">Donner aux remplaçants</span>
+                    </label>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => handleRejectClick(exchange.id)}
+                        className={`inline-flex items-center p-2 border rounded-full ${
+                          bagPhaseConfig.phase !== 'distribution'
+                            ? 'border-gray-300 text-gray-300 bg-gray-50 cursor-not-allowed'
+                            : 'border-red-300 text-red-700 bg-white hover:bg-red-50'
+                        }`}
+                        disabled={bagPhaseConfig.phase !== 'distribution'}
+                        title="Rejeter"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
+                      
+                      {isEligibleForReplacement(exchange) && (
+                        <button
+                          onClick={() => handleProposeToReplacements(exchange)}
+                          className="inline-flex items-center p-2 border border-blue-300 rounded-full text-blue-700 bg-white hover:bg-blue-50"
+                          disabled={proposingToReplacements === exchange.id}
+                          title="Proposer aux remplaçants"
+                        >
+                          <UserPlus className="h-5 w-5" />
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
               )}

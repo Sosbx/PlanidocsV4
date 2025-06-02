@@ -8,7 +8,6 @@ import type { ShiftExchange as FeatureShiftExchange } from '../../../../features
 type ShiftExchange = PlanningShiftExchange | FeatureShiftExchange;
 import type { User } from '../../../../features/auth/types';
 import { ConfirmationModal } from '../../../../components/modals';
-import { useExchangeManagement } from '../../hooks/useExchangeManagement';
 import '../../../../styles/BadgeStyles.css';
 
 interface InterestedUserCardProps {
@@ -21,6 +20,8 @@ interface InterestedUserCardProps {
   bagPhaseConfig: BagPhaseConfig;
   onValidateExchange: (exchangeId: string, interestedUserId: string, hasConflict: boolean) => void;
   onRemoveUser: (exchangeId: string, userId: string) => void;
+  exchanges?: ShiftExchange[];
+  history?: any[];
 }
 
 const InterestedUserCard: React.FC<InterestedUserCardProps> = ({
@@ -32,10 +33,11 @@ const InterestedUserCard: React.FC<InterestedUserCardProps> = ({
   userAssignments,
   bagPhaseConfig,
   onValidateExchange,
-  onRemoveUser
+  onRemoveUser,
+  exchanges = [],
+  history = []
 }) => {
   const [showValidateConfirmation, setShowValidateConfirmation] = useState(false);
-  const { exchanges, history } = useExchangeManagement(null);
 
   const interestedUser = users.find(u => u.id === userId);
   if (!interestedUser) return null;

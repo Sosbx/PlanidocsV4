@@ -25,6 +25,7 @@ export const FEATURES = {
   PLANNING: 'planning',
   SHIFT_EXCHANGE: 'shiftExchange',
   DIRECT_EXCHANGE: 'directExchange',
+  DIRECT_EXCHANGE_MODAL: 'directExchangeModal',
   REPLACEMENTS: 'replacements',
   GENERATED_PLANNING: 'generatedPlanning',
   USER_MANAGEMENT: 'userManagement',
@@ -60,6 +61,13 @@ export const DEFAULT_FEATURES: Record<FeatureKey, Omit<FeatureFlag, 'id' | 'last
     name: 'Échanges',
     description: 'Céder, échanger ou se faire remplacer',
     route: '/direct-exchange',
+    requiredRoles: ['USER'],
+    status: { RD: 'disabled', RG: 'disabled' }
+  },
+  [FEATURES.DIRECT_EXCHANGE_MODAL]: {
+    name: 'Modal Échanges Directs',
+    description: 'Activer le modal d\'échange direct depuis le planning',
+    route: '',
     requiredRoles: ['USER'],
     status: { RD: 'disabled', RG: 'disabled' }
   },

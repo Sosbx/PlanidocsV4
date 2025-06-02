@@ -19,5 +19,8 @@ export { default as BagStatsViz } from './BagStatsViz';
 // Composants d'administration
 export * from './admin';
 
+// Composant optimisé pour la liste
+export { default as OptimizedExchangeList } from './OptimizedExchangeList';
+
 // Composants à migrer
 // export { default as BagStats } from './BagStats';

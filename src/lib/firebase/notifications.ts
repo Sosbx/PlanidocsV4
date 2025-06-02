@@ -142,7 +142,7 @@ export const getNotificationsForUser = async (
         type: data.type,
         iconType: data.iconType || NotificationIconType.NONE,
         read: data.read,
-        createdAt: data.createdAt.toDate().toISOString(),
+        createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : new Date().toISOString(),
         relatedId: data.relatedId,
         link: data.link,
         actionText: data.actionText,
@@ -350,7 +350,7 @@ export const sendExchangeNotification = async (
 ): Promise<string> => {
   const periodText = getPeriodDisplayText(shiftPeriod);
   // Formater la date pour l'affichage (JJ/MM/YYYY)
-  const formattedDate = formatDate ? formatDate(shiftDate, 'short') : shiftDate;
+  const formattedDate = formatDate(shiftDate, 'short');
   
   let title = '';
   let message = '';
@@ -509,7 +509,7 @@ export const createDesiderataReminderNotification = async (
   userId: string,
   deadline: Date
 ): Promise<string> => {
-  const deadlineStr = formatDate(deadline);
+  const deadlineStr = formatDate(deadline, 'long');
   
   return addNotification({
     userId,

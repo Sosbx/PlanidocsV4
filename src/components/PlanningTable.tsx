@@ -125,8 +125,8 @@ const PlanningTable = forwardRef<PlanningTableRef, PlanningTableProps>(({
       return true;
     }
     
-    // Vérifier Nouvel An (31 décembre)
-    if (userBlocks.blockNewYear && dayMonth === '31-12') {
+    // Vérifier Nouvel An (31 décembre et 1er janvier)
+    if (userBlocks.blockNewYear && (dayMonth === '31-12' || dayMonth === '1-1')) {
       return true;
     }
     
@@ -179,7 +179,7 @@ const PlanningTable = forwardRef<PlanningTableRef, PlanningTableProps>(({
                     <li>Noël (24 et 25 décembre)</li>
                   )}
                   {userHasBlocks.blockNewYear && (
-                    <li>Nouvel An (31 décembre)</li>
+                    <li>Nouvel An (31 décembre et 1er janvier)</li>
                   )}
                 </ul>
               </div>

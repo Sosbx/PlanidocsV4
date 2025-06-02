@@ -9,7 +9,10 @@ import { saveDeviceToken } from '../../lib/firebase/deviceTokens';
  */
 const NotificationPermissionManager: React.FC = () => {
   const { user } = useAuth();
-  const [permissionRequested, setPermissionRequested] = useState<boolean>(false);
+  const [permissionRequested, setPermissionRequested] = useState<boolean>(() => {
+    // Récupérer l'état depuis le localStorage pour persister entre les sessions
+    return localStorage.getItem('notification_permission_requested') === 'true';
+  });
 
   useEffect(() => {
     // Si l'utilisateur est connecté et que la permission n'a pas encore été demandée
@@ -30,10 +33,12 @@ const NotificationPermissionManager: React.FC = () => {
           
           // Marquer la permission comme demandée pour éviter de redemander à chaque rendu
           setPermissionRequested(true);
+          localStorage.setItem('notification_permission_requested', 'true');
         } catch (error) {
           console.error('Erreur lors de la configuration des notifications push:', error);
           // Même en cas d'erreur, on marque comme demandé pour éviter de redemander en boucle
           setPermissionRequested(true);
+          localStorage.setItem('notification_permission_requested', 'true');
         }
       };
       

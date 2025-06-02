@@ -140,6 +140,8 @@ const PlanningPreviewPage: React.FC = () => {
         validatedAt={planningData.validatedAt}
         startDate={config.startDate}
         endDate={config.endDate}
+        primaryLimit={config.primaryDesiderataLimit}
+        secondaryLimit={config.secondaryDesiderataLimit}
       />
     </div>
   );

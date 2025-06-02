@@ -3,7 +3,6 @@ import { format, isToday as isTodayFn } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { isGrayedOut } from '../../../utils/dateUtils';
 import { useDesiderataState } from '../../../features/planning/hooks/useDesiderataState';
-import { useReplacementManagement } from '../hooks/useReplacementManagement';
 import { UserPlus } from 'lucide-react';
 import type { ShiftExchange } from '../types';
 import type { User } from '../../../features/users/types';
@@ -70,19 +69,29 @@ const ShiftExchangeCalendarView: React.FC<ShiftExchangeCalendarViewProps> = ({
   bagPhaseConfig,
   filterPeriod = 'all',
 }) => {
-  // Utiliser le hook de gestion des remplaçants
-  const { 
-    proposingShift, 
-    handleProposeToReplacements: proposeToReplacements
-  } = useReplacementManagement();
+  // État local pour gérer les propositions aux remplaçants
+  const [proposingShift, setProposingShift] = useState<string | null>(null);
   
   // Fonction pour proposer une garde aux remplaçants
-  const handleProposeToReplacements = (exchange: ShiftExchange, e: React.MouseEvent) => {
+  const handleProposeToReplacements = async (exchange: ShiftExchange, e: React.MouseEvent) => {
     e.stopPropagation(); // Éviter de déclencher le handleSelectDate du parent
-    proposeToReplacements(exchange, undefined, (error) => {
+    
+    try {
+      setProposingShift(exchange.id);
+      // TODO: Implémenter la proposition aux remplaçants
+      // Pour l'instant, juste un placeholder
+      console.log('Proposition aux remplaçants pour:', exchange);
+      
+      // Simuler un délai
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      alert('Fonctionnalité de proposition aux remplaçants à implémenter');
+    } catch (error) {
       console.error('Erreur lors de la proposition aux remplaçants:', error);
-      alert('Une erreur est survenue lors de la proposition aux remplaçants: ' + (error instanceof Error ? error.message : 'Erreur inconnue'));
-    });
+      alert('Une erreur est survenue lors de la proposition aux remplaçants');
+    } finally {
+      setProposingShift(null);
+    }
   };
   
   // Récupérer les données de désiderata pour l'utilisateur (incluant les archivés)

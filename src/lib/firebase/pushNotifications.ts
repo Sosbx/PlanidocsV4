@@ -116,7 +116,7 @@ export const sendDesiderataReminderPushNotification = async (
   userId: string,
   deadline: Date
 ): Promise<any> => {
-  const deadlineStr = formatDate(deadline);
+  const deadlineStr = formatDate(deadline, 'long');
   
   return sendPushNotification({
     userId,

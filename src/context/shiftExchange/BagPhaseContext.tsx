@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { doc, onSnapshot, setDoc, collection, onSnapshot as onCollectionSnapshot } from 'firebase/firestore';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { doc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from "../../lib/firebase/config";
 import { BagPhaseConfig, defaultBagPhaseConfig } from '../../types/planning';
 import { finalizeAllExchanges, restorePendingExchanges } from '../../lib/firebase/exchange';
@@ -10,6 +10,8 @@ import { finalizeAllExchanges, restorePendingExchanges } from '../../lib/firebas
 interface BagPhaseContextType {
   config: BagPhaseConfig;
   updateConfig: (newConfig: BagPhaseConfig) => Promise<void>;
+  isLoading: boolean;
+  error: string | null;
 }
 
 const BagPhaseContext = createContext<BagPhaseContextType | undefined>(undefined);
@@ -17,236 +19,170 @@ const BagPhaseContext = createContext<BagPhaseContextType | undefined>(undefined
 const BAG_CONFIG_DOC = 'bag_phase_config';
 
 /**
- * Initialise les listeners pour la synchronisation des échanges
- */
-export const initializeExchangeSyncListeners = () => {
-  // Initialiser les imports asynchrones pour éviter les erreurs require/import dans des transactions
-  let notifyExchangeSystem: any = null;
-  let syncValidatedExchangeWithPlanning: any = null;
-  
-  // On charge les fonctions au démarrage mais de manière asynchrone
-  import('../../lib/firebase/planningEventService').then(module => {
-    notifyExchangeSystem = module.notifyExchangeSystem;
-    syncValidatedExchangeWithPlanning = module.syncValidatedExchangeWithPlanning;
-    console.log('Exchange sync services loaded successfully');
-  }).catch(error => {
-    console.error('Failed to load exchange sync services', error);
-  });
-
-  // Listener pour les modifications de planning
-  const planningsListener = onCollectionSnapshot(
-    collection(db, 'generated_plannings'),
-    (snapshot) => {
-      // Pour chaque modification de planning
-      snapshot.docChanges().forEach(async (change) => {
-        const userId = change.doc.id;
-        const planningData = change.doc.data();
-        
-        // Si le document est modifié ou ajouté
-        if (change.type === 'added' || change.type === 'modified') {
-          try {
-            // Vérifier toute période activée dans ce planning
-            if (planningData.periods && notifyExchangeSystem) {
-              for (const periodId in planningData.periods) {
-                const periodData = planningData.periods[periodId];
-                
-                // Si la période et ses données sont valides
-                if (periodData && periodData.assignments) {
-                  // Vérifier si c'est une période archivée ou non
-                  const isArchived = periodData.isArchived === true;
-                  
-                  // Ne notifier que pour les périodes non archivées
-                  if (!isArchived) {
-                    await notifyExchangeSystem(
-                      userId, 
-                      periodId, 
-                      periodData.assignments, 
-                      'update'
-                    );
-                  }
-                }
-              }
-            }
-          } catch (error) {
-            console.error('Error in planning change listener:', error);
-          }
-        }
-      });
-    }
-  );
-  
-  // Listener pour les validations d'échanges
-  const exchangeHistoryListener = onCollectionSnapshot(
-    collection(db, 'exchange_history'),
-    (snapshot) => {
-      // Pour chaque nouvel échange validé
-      snapshot.docChanges().forEach(async (change) => {
-        if (change.type === 'added') {
-          const exchangeId = change.doc.id;
-          const historyData = change.doc.data();
-          
-          // Si c'est un échange complété et que les données sont valides
-          if (historyData && historyData.status === 'completed' && syncValidatedExchangeWithPlanning) {
-            try {
-              await syncValidatedExchangeWithPlanning(exchangeId);
-            } catch (error) {
-              console.error('Error syncing exchange with planning:', error);
-            }
-          }
-        }
-      });
-    }
-  );
-  
-  // Retourner une fonction pour désinscrire les listeners
-  return () => {
-    planningsListener();
-    exchangeHistoryListener();
-  };
-};
-
-/**
- * Provider pour le contexte de phase de la bourse aux gardes
- * Gère la configuration de la phase et les opérations associées
+ * Provider optimisé pour le contexte de phase de la bourse aux gardes
+ * - Réduit les re-renders inutiles
+ * - Optimise les mises à jour de configuration
+ * - Gère les erreurs de manière centralisée
  */
 export const BagPhaseProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [config, setConfig] = useState<BagPhaseConfig>(defaultBagPhaseConfig);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
+  // Effet pour écouter les changements de configuration
   useEffect(() => {
-    // Écouter les changements de configuration
-    const configUnsubscribe = onSnapshot(doc(db, 'config', BAG_CONFIG_DOC), (doc) => {
-      if (doc.exists()) {
-        const data = doc.data();
-        setConfig({
-          ...defaultBagPhaseConfig,
-          ...data,
-          submissionDeadline: data.submissionDeadline.toDate(),
-          isConfigured: true,
-        });
-      } else {
-        setConfig(defaultBagPhaseConfig);
-      }
-    });
+    const configRef = doc(db, 'config', BAG_CONFIG_DOC);
     
-    // Initialiser les listeners pour la synchronisation
-    const syncListenersCleanup = initializeExchangeSyncListeners();
+    const unsubscribe = onSnapshot(
+      configRef,
+      (doc) => {
+        try {
+          if (doc.exists()) {
+            const data = doc.data();
+            setConfig({
+              ...defaultBagPhaseConfig,
+              ...data,
+              submissionDeadline: data.submissionDeadline?.toDate() || new Date(),
+              isConfigured: true,
+            });
+          } else {
+            setConfig(defaultBagPhaseConfig);
+          }
+          setError(null);
+        } catch (err) {
+          console.error('Error processing config:', err);
+          setError('Erreur lors du chargement de la configuration');
+        } finally {
+          setIsLoading(false);
+        }
+      },
+      (err) => {
+        console.error('Error listening to config:', err);
+        setError('Erreur de connexion à la configuration');
+        setIsLoading(false);
+      }
+    );
 
-    return () => {
-      configUnsubscribe();
-      syncListenersCleanup();
-    };
+    return () => unsubscribe();
   }, []);
 
   /**
-   * Met à jour la configuration de la phase de la bourse aux gardes
-   * et synchronise avec les périodes de planning
-   * @param newConfig - La nouvelle configuration
+   * Met à jour la configuration de manière optimisée
+   * Utilise useCallback pour éviter les re-créations de fonction
    */
-  const updateConfig = async (newConfig: BagPhaseConfig) => {
+  const updateConfig = useCallback(async (newConfig: BagPhaseConfig) => {
     const configRef = doc(db, 'config', BAG_CONFIG_DOC);
     
-    // Si on passe à la phase "Terminé", finaliser tous les échanges
-    if (newConfig.phase === 'completed' && config.phase !== 'completed') {
-      try {
-        console.log('Finalizing all pending exchanges...');
-        await finalizeAllExchanges();
-        console.log('All exchanges finalized successfully');
-
-        // Synchroniser le changement avec les périodes de planning
-        await syncPlanningPeriodsWithBAG(newConfig.phase);
-      } catch (error) {
-        console.error('Error finalizing exchanges:', error);
-        throw error;
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      // Gestion optimisée des transitions de phase
+      if (newConfig.phase !== config.phase) {
+        // Passage à la phase "Terminé"
+        if (newConfig.phase === 'completed' && config.phase !== 'completed') {
+          console.log('Finalizing all pending exchanges...');
+          await finalizeAllExchanges();
+          
+          // Synchronisation avec les périodes de planning
+          await syncPlanningPeriodsWithBAG(newConfig.phase);
+        }
+        
+        // Retour depuis la phase "Terminé"
+        else if (config.phase === 'completed' && newConfig.phase !== 'completed') {
+          console.log('Restoring pending exchanges...');
+          await restorePendingExchanges();
+          
+          // Synchronisation avec les périodes de planning
+          await syncPlanningPeriodsWithBAG(newConfig.phase);
+        }
+        
+        // Autres changements de phase
+        else {
+          await syncPlanningPeriodsWithBAG(newConfig.phase);
+        }
       }
+      
+      // Mise à jour de la configuration dans Firestore
+      await setDoc(configRef, {
+        ...newConfig,
+        submissionDeadline: newConfig.submissionDeadline,
+        updatedAt: serverTimestamp()
+      });
+      
+    } catch (err) {
+      console.error('Error updating config:', err);
+      setError('Erreur lors de la mise à jour de la configuration');
+      throw err;
+    } finally {
+      setIsLoading(false);
     }
-    
-    // Si on revient de la phase "Terminé", restaurer les échanges
-    if (config.phase === 'completed' && newConfig.phase !== 'completed') {
-      try {
-        console.log('Restoring pending exchanges...');
-        await restorePendingExchanges();
-        console.log('Exchanges restored successfully');
-
-        // Synchroniser le changement avec les périodes de planning
-        await syncPlanningPeriodsWithBAG(newConfig.phase);
-      } catch (error) {
-        console.error('Error restoring exchanges:', error);
-        throw error;
-      }
-    }
-    
-    // Si la phase change mais n'implique pas de passage à ou depuis completed
-    if (newConfig.phase !== config.phase && 
-        !(newConfig.phase === 'completed' && config.phase !== 'completed') &&
-        !(config.phase === 'completed' && newConfig.phase !== 'completed')) {
-      // Synchroniser le changement avec les périodes de planning
-      await syncPlanningPeriodsWithBAG(newConfig.phase);
-    }
-    
-    await setDoc(configRef, {
-      ...newConfig,
-      submissionDeadline: newConfig.submissionDeadline,
-    });
-  };
+  }, [config.phase]);
   
   /**
    * Synchronise les périodes de planning avec la phase BAG
-   * @param bagPhase - La nouvelle phase BAG
+   * Fonction extraite pour éviter la duplication
    */
-  const syncPlanningPeriodsWithBAG = async (bagPhase: 'submission' | 'distribution' | 'completed') => {
+  const syncPlanningPeriodsWithBAG = useCallback(async (bagPhase: 'submission' | 'distribution' | 'completed') => {
     try {
-      // Importer getPlanningPeriods et updatePlanningPeriod de façon dynamique
+      // Import dynamique pour éviter les dépendances circulaires
       const { getPlanningPeriods, updatePlanningPeriod } = await import('../../lib/firebase/planning');
       
-      // Récupérer toutes les périodes
       const periods = await getPlanningPeriods();
-      
-      // Filtrer pour trouver la période future (BAG)
       const futurePeriod = periods.find(p => p.status === 'future');
       
-      if (futurePeriod) {
-        console.log(`Synchronisation de la période ${futurePeriod.id} avec la phase BAG ${bagPhase}`);
+      if (!futurePeriod) {
+        console.log('Aucune période future trouvée à synchroniser');
+        return;
+      }
+      
+      console.log(`Synchronisation de la période ${futurePeriod.id} avec la phase BAG ${bagPhase}`);
+      
+      if (bagPhase === 'completed') {
+        // Marquer la période future comme active
+        await updatePlanningPeriod(futurePeriod.id, {
+          bagPhase: 'completed',
+          status: 'active',
+          isValidated: true,
+          validatedAt: new Date()
+        });
         
-        // Si on passe en phase "completed", marquer la période comme active
-        if (bagPhase === 'completed') {
-          await updatePlanningPeriod(futurePeriod.id, {
-            bagPhase: 'completed',
-            status: 'active',
-            isValidated: true,
-            validatedAt: new Date()
-          });
-          
-          // Trouver la période active actuelle et la marquer comme archivée
-          const activePeriod = periods.find(p => p.status === 'active');
-          if (activePeriod) {
-            await updatePlanningPeriod(activePeriod.id, {
-              status: 'archived'
-            });
-          }
-        } else {
-          // Si on passe à une autre phase, mettre à jour uniquement la phase BAG
-          await updatePlanningPeriod(futurePeriod.id, {
-            bagPhase: bagPhase
+        // Archiver l'ancienne période active
+        const activePeriod = periods.find(p => p.status === 'active');
+        if (activePeriod && activePeriod.id !== futurePeriod.id) {
+          await updatePlanningPeriod(activePeriod.id, {
+            status: 'archived'
           });
         }
       } else {
-        console.log('Aucune période future trouvée à synchroniser');
+        // Mise à jour simple de la phase BAG
+        await updatePlanningPeriod(futurePeriod.id, {
+          bagPhase: bagPhase
+        });
       }
     } catch (error) {
-      console.error('Erreur lors de la synchronisation des périodes de planning:', error);
+      console.error('Erreur lors de la synchronisation des périodes:', error);
       // Ne pas propager l'erreur pour ne pas bloquer la mise à jour principale
     }
-  };
+  }, []);
+
+  // Valeur mémorisée du contexte pour éviter les re-renders
+  const contextValue = useMemo(() => ({
+    config,
+    updateConfig,
+    isLoading,
+    error
+  }), [config, updateConfig, isLoading, error]);
 
   return (
-    <BagPhaseContext.Provider value={{ config, updateConfig }}>
+    <BagPhaseContext.Provider value={contextValue}>
       {children}
     </BagPhaseContext.Provider>
   );
 };
 
 /**
- * Hook pour accéder au contexte de phase de la bourse aux gardes
+ * Hook optimisé pour accéder au contexte de phase de la bourse aux gardes
  */
 export const useBagPhase = () => {
   const context = useContext(BagPhaseContext);

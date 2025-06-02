@@ -47,6 +47,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   // Charger les notifications de l'utilisateur
   useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
+    
     if (!user) {
       setNotifications([]);
       setLoading(false);
@@ -64,7 +66,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       orderBy('createdAt', 'desc')
     );
 
-    const unsubscribe = onSnapshot(
+    unsubscribe = onSnapshot(
       q,
       (snapshot) => {
         const notificationsList: Notification[] = [];
@@ -77,7 +79,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             message: data.message,
             type: data.type,
             read: data.read,
-            createdAt: data.createdAt.toDate().toISOString(),
+            createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : new Date().toISOString(),
             relatedId: data.relatedId,
             link: data.link
           });
@@ -103,31 +105,38 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     if (!user) return;
 
     try {
-      // Convertir le type de notification en NotificationType
+      // Utiliser directement le type fourni s'il correspond à NotificationType
       let notificationType: NotificationType;
-      switch (notification.type) {
-        case 'exchange':
-          notificationType = NotificationType.EXCHANGE_PROPOSED;
-          break;
-        case 'give':
-          notificationType = NotificationType.GIVE_PROPOSED;
-          break;
-        case 'interested':
-          notificationType = NotificationType.INTERESTED_USER;
-          break;
-        case 'accepted':
-          notificationType = NotificationType.EXCHANGE_ACCEPTED;
-          break;
-        case 'rejected':
-          notificationType = NotificationType.EXCHANGE_REJECTED;
-          break;
-        case 'completed':
-          notificationType = NotificationType.EXCHANGE_COMPLETED;
-          break;
-        case 'system':
-        default:
-          notificationType = NotificationType.SYSTEM;
-          break;
+      
+      // Vérifier si le type est déjà un NotificationType valide
+      if (Object.values(NotificationType).includes(notification.type as NotificationType)) {
+        notificationType = notification.type as NotificationType;
+      } else {
+        // Conversion pour compatibilité avec les anciens types
+        switch (notification.type) {
+          case 'exchange':
+            notificationType = NotificationType.EXCHANGE_PROPOSED;
+            break;
+          case 'give':
+            notificationType = NotificationType.GIVE_PROPOSED;
+            break;
+          case 'interested':
+            notificationType = NotificationType.INTERESTED_USER;
+            break;
+          case 'accepted':
+            notificationType = NotificationType.EXCHANGE_ACCEPTED;
+            break;
+          case 'rejected':
+            notificationType = NotificationType.EXCHANGE_REJECTED;
+            break;
+          case 'completed':
+            notificationType = NotificationType.EXCHANGE_COMPLETED;
+            break;
+          case 'system':
+          default:
+            notificationType = NotificationType.SYSTEM;
+            break;
+        }
       }
 
       await addNotificationFirebase({

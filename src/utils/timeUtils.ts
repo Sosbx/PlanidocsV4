@@ -29,3 +29,13 @@ export const getTimeRemaining = (deadline: Date) => {
     isExpired: false
   };
 };
+
+export const getGreetingByTime = (): string => {
+  const currentHour = new Date().getHours();
+  
+  if (currentHour >= 5 && currentHour < 18) {
+    return 'Bonjour';
+  } else {
+    return 'Bonsoir';
+  }
+};

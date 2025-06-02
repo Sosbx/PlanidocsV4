@@ -1,10 +1,6 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { format, parseISO } from 'date-fns';
-import { useAuth } from '../../../features/auth/hooks';
-import { useUsers } from '../../../features/auth/hooks';
-import { useBagPhase } from '../../../context/shiftExchange';
-import { useShiftExchangeData } from '../hooks/useShiftExchangeData';
-import { useShiftInteraction, useCalendarNavigation } from '../hooks';
+import { useShiftExchangeCore, useCalendarNavigation } from '../hooks';
 import { ShiftPeriod } from '../types';
 import { useBottomNavPadding } from '../../../hooks/useBottomNavPadding';
 
@@ -22,39 +18,60 @@ import {
 import PermanentPlanningPreview from '../../../features/planning/components/PermanentPlanningPreview';
 
 /**
- * Version refactorisée de ShiftExchangePage utilisant les hooks composables
- * et les composants partagés pour réduire la duplication et la complexité
+ * Page de bourse aux gardes - Version optimisée
+ * Utilise le hook centralisé useShiftExchangeCore pour éviter les redondances
  */
 const ShiftExchangePage: React.FC = () => {
-  // Hooks d'authentification et contexte
-  const { user } = useAuth();
-  const { users } = useUsers();
+  // Hook principal optimisé
+  const {
+    user,
+    users,
+    bagPhaseConfig,
+    exchanges,
+    filteredExchanges,
+    loading,
+    userAssignments,
+    receivedShifts,
+    conflictStates,
+    conflictDetails,
+    isInteractionDisabled,
+    showOwnShifts,
+    setShowOwnShifts,
+    showMyInterests,
+    setShowMyInterests,
+    viewMode,
+    setViewMode,
+    toggleInterest,
+    checkForConflict
+  } = useShiftExchangeCore({
+    enableHistory: false, // Pas besoin de l'historique pour la page utilisateur
+    enableConflictCheck: true,
+    limitResults: 100
+  });
+  
   const bottomNavPadding = useBottomNavPadding();
-  const { config: bagPhaseConfig } = useBagPhase();
 
-  // États pour les modals
+  // États locaux pour les modals uniquement
   const [showCommentModal, setShowCommentModal] = useState<{ id: string; comment: string } | null>(null);
   const [showPlanningPreview, setShowPlanningPreview] = useState<{
     date: string;
     position: { x: number; y: number };
   } | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string | undefined>(undefined);
   
-  // État pour le toast local
+  // État local pour le toast
   const [toast, setToast] = useState<{
     visible: boolean;
     message: string;
     type: 'success' | 'error' | 'info';
   }>({ visible: false, message: '', type: 'success' });
   
-  // État pour la date sélectionnée
-  const [selectedDate, setSelectedDate] = useState<string | undefined>(undefined);
+  // États locaux pour la gestion des conflits
+  const [showConflictModal, setShowConflictModal] = useState(false);
+  const [conflictExchange, setConflictExchange] = useState<any>(null);
+  const [exchangeUser, setExchangeUser] = useState<any>(null);
   
-  // Fonction pour sélectionner une date
-  const handleSelectDate = (date: string) => {
-    setSelectedDate(date);
-  };
-
-  // États de filtrage et d'affichage - valeurs par défaut qui seront remplacées par celles du hook
+  // État pour les options de filtrage (reste local car spécifique à cette vue)
   const [filterOptions, setFilterOptions] = useState({
     showOwnShifts: true,
     showMyInterests: false,
@@ -63,13 +80,8 @@ const ShiftExchangePage: React.FC = () => {
     hideSecondaryDesiderata: false,
     filterPeriod: 'all' as 'all' | ShiftPeriod
   });
-  
-  const [, setConflictDetails] = useState<Record<string, any>>({});
 
-  // Référence pour stocker la date initiale
-  const initialDateRef = useRef<Date | null>(null);
-
-  // Hook pour la navigation du calendrier - déplacé avant useComposableExchangeData
+  // Hook pour la navigation du calendrier
   const {
     currentMonth,
     setCurrentMonth,
@@ -84,26 +96,10 @@ const ShiftExchangePage: React.FC = () => {
     initializeCalendarFromDateString
   } = useCalendarNavigation('list');
 
-  // Référence pour suivre si l'initialisation a déjà été effectuée
+  // Références pour optimisation
   const isInitializedRef = useRef(false);
-
-  // Hook pour les données des échanges - utilise notre nouveau hook composable
-  const { 
-    exchanges,
-    filteredExchanges, 
-    loading, 
-    userAssignments, 
-    receivedShifts,
-    conflictStates,
-    showOwnShifts,
-    setShowOwnShifts,
-    showMyInterests,
-    setShowMyInterests,
-    viewMode,
-    setViewMode
-  } = useShiftExchangeData();
   
-  // Synchroniser les états locaux avec ceux du hook après le chargement initial
+  // Synchroniser les états de filtrage avec le hook principal
   useEffect(() => {
     setFilterOptions(prev => ({
       ...prev,
@@ -111,9 +107,9 @@ const ShiftExchangePage: React.FC = () => {
       showMyInterests
     }));
   }, [showOwnShifts, showMyInterests]);
-
-  // Créer les maps pour les conflits et les intérêts
-  const conflictPeriodsMap = React.useMemo(() => {
+  
+  // Calcul optimisé des maps avec useMemo
+  const conflictPeriodsMap = useMemo(() => {
     const map: Record<string, boolean> = {};
     if (user && exchanges) {
       exchanges.forEach(exchange => {
@@ -124,7 +120,7 @@ const ShiftExchangePage: React.FC = () => {
     return map;
   }, [exchanges, conflictStates, user]);
   
-  const interestedPeriodsMap = React.useMemo(() => {
+  const interestedPeriodsMap = useMemo(() => {
     const map: Record<string, boolean> = {};
     if (user && exchanges) {
       exchanges.forEach(exchange => {
@@ -135,76 +131,115 @@ const ShiftExchangePage: React.FC = () => {
     return map;
   }, [exchanges, user]);
   
-  // Effet pour initialiser le calendrier une fois que les données sont chargées
+  // Initialisation du calendrier une seule fois
   useEffect(() => {
-    // Vérifier si nous avons des échanges et si l'initialisation n'a pas encore été effectuée
     if (exchanges.length > 0 && !isInitializedRef.current) {
-      // Trouver la première date d'échange
       const sortedExchanges = [...exchanges].sort((a, b) => a.date.localeCompare(b.date));
       if (sortedExchanges.length > 0) {
         const firstExchangeDate = parseISO(sortedExchanges[0].date);
-        console.log("Initialisation du calendrier à la première date d'échange:", firstExchangeDate);
-        
-        // Utiliser la fonction d'initialisation du hook de navigation
         initializeCalendarFromDateString(format(firstExchangeDate, 'yyyy-MM-dd'));
-        
-        // Marquer comme initialisé pour éviter les rendus en boucle
         isInitializedRef.current = true;
       }
     }
   }, [exchanges, initializeCalendarFromDateString]);
-
-  // Hook pour la gestion des interactions (toggle interest)
-  const {
-    handleToggleInterest,
-    showConflictModal,
-    conflictExchange,
-    exchangeUser,
-    handleCloseConflictModal,
-    handleConfirmConflict
-  } = useShiftInteraction(users, conflictStates, setConflictDetails, setToast, {
-    bagPhaseConfig
-  });
-
-  // Vérifier si les interactions doivent être désactivées
-  const isInteractionDisabled = bagPhaseConfig.phase !== 'submission';
   
-  // Chaîne de description pour aider l'utilisateur à comprendre les conflits
-  const conflictHelpText = "Cela signifie que vous avez déjà une garde. Vous pouvez quand même vous positionner, un échange sera proposé sous validation de l'administrateur.";
-
+  // Gestion optimisée de l'intérêt avec vérification de conflit
+  const handleToggleInterest = useCallback(async (exchange: any) => {
+    if (!user || isInteractionDisabled) {
+      setToast({
+        visible: true,
+        message: isInteractionDisabled 
+          ? 'La période de soumission est terminée' 
+          : 'Vous devez être connecté',
+        type: 'error'
+      });
+      return;
+    }
+    
+    try {
+      // Vérifier s'il y a un conflit
+      const conflict = await checkForConflict(exchange);
+      
+      if (conflict.hasConflict) {
+        // Montrer le modal de confirmation
+        setConflictExchange(exchange);
+        const exchangeUserData = users.find(u => u.id === exchange.userId);
+        setExchangeUser(exchangeUserData);
+        setShowConflictModal(true);
+      } else {
+        // Pas de conflit, procéder directement
+        await toggleInterest(exchange);
+        setToast({
+          visible: true,
+          message: exchange.interestedUsers?.includes(user.id) 
+            ? 'Intérêt retiré' 
+            : 'Intérêt manifesté',
+          type: 'success'
+        });
+      }
+    } catch (error) {
+      console.error('Error toggling interest:', error);
+      setToast({
+        visible: true,
+        message: 'Erreur lors de l\'opération',
+        type: 'error'
+      });
+    }
+  }, [user, users, isInteractionDisabled, checkForConflict, toggleInterest]);
+  
+  // Confirmation du conflit
+  const handleConfirmConflict = useCallback(async () => {
+    if (!conflictExchange) return;
+    
+    try {
+      await toggleInterest(conflictExchange);
+      setToast({
+        visible: true,
+        message: 'Intérêt manifesté avec conflit potentiel',
+        type: 'info'
+      });
+    } catch (error) {
+      console.error('Error confirming conflict:', error);
+      setToast({
+        visible: true,
+        message: 'Erreur lors de l\'opération',
+        type: 'error'
+      });
+    } finally {
+      setShowConflictModal(false);
+      setConflictExchange(null);
+      setExchangeUser(null);
+    }
+  }, [conflictExchange, toggleInterest]);
+  
   // Fonction pour mettre à jour les options de filtrage
-  // Fonction unifiée pour mettre à jour les options de filtrage
-  const updateFilterOption = <K extends keyof typeof filterOptions>(
+  const updateFilterOption = useCallback(<K extends keyof typeof filterOptions>(
     key: K,
     value: typeof filterOptions[K]
   ) => {
-    // Utiliser à la fois les états locaux et ceux du hook
     setFilterOptions(prev => ({ ...prev, [key]: value }));
     
-    // Synchroniser les états du hook si applicable
+    // Synchroniser avec le hook principal si nécessaire
     if (key === 'showOwnShifts') {
       setShowOwnShifts(value as boolean);
     } else if (key === 'showMyInterests') {
       setShowMyInterests(value as boolean);
     }
-  };
-
+  }, [setShowOwnShifts, setShowMyInterests]);
+  
   // Rendu du composant d'en-tête personnalisé
-  const renderCustomHeader = useCallback(() => {
-    return (
-      <div className="ml-0 sm:ml-3">
-        <BagPhaseIndicator />
-      </div>
-    );
-  }, []);
-
-  // Rendu de la vue calendrier
+  const renderCustomHeader = useCallback(() => (
+    <div className="ml-0 sm:ml-3">
+      <BagPhaseIndicator />
+    </div>
+  ), []);
+  
+  // Rendu optimisé de la vue calendrier
   const renderCalendarView = useCallback(() => {
     if (!user) return null;
     
     return (
       <div className="w-full">
-        {/* Vue calendrier principale */}
         <div 
           ref={calendarContainerRef}
           className="w-full bg-white rounded-lg shadow-lg overflow-hidden"
@@ -238,7 +273,6 @@ const ShiftExchangePage: React.FC = () => {
                 </button>
               </div>
               
-              {/* Message pour le swipe sur mobile */}
               {isMobile && (
                 <p className="text-[9px] text-gray-400 italic">
                   Glissez horizontalement pour naviguer entre les mois
@@ -261,10 +295,10 @@ const ShiftExchangePage: React.FC = () => {
               hideSecondaryDesiderata={filterOptions.hideSecondaryDesiderata}
               user={user}
               users={users}
-              onToggleInterest={(exchange) => handleToggleInterest(exchange as unknown as import('../types').ShiftExchange)}
+              onToggleInterest={handleToggleInterest}
               isInteractionDisabled={isInteractionDisabled}
               selectedDate={selectedDate}
-              onSelectDate={handleSelectDate}
+              onSelectDate={setSelectedDate}
               receivedShifts={receivedShifts}
               currentMonth={currentMonth}
               calendarViewMode={calendarViewMode}
@@ -296,17 +330,34 @@ const ShiftExchangePage: React.FC = () => {
       </div>
     );
   }, [
-    user, calendarContainerRef, currentMonth, goToPrevious, goToNext, 
-    calendarViewMode, setCalendarViewMode, getDaysToDisplay, 
-    filteredExchanges, userAssignments, conflictStates, 
-    interestedPeriodsMap, conflictPeriodsMap, filterOptions.showDesiderata,
-    users, handleToggleInterest, isInteractionDisabled, 
-    receivedShifts, bagPhaseConfig, isMobile
+    user, calendarContainerRef, currentMonth, goToPrevious, goToNext,
+    getDaysToDisplay, filteredExchanges, userAssignments, conflictStates,
+    interestedPeriodsMap, conflictPeriodsMap, filterOptions, users,
+    handleToggleInterest, isInteractionDisabled, selectedDate, receivedShifts,
+    bagPhaseConfig, isMobile, calendarViewMode
   ]);
+  
+  // Toast pour les messages
+  useEffect(() => {
+    if (toast.visible) {
+      const timer = setTimeout(() => {
+        setToast(prev => ({ ...prev, visible: false }));
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast.visible]);
 
   return (
     <>
-      {/* Utilisation du template de page d'échange */}
+      {/* Toast pour les notifications */}
+      <Toast 
+        message={toast.message}
+        isVisible={toast.visible}
+        type={toast.type}
+        onClose={() => setToast(prev => ({ ...prev, visible: false }))}
+      />
+      
+      {/* Template de page principal */}
       <ExchangePageTemplate
         title="Bourse aux Gardes"
         user={user}
@@ -322,7 +373,7 @@ const ShiftExchangePage: React.FC = () => {
         interestedPeriodsMap={interestedPeriodsMap}
         bagPhaseConfig={bagPhaseConfig}
         isInteractionDisabled={isInteractionDisabled}
-        onToggleInterest={(exchange) => handleToggleInterest(exchange as unknown as import('../types').ShiftExchange)}
+        onToggleInterest={handleToggleInterest}
         className={bottomNavPadding}
         filterOptions={{
           showOwnShifts: filterOptions.showOwnShifts,
@@ -348,11 +399,15 @@ const ShiftExchangePage: React.FC = () => {
       {/* Modals */}
       <ConflictModal
         isOpen={showConflictModal}
-        onClose={handleCloseConflictModal}
+        onClose={() => {
+          setShowConflictModal(false);
+          setConflictExchange(null);
+          setExchangeUser(null);
+        }}
         onConfirm={handleConfirmConflict}
-        exchange={conflictExchange as unknown as import('../../../types/planning').ShiftExchange}
+        exchange={conflictExchange}
         exchangeUser={exchangeUser}
-        helpText={conflictHelpText}
+        helpText="Cela signifie que vous avez déjà une garde. Vous pouvez quand même vous positionner, un échange sera proposé sous validation de l'administrateur."
       />
 
       {/* Modal pour afficher les commentaires sur mobile */}

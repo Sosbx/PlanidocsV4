@@ -3,7 +3,6 @@ import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { UserCheck, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, ArrowLeftRight } from 'lucide-react';
 import { isGrayedOut, formatWithCapitalizedMonth, getPeriodDisplayText } from '../../../utils/dateUtils';
-import { useReplacementManagement } from '../hooks/useReplacementManagement';
 import CompletedPhaseExchangeItem from './CompletedPhaseExchangeItem';
 import type { BagPhaseConfig } from '../types';
 import { debounce } from '../../../utils/debounce';
@@ -74,13 +73,38 @@ const GroupedShiftExchangeList: React.FC<GroupedShiftExchangeListProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const indicatorRef = useRef<HTMLDivElement>(null);
   
-  // Utiliser le hook de gestion des remplaçants
-  const { 
-    proposingShift, 
-    removingShift, 
-    handleProposeToReplacements, 
-    handleRemoveFromExchange 
-  } = useReplacementManagement();
+  // États locaux pour gérer les remplacements
+  const [proposingShift, setProposingShift] = useState<string | null>(null);
+  const [removingShift, setRemovingShift] = useState<string | null>(null);
+  
+  // Fonctions placeholder pour les remplacements
+  const handleProposeToReplacements = useCallback(async (exchange: ShiftExchange) => {
+    try {
+      setProposingShift(exchange.id);
+      // TODO: Implémenter la proposition aux remplaçants
+      console.log('Proposition aux remplaçants pour:', exchange);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      alert('Fonctionnalité de proposition aux remplaçants à implémenter');
+    } catch (error) {
+      console.error('Erreur:', error);
+    } finally {
+      setProposingShift(null);
+    }
+  }, []);
+  
+  const handleRemoveFromExchange = useCallback(async (exchangeId: string) => {
+    try {
+      setRemovingShift(exchangeId);
+      // TODO: Implémenter le retrait de l'échange
+      console.log('Retrait de l\'échange:', exchangeId);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      alert('Fonctionnalité de retrait à implémenter');
+    } catch (error) {
+      console.error('Erreur:', error);
+    } finally {
+      setRemovingShift(null);
+    }
+  }, []);
 
   // Récupérer les désidératas (incluant les archivés)
   const { selections, isLoading: isLoadingDesiderata } = useDesiderataState(true);
