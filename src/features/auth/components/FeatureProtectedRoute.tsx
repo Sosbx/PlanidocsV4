@@ -4,7 +4,7 @@ import { useFeatureFlags } from '../../../context/featureFlags/FeatureFlagsConte
 import { useSuperAdmin } from '../../../context/superAdmin/SuperAdminContext';
 import { FeatureKey } from '../../../types/featureFlags';
 import { useAuth } from '../hooks/useAuth';
-import { toast } from 'react-toastify';
+import { toast } from '../../../hooks/useToast';
 
 interface FeatureProtectedRouteProps {
   children: React.ReactNode;

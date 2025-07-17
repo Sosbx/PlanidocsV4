@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 // import { FixedSizeList as List } from 'react-window'; // Désactivé temporairement pour la virtualisation
 import { getMonthsInRange } from '../utils/dateUtils';
+import { createParisDate } from '../utils/timezoneUtils';
 import MonthTable from './MonthTable';
 import type { ShiftAssignment } from '../types/planning';
 import type { ShiftExchange } from '../types/exchange';
@@ -29,10 +30,11 @@ interface VirtualizedMonthListProps {
   todayRef?: React.RefObject<HTMLDivElement>;
   isFirstDayOfBagPeriod?: (date: Date) => boolean;
   onCellClick: (event: React.MouseEvent, cellKey: string, assignment: ShiftAssignment) => void;
-  height?: number;
+  height?: number | string;
   width?: number | string;
   onLoadPreviousMonth?: () => void;
   onLoadNextMonth?: () => void;
+  maxMonths?: number;
 }
 
 /**
@@ -56,18 +58,39 @@ const VirtualizedMonthList: React.FC<VirtualizedMonthListProps> = ({
   todayRef,
   isFirstDayOfBagPeriod,
   onCellClick,
-  height = 600,
+  height = 'calc(100vh - 250px)', // Hauteur dynamique optimisée pour petits écrans
   width = '100%',
   onLoadPreviousMonth,
-  onLoadNextMonth
+  onLoadNextMonth,
+  maxMonths = 7 // Maximum 7 mois affichés simultanément
 }) => {
   // État local pour les mois - permettra de forcer des re-rendus
   const [monthsState, setMonthsState] = useState(() => getMonthsInRange(startDate, endDate));
   
-  // Mémoïser le calcul des mois dans la plage de dates
+  // Mémoïser le calcul des mois dans la plage de dates avec limite
   const months = useMemo(() => {
-    return getMonthsInRange(startDate, endDate);
-  }, [startDate, endDate]);
+    const allMonths = getMonthsInRange(startDate, endDate);
+    // Limiter le nombre de mois affichés si nécessaire
+    if (allMonths.length > maxMonths) {
+      // Prioriser les mois autour de la date actuelle
+      const today = createParisDate();
+      const currentMonthIndex = allMonths.findIndex(month => 
+        month.getFullYear() === today.getFullYear() && 
+        month.getMonth() === today.getMonth()
+      );
+      
+      if (currentMonthIndex !== -1) {
+        // Afficher les mois autour du mois actuel
+        const startIndex = Math.max(0, currentMonthIndex - Math.floor(maxMonths / 2));
+        const endIndex = Math.min(allMonths.length, startIndex + maxMonths);
+        return allMonths.slice(startIndex, endIndex);
+      } else {
+        // Si le mois actuel n'est pas dans la plage, afficher les premiers mois
+        return allMonths.slice(0, maxMonths);
+      }
+    }
+    return allMonths;
+  }, [startDate, endDate, maxMonths]);
   
   // Mémoïser la hauteur approximative d'un mois (300px par défaut)
   const itemHeight = useMemo(() => {
@@ -102,14 +125,14 @@ const VirtualizedMonthList: React.FC<VirtualizedMonthListProps> = ({
         height: height,
         width: width,
         overflowX: 'auto',
-        overflowY: 'auto',
+        overflowY: 'auto', // Permettre le scroll vertical pour les petits écrans
         whiteSpace: 'nowrap',
         padding: '10px 0',
-        border: 'none', // S'assurer qu'il n'y a pas de bordure
-        maxWidth: '100%', // Assurer que le conteneur ne dépasse pas la largeur de son parent
-        position: 'relative', // Ajouter position relative pour le contexte de positionnement
-        display: 'block', // Forcer l'affichage en bloc
-        boxSizing: 'border-box' // S'assurer que le padding est inclus dans la largeur
+        border: 'none',
+        maxWidth: '100%',
+        position: 'relative',
+        display: 'block',
+        boxSizing: 'border-box'
       }}
     >
       <div 

@@ -1,24 +1,28 @@
 // Pages Mes Désiderata
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { createParisDate } from '@/utils/timezoneUtils';
 import { Calendar, Save, Download, HelpCircle, Clock, Columns, LayoutList } from 'lucide-react';
 import FloatingControlBar from '../../../components/FloatingControlBar';
 import { format } from 'date-fns';
+import { formatParisDate } from '../../../utils/timezoneUtils';
 import PlanningTable from '../../../components/PlanningTable';
 import { usePlanningConfig } from '../../../context/planning/PlanningContext';
 import { useAuth } from '../../../features/auth/hooks';
 import { useDesiderata } from '../../../features/planning/hooks/useDesiderata';
-import Toast from '../../../components/Toast';
+import Toast from '../../../components/common/Toast';
 import { getDesiderata } from '../../../lib/firebase/desiderata';
 import { loadPdfExporter, loadCsvPlanningExporter } from '../../../utils/lazyExporters';
 import Tutorial from '../../../components/Tutorial';
 import { Selections, PeriodSelection } from '../../../types/planning';
 import { useBottomNavPadding } from '../../../hooks/useBottomNavPadding';
+import { useAssociation } from '../../../context/association/AssociationContext';
 
 const UserPage: React.FC = () => {
   const { config } = usePlanningConfig();
   const { user } = useAuth();
   const { validateDesiderata, isSaving } = useDesiderata();
   const bottomNavPadding = useBottomNavPadding({ extraPadding: true });
+  const { currentAssociation } = useAssociation();
   const [isValidated, setIsValidated] = useState(user?.hasValidatedPlanning || false);
   const [showTutorial, setShowTutorial] = useState(false);
   const [validatedSelections, setValidatedSelections] = useState<Record<string, PeriodSelection>>({});
@@ -46,7 +50,8 @@ const UserPage: React.FC = () => {
     const loadSelections = async () => {
       if (user) {
         try {
-          const desiderata = await getDesiderata(user.id);
+          const desiderata = await getDesiderata(user.id, currentAssociation);
+          
           if (desiderata?.selections) {
             // Conversion explicite pour satisfaire le typage
             const simpleSelections = Object.entries(desiderata.selections).reduce((acc, [key, value]) => {
@@ -71,7 +76,7 @@ const UserPage: React.FC = () => {
       }
     };
     loadSelections();
-  }, [user]);
+  }, [user, currentAssociation]);
 
   // Mettre à jour l'état de validation quand l'utilisateur change
   useEffect(() => {
@@ -119,7 +124,7 @@ const UserPage: React.FC = () => {
   useEffect(() => {
     const checkDeadline = () => {
       if (config.deadline) {
-        setIsDeadlineExpired(new Date() > config.deadline);
+        setIsDeadlineExpired(createParisDate() > config.deadline);
       }
     };
 
@@ -156,7 +161,7 @@ const UserPage: React.FC = () => {
       };
     }
 
-    const now = new Date();
+    const now = createParisDate();
     const difference = deadline.getTime() - now.getTime();
     const isExpired = difference <= 0;
 
@@ -190,7 +195,7 @@ const UserPage: React.FC = () => {
     try {
       // Sauvegarder les sélections actuelles
       await planningRef.saveSelections();
-      const currentDesiderata = await getDesiderata(user.id);
+      const currentDesiderata = await getDesiderata(user.id, currentAssociation);
       const selections = currentDesiderata?.selections || {};
       
       // Valider le planning
@@ -265,21 +270,7 @@ const UserPage: React.FC = () => {
       });
       
       try {
-        // Afficher les sélections validées pour débogage
-        console.log("validatedSelections pour PDF:", validatedSelections);
-        console.log("Nombre de sélections pour PDF:", Object.keys(validatedSelections).length);
-        
-        // Ne pas transformer les données - transmettre directement les validatedSelections
-        // Cela permettra de conserver la structure avec les commentaires
-        
-        // Afficher les données pour débogage
-        console.log("Données envoyées pour PDF:", validatedSelections);
-        console.log("Nombre de sélections pour PDF:", Object.keys(validatedSelections).length);
-        
         const exportPlanningToPDF = await loadPdfExporter();
-        
-        // Nous gardons validatedSelections tel quel pour conserver les commentaires
-        // et pour que l'exportateur PDF puisse les récupérer
         
         exportPlanningToPDF({
           userName: `${user.lastName}_${user.firstName}`,
@@ -386,10 +377,7 @@ const UserPage: React.FC = () => {
                 </div>
               </div>
               <div className="text-[10px] text-gray-500 italic">
-                MàJ : {new Date().toLocaleDateString('fr-FR', {
-                  day: 'numeric',
-                  month: 'short',
-                })}
+                MàJ : {formatParisDate(createParisDate(), 'dd MMM')}
               </div>
             </div>
           ) : (

@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { createParisDate, formatParisDate } from '@/utils/timezoneUtils';
 import { format } from 'date-fns';
 import { User } from '../../../types/users';
 import { GeneratedPlanning, PlanningPeriod, ShiftAssignment } from '../../../types/planning';
@@ -250,7 +251,7 @@ export const useImport = ({
       const hasTwoPeriods = pastPeriodId && futurePeriodId && pastPeriod && futurePeriod;
       
       // Date limite séparant passé et futur
-      const today = new Date();
+      const today = createParisDate();
       today.setHours(0, 0, 0, 0);
       
       for (let i = 0; i < validFiles.length; i++) {
@@ -283,7 +284,7 @@ export const useImport = ({
               const assignmentTime = assignmentDate.getTime();
               
               if (assignmentTime < periodStartTime || assignmentTime > periodEndTime) {
-                datesOutOfRange.push(format(assignmentDate, 'dd/MM/yyyy'));
+                datesOutOfRange.push(formatParisDate(assignmentDate, 'dd/MM/yyyy'));
               }
             }
             
@@ -295,7 +296,7 @@ export const useImport = ({
                 
               failedFiles.push({
                 fileName: file.name,
-                reason: `Certaines dates sont en dehors de la période sélectionnée (${format(selectedPeriod.startDate, 'dd/MM/yyyy')} - ${format(selectedPeriod.endDate, 'dd/MM/yyyy')}). Dates hors période : ${displayDates}`
+                reason: `Certaines dates sont en dehors de la période sélectionnée (${formatParisDate(selectedPeriod.startDate, 'dd/MM/yyyy')} - ${formatParisDate(selectedPeriod.endDate, 'dd/MM/yyyy')}). Dates hors période : ${displayDates}`
               });
               continue;
             }
@@ -303,11 +304,11 @@ export const useImport = ({
             const planning: GeneratedPlanning = {
               periodId: selectedPeriodId,
               assignments,
-              uploadedAt: new Date(),
+              uploadedAt: createParisDate(),
               periods: {
                 [selectedPeriodId]: {
                   assignments,
-                  uploadedAt: new Date()
+                  uploadedAt: createParisDate()
                 }
               }
             };
@@ -385,7 +386,7 @@ export const useImport = ({
                 const assignmentTime = assignmentDate.getTime();
                 
                 if (assignmentTime < pastPeriodStartTime || assignmentTime > pastPeriodEndTime) {
-                  pastDatesOutOfRange.push(format(assignmentDate, 'dd/MM/yyyy'));
+                  pastDatesOutOfRange.push(formatParisDate(assignmentDate, 'dd/MM/yyyy'));
                 }
               }
               
@@ -410,11 +411,11 @@ export const useImport = ({
               const pastPlanning: GeneratedPlanning = {
                 periodId: pastPeriodId,
                 assignments: pastAssignments,
-                uploadedAt: new Date(),
+                uploadedAt: createParisDate(),
                 periods: {
                   [pastPeriodId]: {
                     assignments: pastAssignments,
-                    uploadedAt: new Date(),
+                    uploadedAt: createParisDate(),
                     isArchived: true // Explicitement marquer comme archivée
                   }
                 }
@@ -448,7 +449,7 @@ export const useImport = ({
                 const assignmentTime = assignmentDate.getTime();
                 
                 if (assignmentTime < futurePeriodStartTime || assignmentTime > futurePeriodEndTime) {
-                  futureDatesOutOfRange.push(format(assignmentDate, 'dd/MM/yyyy'));
+                  futureDatesOutOfRange.push(formatParisDate(assignmentDate, 'dd/MM/yyyy'));
                 }
               }
               
@@ -457,11 +458,11 @@ export const useImport = ({
                 const futurePlanning: GeneratedPlanning = {
                   periodId: futurePeriodId,
                   assignments: futureAssignments,
-                  uploadedAt: new Date(),
+                  uploadedAt: createParisDate(),
                   periods: {
                     [futurePeriodId]: {
                       assignments: futureAssignments,
-                      uploadedAt: new Date(),
+                      uploadedAt: createParisDate(),
                       isArchived: false // Explicitement marquer comme non-archivée
                     }
                   }

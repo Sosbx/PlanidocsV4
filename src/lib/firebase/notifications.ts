@@ -1,4 +1,5 @@
 import { collection, query, where, orderBy, getDocs, addDoc, updateDoc, doc, Timestamp, writeBatch, deleteDoc } from 'firebase/firestore';
+import { createParisDate, firebaseTimestampToParisDate } from '@/utils/timezoneUtils';
 import { db } from './config';
 import { ShiftPeriod } from '../../types/exchange';
 import { getPeriodDisplayText, formatDate } from '../../utils/dateUtils';
@@ -142,7 +143,7 @@ export const getNotificationsForUser = async (
         type: data.type,
         iconType: data.iconType || NotificationIconType.NONE,
         read: data.read,
-        createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : new Date().toISOString(),
+        createdAt: data.createdAt?.toDate ? firebaseTimestampToParisDate(data.createdAt).toISOString() : createParisDate().toISOString(),
         relatedId: data.relatedId,
         link: data.link,
         actionText: data.actionText,
@@ -229,7 +230,7 @@ export const addNotification = async (
           relatedId: options.relatedId || '',
           link: options.link || '',
           type: options.type,
-          createdAt: new Date().toISOString()
+          createdAt: createParisDate().toISOString()
         }
       };
       

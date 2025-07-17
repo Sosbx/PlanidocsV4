@@ -11,6 +11,7 @@ import {
   runTransaction, 
   Timestamp 
 } from 'firebase/firestore';
+import { createParisDate } from '@/utils/timezoneUtils';
 import { db } from '../config';
 import { COLLECTIONS } from './types';
 import { auth } from '../config';
@@ -349,7 +350,7 @@ export class ReplacementTransactionService {
                 shiftType: proposalData.targetShift.shiftType,
                 timeSlot: proposalData.targetShift.timeSlot,
                 replacedBy: user.id,
-                replacementDate: new Date()
+                replacementDate: createParisDate()
               }
             },
             'update'

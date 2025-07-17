@@ -1,0 +1,76 @@
+{
+  "name": "Planidocs V4 - Gestion de Planning Médical",
+  "short_name": "Planidocs",
+  "description": "Application de gestion de planning et d'échange de gardes entre médecins",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#3b82f6",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "lang": "fr",
+  "categories": ["medical", "productivity", "business"],
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "16x16 32x32 48x48",
+      "type": "image/x-icon",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "prefer_related_applications": false,
+  "shortcuts": [
+    {
+      "name": "Planning Personnel",
+      "short_name": "Planning",
+      "description": "Consulter mon planning personnel",
+      "url": "/planning",
+      "icons": [
+        {
+          "src": "/favicon.ico",
+          "sizes": "16x16 32x32 48x48"
+        }
+      ]
+    },
+    {
+      "name": "Bourse aux Gardes",
+      "short_name": "Échanges",
+      "description": "Gérer les échanges de gardes",
+      "url": "/shift-exchange",
+      "icons": [
+        {
+          "src": "/favicon.ico",
+          "sizes": "16x16 32x32 48x48"
+        }
+      ]
+    },
+    {
+      "name": "Échanges Directs",
+      "short_name": "Direct",
+      "description": "Échanges directs entre médecins",
+      "url": "/direct-exchange",
+      "icons": [
+        {
+          "src": "/favicon.ico",
+          "sizes": "16x16 32x32 48x48"
+        }
+      ]
+    }
+  ],
+  "capture_links": "existing-client-navigate",
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  }
+}

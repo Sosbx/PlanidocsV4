@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
+import { formatParisDate } from '@/utils/timezoneUtils';
 import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { frLocale } from '../../../../utils/dateLocale';
 import { saveGeneratedPlanning, createPlanningPeriod, deletePlanningPeriod } from '../../../../lib/firebase/planning';
 import { useImportExport } from '../../hooks';
 import { X, Upload, Calendar, Clock, Plus, Trash2 } from 'lucide-react';
@@ -242,7 +243,7 @@ const ImportModal: React.FC<ImportModalProps> = ({
                         {period.name}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {format(period.startDate, 'dd/MM/yyyy', { locale: fr })} - {format(period.endDate, 'dd/MM/yyyy', { locale: fr })}
+                        {formatParisDate(period.startDate, 'dd/MM/yyyy', { locale: frLocale })} - {formatParisDate(period.endDate, 'dd/MM/yyyy', { locale: frLocale })}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${

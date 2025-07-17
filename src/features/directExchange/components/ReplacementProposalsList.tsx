@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { formatParisDate } from '@/utils/timezoneUtils';
 import { CalendarClock, User, MessageSquare, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { useReplacementService } from '../hooks/useReplacementService';
 import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { frLocale } from '../../../utils/dateLocale';
 import { standardizePeriod } from '../../../utils/periodUtils';
 
 interface ReplacementProposalsListProps {
@@ -89,7 +90,7 @@ export const ReplacementProposalsList: React.FC<ReplacementProposalsListProps> =
   const formatDate = (dateString: string) => {
     try {
       const date = new Date(dateString);
-      return format(date, 'EEE d MMM yyyy', { locale: fr });
+      return formatParisDate(date, 'EEE d MMM yyyy', { locale: frLocale });
     } catch (e) {
       return dateString;
     }

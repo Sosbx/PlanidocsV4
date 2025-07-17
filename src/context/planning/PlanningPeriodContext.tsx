@@ -1,26 +1,11 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { doc, onSnapshot, collection, setDoc } from 'firebase/firestore';
-import { db } from "../../lib/firebase/config";
 import { useBagPhase } from '../shiftExchange';
-import { 
-  PlanningPeriod as PlanningPeriodType
-} from '../../types/planning';
-import { 
-  getPlanningPeriods, 
-  createPlanningPeriod, 
-  updatePlanningPeriod, 
-  deletePlanningPeriod,
-  validateBagAndMergePeriods
-} from '../../lib/firebase/planning';
+import { PlanningPeriod as PlanningPeriodType } from '../../types/planning';
 import { subDays, isBefore } from 'date-fns';
-
-/**
- * Interface pour la période de planning simplifiée (compatibilité)
- */
-interface SimplePlanningPeriod {
-  startDate: Date;
-  endDate: Date;
-}
+import { useAssociation } from '../association/AssociationContext';
+import { startOfDayParis, endOfDayParis, createParisDate, addMonthsParis } from '../../utils/timezoneUtils';
+import { getPlanningRepository } from '../../api/implementations/PlanningRepository';
+import { SimplePlanningPeriod } from '../../api/interfaces/IPlanningRepository';
 
 /**
  * Type pour le contexte de période de planning
@@ -60,93 +45,48 @@ const PlanningPeriodContext = createContext<PlanningPeriodContextType | undefine
  */
 export const PlanningPeriodProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { config: bagPhaseConfig } = useBagPhase();
+  const { currentAssociation } = useAssociation();
   const [currentPeriod, setCurrentPeriod] = useState<SimplePlanningPeriod>({
-    startDate: new Date(),
-    endDate: new Date(new Date().setMonth(new Date().getMonth() + 3))
+    startDate: createParisDate(),
+    endDate: addMonthsParis(createParisDate(), 3)
   });
   const [futurePeriod, setFuturePeriod] = useState<SimplePlanningPeriod | null>(null);
   const [allPeriods, setAllPeriods] = useState<PlanningPeriodType[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  
+  const repository = getPlanningRepository();
 
   // Charger les périodes depuis Firestore (compatibilité)
   useEffect(() => {
-    const unsubscribe = onSnapshot(doc(db, 'config', 'planning_periods'), (doc) => {
-      if (doc.exists()) {
-        const data = doc.data();
-        
-        if (data.currentPeriod) {
-          setCurrentPeriod({
-            startDate: data.currentPeriod.startDate.toDate(),
-            endDate: data.currentPeriod.endDate.toDate()
-          });
-        }
-        
-        if (data.futurePeriod) {
-          setFuturePeriod({
-            startDate: data.futurePeriod.startDate.toDate(),
-            endDate: data.futurePeriod.endDate.toDate()
-          });
-        } else {
-          setFuturePeriod(null);
-        }
+    if (!currentAssociation) return;
+    
+    const unsubscribe = repository.subscribeToPeriodsConfig(currentAssociation, (data) => {
+      if (data.currentPeriod) {
+        setCurrentPeriod(data.currentPeriod);
+      }
+      
+      if (data.futurePeriod) {
+        setFuturePeriod(data.futurePeriod);
+      } else {
+        setFuturePeriod(null);
       }
     });
     
     return () => unsubscribe();
-  }, []);
-
-  /**
-   * Crée une période par défaut si aucune période n'existe
-   * @returns ID de la période créée ou null en cas d'erreur
-   */
-  const createDefaultPeriod = async (): Promise<string | null> => {
-    try {
-      const today = new Date();
-      const endDate = new Date(today);
-      endDate.setMonth(today.getMonth() + 3); // 3 mois dans le futur
-      
-      const defaultPeriod: Omit<PlanningPeriodType, 'id'> = {
-        name: 'Période par défaut',
-        startDate: today,
-        endDate: endDate,
-        status: 'active',
-        bagPhase: 'completed',
-        isValidated: true,
-        validatedAt: today
-      };
-      
-      // Créer la période dans Firebase
-      const periodId = await createPlanningPeriod(defaultPeriod);
-      
-      // Mettre à jour la configuration globale
-      await setDoc(doc(db, 'config', 'planning_periods'), {
-        currentPeriod: {
-          startDate: today,
-          endDate: endDate
-        },
-        futurePeriod: null
-      });
-      
-      return periodId;
-    } catch (error) {
-      console.error('Erreur lors de la création de la période par défaut:', error);
-      return null;
-    }
-  };
+  }, [currentAssociation, repository]);
 
   // Charger toutes les périodes
   useEffect(() => {
+    if (!currentAssociation) return;
+    
     const loadPeriods = async () => {
       setIsLoading(true);
       try {
-        const periods = await getPlanningPeriods();
+        const periods = await repository.getPlanningPeriods(currentAssociation);
         setAllPeriods(periods);
-        
-        // La création automatique de période par défaut a été supprimée
       } catch (error) {
         console.error('Error loading planning periods:', error);
       } finally {
-        // Toujours terminer l'état de chargement, même en cas d'erreur
         setIsLoading(false);
       }
     };
@@ -154,23 +94,12 @@ export const PlanningPeriodProvider: React.FC<{ children: React.ReactNode }> = (
     loadPeriods();
     
     // Écouter les changements dans la collection planning_periods
-    const unsubscribe = onSnapshot(collection(db, 'planning_periods'), (snapshot) => {
-      const periods: PlanningPeriodType[] = snapshot.docs.map(doc => ({
-        id: doc.id,
-        name: doc.data().name,
-        startDate: doc.data().startDate.toDate(),
-        endDate: doc.data().endDate.toDate(),
-        status: doc.data().status,
-        bagPhase: doc.data().bagPhase,
-        isValidated: doc.data().isValidated,
-        validatedAt: doc.data().validatedAt?.toDate() || null
-      }));
-      
+    const unsubscribe = repository.subscribeToPlanningPeriods(currentAssociation, (periods) => {
       setAllPeriods(periods);
     });
     
     return () => unsubscribe();
-  }, []);
+  }, [currentAssociation, repository]);
 
   // Déterminer si la bourse aux gardes est active
   const isBagActive = bagPhaseConfig.phase !== 'completed' || !bagPhaseConfig.isValidated;
@@ -183,14 +112,9 @@ export const PlanningPeriodProvider: React.FC<{ children: React.ReactNode }> = (
   const isInBagPeriod = (date: Date): boolean => {
     if (!futurePeriod) return false;
     
-    const checkDate = new Date(date);
-    checkDate.setHours(0, 0, 0, 0);
-    
-    const startDate = new Date(futurePeriod.startDate);
-    startDate.setHours(0, 0, 0, 0);
-    
-    const endDate = new Date(futurePeriod.endDate);
-    endDate.setHours(23, 59, 59, 999);
+    const checkDate = startOfDayParis(date);
+    const startDate = startOfDayParis(futurePeriod.startDate);
+    const endDate = endOfDayParis(futurePeriod.endDate);
     
     return checkDate >= startDate && checkDate <= endDate;
   };
@@ -201,14 +125,9 @@ export const PlanningPeriodProvider: React.FC<{ children: React.ReactNode }> = (
    * @returns true si la date est dans la période courante, false sinon
    */
   const isInCurrentPeriod = (date: Date): boolean => {
-    const checkDate = new Date(date);
-    checkDate.setHours(0, 0, 0, 0);
-    
-    const startDate = new Date(currentPeriod.startDate);
-    startDate.setHours(0, 0, 0, 0);
-    
-    const endDate = new Date(currentPeriod.endDate);
-    endDate.setHours(23, 59, 59, 999);
+    const checkDate = startOfDayParis(date);
+    const startDate = startOfDayParis(currentPeriod.startDate);
+    const endDate = endOfDayParis(currentPeriod.endDate);
     
     return checkDate >= startDate && checkDate <= endDate;
   };
@@ -219,11 +138,8 @@ export const PlanningPeriodProvider: React.FC<{ children: React.ReactNode }> = (
    * @returns true si la date est archivée, false sinon
    */
   const isArchived = (date: Date): boolean => {
-    const yesterday = subDays(new Date(), 1);
-    yesterday.setHours(0, 0, 0, 0);
-    
-    const checkDate = new Date(date);
-    checkDate.setHours(0, 0, 0, 0);
+    const yesterday = startOfDayParis(subDays(createParisDate(), 1));
+    const checkDate = startOfDayParis(date);
     
     return isBefore(checkDate, yesterday);
   };
@@ -248,8 +164,10 @@ export const PlanningPeriodProvider: React.FC<{ children: React.ReactNode }> = (
    * Rafraîchit la liste des périodes
    */
   const refreshPeriods = async (): Promise<void> => {
+    if (!currentAssociation) return;
+    
     try {
-      const periods = await getPlanningPeriods();
+      const periods = await repository.getPlanningPeriods(currentAssociation);
       setAllPeriods(periods);
     } catch (error) {
       console.error('Error refreshing planning periods:', error);
@@ -263,8 +181,10 @@ export const PlanningPeriodProvider: React.FC<{ children: React.ReactNode }> = (
    * @returns ID de la période créée
    */
   const createPeriod = async (period: Omit<PlanningPeriodType, 'id'>): Promise<string> => {
+    if (!currentAssociation) throw new Error('Association non définie');
+    
     try {
-      const periodId = await createPlanningPeriod(period);
+      const periodId = await repository.createPlanningPeriod(period, currentAssociation);
       await refreshPeriods();
       return periodId;
     } catch (error) {
@@ -282,8 +202,10 @@ export const PlanningPeriodProvider: React.FC<{ children: React.ReactNode }> = (
     periodId: string, 
     updates: Partial<PlanningPeriodType>
   ): Promise<void> => {
+    if (!currentAssociation) throw new Error('Association non définie');
+    
     try {
-      await updatePlanningPeriod(periodId, updates);
+      await repository.updatePlanningPeriod(periodId, updates, currentAssociation);
       await refreshPeriods();
     } catch (error) {
       console.error('Error updating period:', error);
@@ -296,8 +218,10 @@ export const PlanningPeriodProvider: React.FC<{ children: React.ReactNode }> = (
    * @param periodId - ID de la période
    */
   const deletePeriod = async (periodId: string): Promise<void> => {
+    if (!currentAssociation) throw new Error('Association non définie');
+    
     try {
-      await deletePlanningPeriod(periodId);
+      await repository.deletePlanningPeriod(periodId, currentAssociation);
       await refreshPeriods();
     } catch (error) {
       console.error('Error deleting period:', error);
@@ -310,8 +234,10 @@ export const PlanningPeriodProvider: React.FC<{ children: React.ReactNode }> = (
    * @param futurePeriodId - ID de la période future
    */
   const validateBag = async (futurePeriodId: string): Promise<void> => {
+    if (!currentAssociation) throw new Error('Association non définie');
+    
     try {
-      await validateBagAndMergePeriods(futurePeriodId);
+      await repository.validateBagAndMergePeriods(futurePeriodId, currentAssociation);
       await refreshPeriods();
     } catch (error) {
       console.error('Error validating BAG:', error);

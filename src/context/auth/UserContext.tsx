@@ -1,8 +1,10 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, Profiler } from 'react';
+import { performanceProfiler } from '../../utils/performanceProfiler';
 import type { User } from '../../features/users/types';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from "../../lib/firebase/config";
-import { updateUser, deleteUser, createUser as createUserInFirestore, getCollectionName } from '../../lib/firebase/users';
+import { updateUser, deleteUser, createUser as createUserInFirestore } from '../../lib/firebase/users';
+import { getCollectionName } from '../../utils/collectionUtils';
 import { useAssociation } from '../association/AssociationContext';
 import { useAuth } from '../../features/auth/hooks';
 
@@ -34,11 +36,11 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     // Fonction pour charger les utilisateurs d'une association spécifique
     const loadUsersForAssociation = (associationId: string) => {
-      console.log(`UserContext: Chargement des utilisateurs pour l'association ${associationId}`);
+      // console.log(`UserContext: Chargement des utilisateurs pour l'association ${associationId}`); // Removed for performance
 
       // Obtenir le nom de la collection en fonction de l'association
       const usersCollection = getCollectionName('users', associationId);
-      console.log(`UserContext: Utilisation de la collection ${usersCollection}`);
+      // console.log(`UserContext: Utilisation de la collection ${usersCollection}`); // Removed for performance
 
       // Pour Rive Droite, nous devons inclure les utilisateurs sans associationId
       if (associationId === 'RD') {
@@ -55,7 +57,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
               // Filtrer pour inclure les utilisateurs avec associationId=RD OU sans associationId
               .filter(user => !user.associationId || user.associationId === 'RD');
             
-            console.log(`UserContext: ${updatedUsers.length} utilisateurs chargés pour l'association ${associationId}`);
+            // console.log(`UserContext: ${updatedUsers.length} utilisateurs chargés pour l'association ${associationId}`); // Removed for performance
             setUsers(updatedUsers);
             setLoading(false);
             setError(null);
@@ -75,7 +77,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
               id: doc.id,
               ...doc.data()
             } as User));
-            console.log(`UserContext: ${updatedUsers.length} utilisateurs chargés pour l'association ${associationId}`);
+            // console.log(`UserContext: ${updatedUsers.length} utilisateurs chargés pour l'association ${associationId}`); // Removed for performance
             setUsers(updatedUsers);
             setLoading(false);
             setError(null);
@@ -103,11 +105,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => unsubscribe();
   }, [currentUser, currentAssociation]);
 
-  const contextValue: UserContextType = {
-    users,
-    loading,
-    error,
-    addUser: async (userData) => {
+  // Mémoïser les fonctions pour éviter les re-renders
+  const addUser = useCallback(async (userData: Omit<User, 'id' | 'hasValidatedPlanning'>) => {
       // Déterminer l'association à utiliser
       const associationId = currentUser?.associationId || 'RD';
 
@@ -131,8 +130,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } finally {
         setLoading(false);
       }
-    },
-    updateUser: async (id, userData) => {
+  }, [currentUser]);
+
+  const updateUserCallback = useCallback(async (id: string, userData: Partial<User>) => {
       // Déterminer l'association à utiliser
       const associationId = currentUser?.associationId || 'RD';
 
@@ -148,8 +148,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setError(error.message);
         throw error;
       }
-    },
-    deleteUser: async (id) => {
+  }, [currentUser]);
+
+  const deleteUserCallback = useCallback(async (id: string) => {
       // Déterminer l'association à utiliser
       const associationId = currentUser?.associationId || 'RD';
 
@@ -163,13 +164,25 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setError(error.message);
         throw error;
       }
-    },
-  };
+  }, [currentUser]);
 
+  // Mémoïser la valeur du contexte pour éviter les re-renders inutiles
+  const contextValue: UserContextType = useMemo(() => ({
+    users,
+    loading,
+    error,
+    addUser,
+    updateUser: updateUserCallback,
+    deleteUser: deleteUserCallback
+  }), [users, loading, error, addUser, updateUserCallback, deleteUserCallback]);
+
+  // Optimisation : ne re-rendre que si nécessaire
   return (
-    <UserContext.Provider value={contextValue}>
-      {children}
-    </UserContext.Provider>
+    <Profiler id="UserProvider" onRender={performanceProfiler.onRender}>
+      <UserContext.Provider value={contextValue}>
+        {children}
+      </UserContext.Provider>
+    </Profiler>
   );
 };
 

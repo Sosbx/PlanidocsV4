@@ -10,10 +10,12 @@ import {
   getDoc,
   serverTimestamp
 } from 'firebase/firestore';
+import { createParisDate, firebaseTimestampToParisDate } from '@/utils/timezoneUtils';
 import { db } from './config';
 import { COLLECTIONS } from './directExchange/types';
 import { ShiftPeriod } from '../../types/exchange';
 import { normalizePeriod } from '../../utils/dateUtils';
+import { getCollectionName, COLLECTIONS as COLLECTION_NAMES } from '../../utils/collectionUtils';
 
 // Interface pour le verrouillage d'un échange
 export interface LockOptions {
@@ -225,7 +227,7 @@ export const unlockExchange = (
 export const cleanupExpiredLocks = async () => {
   try {
     const batch = writeBatch(db);
-    const now = new Date();
+    const now = createParisDate();
     
     // Nettoyer les collections d'échanges directs
     const directExchangesQuery = query(
@@ -237,7 +239,7 @@ export const cleanupExpiredLocks = async () => {
     
     directExchangesDocs.forEach(doc => {
       const data = doc.data();
-      if (data.lockedUntil && data.lockedUntil.toDate() < now) {
+      if (data.lockedUntil && firebaseTimestampToParisDate(data.lockedUntil) < now) {
         batch.update(doc.ref, {
           locked: false,
           lockedBy: null,
@@ -324,14 +326,15 @@ export const syncExchangeSystems = async (
 /**
  * Supprime une période de planning en cascade (plannings et échanges)
  * @param periodId ID de la période à supprimer
+ * @param associationId ID de l'association (optionnel, défaut: 'RD')
  */
-export const deletePlanningPeriodWithCascade = async (periodId: string): Promise<void> => {
+export const deletePlanningPeriodWithCascade = async (periodId: string, associationId: string = 'RD'): Promise<void> => {
   try {
     const batch = writeBatch(db);
     
     // 1. Récupérer tous les plannings pour cette période
     const planningsQuery = query(
-      collection(db, 'generated_plannings')
+      collection(db, getCollectionName(COLLECTION_NAMES.GENERATED_PLANNINGS, associationId))
     );
     
     const planningsSnapshot = await getDocs(planningsQuery);
@@ -350,7 +353,7 @@ export const deletePlanningPeriodWithCascade = async (periodId: string): Promise
         affectedUserIds.push(userId);
         
         // Mise à jour pour supprimer la période
-        const planningRef = doc(db, 'generated_plannings', userId);
+        const planningRef = doc(db, getCollectionName(COLLECTION_NAMES.GENERATED_PLANNINGS, associationId), userId);
         batch.update(planningRef, {
           [`periods.${periodId}`]: null
         });
@@ -358,7 +361,7 @@ export const deletePlanningPeriodWithCascade = async (periodId: string): Promise
     }
     
     // 3. Supprimer la période elle-même
-    batch.delete(doc(db, 'planning_periods', periodId));
+    batch.delete(doc(db, getCollectionName(COLLECTION_NAMES.PLANNING_PERIODS, associationId), periodId));
     
     // 4. Exécuter le batch
     await batch.commit();
@@ -366,7 +369,7 @@ export const deletePlanningPeriodWithCascade = async (periodId: string): Promise
     // 5. Maintenant, nettoyer les échanges pour tous les utilisateurs affectés
     // (ceci est fait après le batch car cela peut nécessiter plusieurs opérations)
     for (const userId of affectedUserIds) {
-      await cleanupUserExchanges(userId, periodId);
+      await cleanupUserExchanges(userId, periodId, associationId);
     }
   } catch (error) {
     console.error('Error deleting planning period with cascade:', error);
@@ -378,11 +381,12 @@ export const deletePlanningPeriodWithCascade = async (periodId: string): Promise
  * Nettoie les échanges d'un utilisateur pour une période spécifique
  * @param userId ID de l'utilisateur
  * @param periodId ID de la période
+ * @param associationId ID de l'association (optionnel, défaut: 'RD')
  */
-const cleanupUserExchanges = async (userId: string, periodId: string): Promise<void> => {
+const cleanupUserExchanges = async (userId: string, periodId: string, associationId: string = 'RD'): Promise<void> => {
   try {
     // Récupérer d'abord la période pour connaître ses dates
-    const periodDoc = await getDocs(query(collection(db, 'planning_periods'), where('__name__', '==', periodId)));
+    const periodDoc = await getDocs(query(collection(db, getCollectionName(COLLECTION_NAMES.PLANNING_PERIODS, associationId)), where('__name__', '==', periodId)));
     
     if (periodDoc.empty) {
       console.warn(`Period ${periodId} not found, cannot cleanup exchanges precisely`);
@@ -390,8 +394,8 @@ const cleanupUserExchanges = async (userId: string, periodId: string): Promise<v
     }
     
     const periodData = periodDoc.docs[0].data();
-    const startDate = periodData.startDate.toDate();
-    const endDate = periodData.endDate.toDate();
+    const startDate = firebaseTimestampToParisDate(periodData.startDate);
+    const endDate = firebaseTimestampToParisDate(periodData.endDate);
     
     // Formater les dates au format 'YYYY-MM-DD'
     const formatDate = (date: Date) => {
@@ -406,7 +410,7 @@ const cleanupUserExchanges = async (userId: string, periodId: string): Promise<v
     
     // Récupérer tous les échanges dans cette plage de dates pour cet utilisateur
     const exchangesQuery = query(
-      collection(db, 'shift_exchanges'),
+      collection(db, getCollectionName(COLLECTION_NAMES.SHIFT_EXCHANGES, associationId)),
       where('userId', '==', userId),
       where('date', '>=', formattedStartDate),
       where('date', '<=', formattedEndDate),
@@ -420,7 +424,7 @@ const cleanupUserExchanges = async (userId: string, periodId: string): Promise<v
     exchangesSnapshot.docs.forEach(doc => {
       batch.update(doc.ref, {
         status: 'unavailable',
-        lastModified: new Date()
+        lastModified: createParisDate()
       });
     });
     

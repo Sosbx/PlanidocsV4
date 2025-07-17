@@ -1,11 +1,12 @@
 import React, { useState, useCallback, useMemo } from 'react';
+import { createParisDate, formatParisDate } from '@/utils/timezoneUtils';
 import { usePlanningView } from '../hooks';
 import { LoadingSpinner } from '../../../components/common';
 import { isGrayedOut } from '../../../utils/dateUtils';
 import type { ShiftAssignment } from '../../../types/planning';
 import type { User } from '../../../types/users';
 import { format, addDays, isToday } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { frLocale } from '../../../utils/dateLocale';
 
 // Import des composants nécessaires au rendu des cellules
 import VirtualizedMonthList from '../../../components/VirtualizedMonthList';
@@ -113,7 +114,7 @@ const DoctorPlanningView: React.FC<DoctorPlanningViewProps> = ({
   // Vérifier si un médecin a une garde à une date et période données
   const hasAssignment = useCallback((userId: string, date: Date, period: 'M' | 'AM' | 'S') => {
     const assignments = getFilteredAssignments(userId);
-    const dateStr = format(date, 'yyyy-MM-dd');
+    const dateStr = formatParisDate(date, 'yyyy-MM-dd');
     const key = `${dateStr}-${period}`;
     
     return assignments[key] !== undefined;
@@ -122,7 +123,7 @@ const DoctorPlanningView: React.FC<DoctorPlanningViewProps> = ({
   // Obtenir l'assignation pour un médecin à une date et période données
   const getAssignment = useCallback((userId: string, date: Date, period: 'M' | 'AM' | 'S') => {
     const assignments = getFilteredAssignments(userId);
-    const dateStr = format(date, 'yyyy-MM-dd');
+    const dateStr = formatParisDate(date, 'yyyy-MM-dd');
     const key = `${dateStr}-${period}`;
     
     return assignments[key];
@@ -139,7 +140,7 @@ const DoctorPlanningView: React.FC<DoctorPlanningViewProps> = ({
   
   // Aller au jour actuel
   const goToToday = useCallback(() => {
-    jumpToDate(new Date());
+    jumpToDate(createParisDate());
   }, [jumpToDate]);
   
   // Rendu du mode calendrier
@@ -243,10 +244,10 @@ const DoctorPlanningView: React.FC<DoctorPlanningViewProps> = ({
                   isToday(day) ? 'font-semibold text-blue-700' : 'text-gray-600'
                 }`}>
                   <div>
-                    {format(day, 'd MMMM', { locale: fr })}
+                    {formatParisDate(day, 'd MMMM', { locale: frLocale })}
                   </div>
                   <div className="text-xs text-gray-500">
-                    {format(day, 'EEEE', { locale: fr })}
+                    {formatParisDate(day, 'EEEE', { locale: frLocale })}
                   </div>
                 </td>
                 
@@ -324,7 +325,7 @@ const DoctorPlanningView: React.FC<DoctorPlanningViewProps> = ({
           </button>
 
           <div className="text-gray-700 font-medium ml-2">
-            {format(startDate, 'MMMM yyyy', { locale: fr })}
+            {formatParisDate(startDate, 'MMMM yyyy', { locale: frLocale })}
           </div>
         </div>
         

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { formatParisDate } from '@/utils/timezoneUtils';
 import { X, Save, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import { useBagPhase } from '../hooks/useBagPhase';
@@ -99,7 +100,7 @@ const BagPhaseConfigModal: React.FC<BagPhaseConfigModalProps> = ({ isOpen, onClo
             </label>
             <input
               type="datetime-local"
-              value={format(formData.submissionDeadline, "yyyy-MM-dd'T'HH:mm")}
+              value={formatParisDate(formData.submissionDeadline, "yyyy-MM-dd'T'HH:mm")}
               onChange={(e) => setFormData(prev => ({
                 ...prev,
                 submissionDeadline: new Date(e.target.value)

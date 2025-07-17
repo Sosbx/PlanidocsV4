@@ -69,7 +69,7 @@ export const DEFAULT_FEATURES: Record<FeatureKey, Omit<FeatureFlag, 'id' | 'last
     description: 'Activer le modal d\'échange direct depuis le planning',
     route: '',
     requiredRoles: ['USER'],
-    status: { RD: 'disabled', RG: 'disabled' }
+    status: { RD: 'enabled', RG: 'enabled' }
   },
   [FEATURES.ADMIN_DESIDERATA]: {
     name: 'Gestion des désidérata',

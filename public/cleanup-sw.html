@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nettoyage Service Worker - Planidocs</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .button {
+            background-color: #3b82f6;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px;
+            display: inline-block;
+        }
+        .button:hover {
+            background-color: #2563eb;
+        }
+        .button.danger {
+            background-color: #ef4444;
+        }
+        .button.danger:hover {
+            background-color: #dc2626;
+        }
+        .log {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 20px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .status.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🛠️ Nettoyage Service Worker</h1>
+        <p>Cette page permet de nettoyer les Service Workers problématiques de Planidocs.</p>
+        
+        <div>
+            <button class="button" onclick="checkStatus()">📊 Vérifier l'état</button>
+            <button class="button danger" onclick="cleanupAll()">🧹 Nettoyage complet</button>
+            <button class="button" onclick="registerSimple()">📦 Installer SW Simple</button>
+            <button class="button" onclick="clearLogs()">🗑️ Vider les logs</button>
+        </div>
+        
+        <div id="status"></div>
+        <div class="log" id="logs">Prêt pour le nettoyage...\n</div>
+    </div>
+
+    <script>
+        function log(message) {
+            const logs = document.getElementById('logs');
+            logs.textContent += new Date().toLocaleTimeString() + ' - ' + message + '\n';
+            logs.scrollTop = logs.scrollHeight;
+        }
+
+        function setStatus(message, type = 'success') {
+            const status = document.getElementById('status');
+            status.innerHTML = `<div class="status ${type}">${message}</div>`;
+        }
+
+        async function checkStatus() {
+            log('🔍 Vérification de l\'état des Service Workers...');
+            
+            if (!('serviceWorker' in navigator)) {
+                setStatus('❌ Service Worker non supporté', 'error');
+                log('❌ Service Worker non supporté par ce navigateur');
+                return;
+            }
+
+            try {
+                const registrations = await navigator.serviceWorker.getRegistrations();
+                log(`📋 ${registrations.length} Service Worker(s) trouvé(s)`);
+                
+                registrations.forEach((reg, index) => {
+                    log(`  ${index + 1}. Scope: ${reg.scope}`);
+                    log(`     État: ${reg.active ? 'Actif' : 'Inactif'}`);
+                });
+
+                const cacheNames = await caches.keys();
+                log(`💾 ${cacheNames.length} cache(s) trouvé(s)`);
+                cacheNames.forEach(name => log(`  - ${name}`));
+
+                setStatus(`✅ État vérifié: ${registrations.length} SW, ${cacheNames.length} caches`);
+            } catch (error) {
+                log(`❌ Erreur: ${error.message}`);
+                setStatus('❌ Erreur lors de la vérification', 'error');
+            }
+        }
+
+        async function cleanupAll() {
+            log('🧹 Début du nettoyage complet...');
+
+            if (!('serviceWorker' in navigator)) {
+                setStatus('❌ Service Worker non supporté', 'error');
+                return;
+            }
+
+            try {
+                // Désinscrire tous les Service Workers
+                const registrations = await navigator.serviceWorker.getRegistrations();
+                log(`🗑️ Désinscription de ${registrations.length} Service Worker(s)...`);
+                
+                await Promise.all(
+                    registrations.map(async registration => {
+                        log(`  Désinscription: ${registration.scope}`);
+                        return registration.unregister();
+                    })
+                );
+
+                // Vider tous les caches
+                const cacheNames = await caches.keys();
+                log(`🗑️ Suppression de ${cacheNames.length} cache(s)...`);
+                
+                await Promise.all(
+                    cacheNames.map(async cacheName => {
+                        log(`  Suppression cache: ${cacheName}`);
+                        return caches.delete(cacheName);
+                    })
+                );
+
+                log('✅ Nettoyage complet terminé!');
+                setStatus('✅ Nettoyage complet réussi');
+                
+            } catch (error) {
+                log(`❌ Erreur lors du nettoyage: ${error.message}`);
+                setStatus('❌ Erreur lors du nettoyage', 'error');
+            }
+        }
+
+        async function registerSimple() {
+            log('📦 Enregistrement du Service Worker simple...');
+
+            if (!('serviceWorker' in navigator)) {
+                setStatus('❌ Service Worker non supporté', 'error');
+                return;
+            }
+
+            try {
+                const registration = await navigator.serviceWorker.register('/sw-simple.js', {
+                    scope: '/',
+                    updateViaCache: 'none'
+                });
+
+                log('✅ Service Worker simple enregistré avec succès!');
+                log(`   Scope: ${registration.scope}`);
+                setStatus('✅ Service Worker simple installé');
+
+                // Forcer l'activation
+                if (registration.waiting) {
+                    registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+                    log('⚡ Activation forcée');
+                }
+
+            } catch (error) {
+                log(`❌ Erreur lors de l'enregistrement: ${error.message}`);
+                setStatus('❌ Erreur lors de l\'installation', 'error');
+            }
+        }
+
+        function clearLogs() {
+            document.getElementById('logs').textContent = 'Logs vidés...\n';
+            document.getElementById('status').innerHTML = '';
+        }
+
+        // Auto-vérification au chargement
+        window.addEventListener('load', () => {
+            log('🚀 Page de nettoyage chargée');
+            checkStatus();
+        });
+    </script>
+</body>
+</html>

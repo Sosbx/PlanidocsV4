@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
+import { formatParisDate } from '@/utils/timezoneUtils';
 import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { frLocale } from '../../../utils/dateLocale';
 import { useDirectExchangeTransactions } from '../hooks';
 
 /**
@@ -59,7 +60,7 @@ export const ExchangeHistory: React.FC<ExchangeHistoryProps> = ({
   
   // Formater la date pour l'affichage
   const formatDate = (date: Date) => {
-    return format(date, 'dd MMMM yyyy à HH:mm', { locale: fr });
+    return formatParisDate(date, 'dd MMMM yyyy à HH:mm', { locale: frLocale });
   };
   
   if (loading || isProcessing) {

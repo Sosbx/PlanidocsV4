@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createParisDate, formatParisDate } from '@/utils/timezoneUtils';
 import { format, addDays, subDays, isSameDay, startOfWeek, endOfWeek, isToday as isDateToday } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Calendar, ArrowDown, ArrowUpDown, ArrowLeftRight, Plus, Minus, Eye, UserCheck } from 'lucide-react';
@@ -33,9 +34,9 @@ const PermanentPlanningPreview: React.FC<PermanentPlanningPreviewProps> = ({
 }) => {
   // Access user's desiderata (includeArchived = true pour afficher tous les désidératas)
   const { selections, isLoading } = useDesiderataState(true);
-  const initialDate = selectedDate ? new Date(selectedDate) : new Date();
+  const initialDate = selectedDate ? new Date(selectedDate) : createParisDate();
   const [currentDate, setCurrentDate] = useState<Date>(initialDate);
-  const [viewMode, setViewMode] = useState<'month' | '5days'>('5days');
+  const [viewMode, setViewMode] = useState<'month' | '5days'>('month');
   
   // Ne pas passer automatiquement en mode 5 jours quand une date est sélectionnée
   // L'utilisateur doit le faire manuellement ou utiliser le bouton retour
@@ -68,7 +69,7 @@ const PermanentPlanningPreview: React.FC<PermanentPlanningPreviewProps> = ({
   };
 
   // Générer les dates et s'assurer que la date sélectionnée est centrée en mode 5 jours
-  let dates = getDates();
+  const dates = getDates();
 
   const navigatePrevious = () => {
     if (viewMode === '5days') {
@@ -268,7 +269,7 @@ const PermanentPlanningPreview: React.FC<PermanentPlanningPreviewProps> = ({
       return () => clearTimeout(timer);
     } else if (!selectedDate) {
       // Si aucune date n'est sélectionnée, afficher le mois courant
-      setCurrentDate(new Date());
+      setCurrentDate(createParisDate());
     }
   }, [viewMode, scrollToSelectedDate]);
 
@@ -287,7 +288,7 @@ const PermanentPlanningPreview: React.FC<PermanentPlanningPreviewProps> = ({
           <h3 className="text-[10px] sm:text-xs font-semibold text-gray-700 planning-title truncate max-w-[60px] xs:max-w-none flex-shrink">
             {viewMode === 'month' 
               ? formatWithCapitalizedMonth(currentDate, 'MMM yyyy') 
-              : format(currentDate, 'dd/MM', { locale: fr })}
+              : formatParisDate(currentDate, 'dd/MM', { locale: fr })}
           </h3>
           
           <button 
@@ -341,10 +342,10 @@ const PermanentPlanningPreview: React.FC<PermanentPlanningPreviewProps> = ({
           </thead>
           <tbody>
             {dates.map(date => {
-              const dateStr = format(date, 'yyyy-MM-dd');
+              const dateStr = formatParisDate(date, 'yyyy-MM-dd');
               // Vérifier si cette date correspond à la date sélectionnée
-              const isSelected = selectedDate && format(date, 'yyyy-MM-dd') === selectedDate;
-              const isToday = isSameDay(new Date(), date);
+              const isSelected = selectedDate && formatParisDate(date, 'yyyy-MM-dd') === selectedDate;
+              const isToday = isSameDay(createParisDate(), date);
               const isWeekend = isGrayedOut(date);
 
               return (
@@ -363,10 +364,10 @@ const PermanentPlanningPreview: React.FC<PermanentPlanningPreviewProps> = ({
                     <div className={`${isSelected ? 'bg-indigo-50 rounded px-0.5 xs:px-1 py-0.5 ring-1 ring-indigo-200' : ''}`}>
                       <div className="flex items-center gap-0.5">
                         <span className={`text-[9px] xs:text-[10px] sm:text-[11px] font-semibold ${isSelected ? 'text-indigo-700' : isToday ? 'text-yellow-700' : isWeekend ? 'text-red-600' : ''}`}>
-                          {format(date, 'd', { locale: fr })}
+                          {formatParisDate(date, 'd', { locale: fr })}
                         </span>
                         <span className={`text-[7px] xs:text-[8px] sm:text-[9px] text-gray-500 ${isSelected ? 'text-indigo-500' : ''}`}>
-                          {format(date, 'E', { locale: fr }).substring(0, 1)}
+                          {formatParisDate(date, 'E', { locale: fr }).substring(0, 1)}
                         </span>
                       </div>
                     </div>
@@ -415,9 +416,11 @@ const PermanentPlanningPreview: React.FC<PermanentPlanningPreviewProps> = ({
                           </div>
                         )}
                         
-                        {/* Conflict indicator for user's shifts */}
-                        {hasConflict && assignment && (
-                          <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-500 rounded-full shadow-sm z-10"></div>
+                        {/* Conflict indicator for interested positions with assignments */}
+                        {isInterested && hasConflict && assignment && (
+                          <div className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-red-500 rounded-full shadow-sm flex items-center justify-center z-10">
+                            <ArrowLeftRight className="h-2 w-2 text-white" />
+                          </div>
                         )}
                         
                         {assignment && (
@@ -428,7 +431,6 @@ const PermanentPlanningPreview: React.FC<PermanentPlanningPreviewProps> = ({
                               'badge-evening'}
                             ${isSelected ? 'shadow-md planning-transition' : ''}
                             ${showDesiderata && hasDesiderata ? 'opacity-90' : ''}
-                            ${hasConflict ? 'ring-1 ring-red-500' : ''}
                           `}>
                             {assignment.shiftType}
                           </span>

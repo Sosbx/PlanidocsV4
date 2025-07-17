@@ -8,6 +8,15 @@ export * from './planning';
 // Re-export exchange types
 export * from './exchange';
 
+// Re-export error types
+export * from './errors';
+
+// Re-export Firebase types
+export * from './firebase';
+
+// Re-export handler types
+export * from './handlers';
+
 /**
  * Base user interface with common properties
  * This is a transitional type to handle the different user types

@@ -1,4 +1,5 @@
 import { doc, setDoc, getDoc, deleteDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { createParisDate } from '@/utils/timezoneUtils';
 import { db } from './config';
 import { ASSOCIATIONS } from '../../constants/associations';
 
@@ -38,9 +39,9 @@ export const saveDeviceToken = async (
       userId,
       token,
       associationId,
-      createdAt: new Date().toISOString(),
+      createdAt: createParisDate().toISOString(),
       platform: getPlatformInfo(),
-      lastActive: new Date().toISOString()
+      lastActive: createParisDate().toISOString()
     });
     
     console.log(`Token d'appareil enregistré pour l'utilisateur ${userId}`);
@@ -81,7 +82,7 @@ export const updateDeviceTokenLastActive = async (userId: string, token: string)
     const deviceTokenRef = doc(db, 'device_tokens', `${userId}_${token}`);
     
     await setDoc(deviceTokenRef, {
-      lastActive: new Date().toISOString()
+      lastActive: createParisDate().toISOString()
     }, { merge: true });
     
     return true;

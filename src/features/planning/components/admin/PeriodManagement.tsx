@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createParisDate, formatParisDate } from '@/utils/timezoneUtils';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { ConfirmationModal } from '../../../../components/modals';
@@ -25,9 +26,9 @@ const PeriodManagement: React.FC<PeriodManagementProps> = ({
   onError 
 }) => {
   const [newPeriodName, setNewPeriodName] = useState<string>('');
-  const [newPeriodStartDate, setNewPeriodStartDate] = useState<Date>(new Date());
+  const [newPeriodStartDate, setNewPeriodStartDate] = useState<Date>(createParisDate());
   const [newPeriodEndDate, setNewPeriodEndDate] = useState<Date>(
-    new Date(new Date().setMonth(new Date().getMonth() + 3))
+    new Date(createParisDate().setMonth(createParisDate().getMonth() + 3))
   );
   const [newPeriodStatus, setNewPeriodStatus] = useState<'active' | 'future' | 'archived'>('future');
   const [periodToDelete, setPeriodToDelete] = useState<string | null>(null);
@@ -41,7 +42,7 @@ const PeriodManagement: React.FC<PeriodManagementProps> = ({
     
     try {
       // Déterminer automatiquement le statut en fonction des dates
-      const today = new Date();
+      const today = createParisDate();
       today.setHours(0, 0, 0, 0);
       
       // Déterminer le statut automatiquement
@@ -88,8 +89,8 @@ const PeriodManagement: React.FC<PeriodManagementProps> = ({
       
       // Réinitialiser le formulaire
       setNewPeriodName('');
-      setNewPeriodStartDate(new Date());
-      setNewPeriodEndDate(new Date(new Date().setMonth(new Date().getMonth() + 3)));
+      setNewPeriodStartDate(createParisDate());
+      setNewPeriodEndDate(new Date(createParisDate().setMonth(createParisDate().getMonth() + 3)));
       
       onSuccess('Période ajoutée avec succès');
     } catch (error) {
@@ -182,7 +183,7 @@ const PeriodManagement: React.FC<PeriodManagementProps> = ({
               </label>
               <input
                 type="date"
-                value={format(newPeriodStartDate, 'yyyy-MM-dd')}
+                value={formatParisDate(newPeriodStartDate, 'yyyy-MM-dd')}
                 onChange={(e) => setNewPeriodStartDate(new Date(e.target.value))}
                 className="block w-full pl-4 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 rounded-md"
                 required
@@ -194,7 +195,7 @@ const PeriodManagement: React.FC<PeriodManagementProps> = ({
               </label>
               <input
                 type="date"
-                value={format(newPeriodEndDate, 'yyyy-MM-dd')}
+                value={formatParisDate(newPeriodEndDate, 'yyyy-MM-dd')}
                 onChange={(e) => setNewPeriodEndDate(new Date(e.target.value))}
                 className="block w-full pl-4 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 rounded-md"
                 required
@@ -257,7 +258,7 @@ const PeriodManagement: React.FC<PeriodManagementProps> = ({
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-500">
-                        {format(period.startDate, 'dd/MM/yyyy', { locale: fr })} - {format(period.endDate, 'dd/MM/yyyy', { locale: fr })}
+                        {formatParisDate(period.startDate, 'dd/MM/yyyy', { locale: fr })} - {formatParisDate(period.endDate, 'dd/MM/yyyy', { locale: fr })}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">

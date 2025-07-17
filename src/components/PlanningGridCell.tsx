@@ -3,6 +3,7 @@ import { Badge } from './common';
 import type { ShiftAssignment } from '../types/planning';
 import type { ShiftExchange } from '../types/exchange';
 import { getCellBackgroundClass } from '../utils/cellColorUtils';
+import { createParisDate, toParisTime } from '../utils/timezoneUtils';
 
 // Importer les styles pour les couleurs des opérations
 import '../styles/OperationColors.css';
@@ -156,8 +157,8 @@ const PlanningGridCell: React.FC<PlanningGridCellProps> = React.memo(({
   // Vérifier si la date est dans le passé
   const isPastDate = useMemo(() => {
     if (!assignment?.date) return false;
-    const cellDate = new Date(assignment.date);
-    const today = new Date();
+    const cellDate = toParisTime(assignment.date);
+    const today = createParisDate();
     today.setHours(0, 0, 0, 0);
     return cellDate < today;
   }, [assignment?.date]);

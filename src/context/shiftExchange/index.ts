@@ -3,3 +3,4 @@
  */
 
 export * from './BagPhaseContext';
+export * from './ShiftExchangeContext';

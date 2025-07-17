@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { createParisDate, formatParisDate, parseParisDate } from '@/utils/timezoneUtils';
 import { collection, getDocs, query, orderBy, doc, updateDoc, arrayUnion, Timestamp } from 'firebase/firestore';
 import { db } from "../lib/firebase/config";
 import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
-import { useUsers } from '../features/auth/hooks';
+import { frLocale } from '../utils/dateLocale';
+import { useUsers } from '../features/auth/hooks/useUsers';
 import { AlertTriangle, Mail, Check } from 'lucide-react';
 
 interface Replacement {
@@ -93,7 +94,7 @@ const ReplacementsPage: React.FC = () => {
         )
       );
       
-      alert(`Notification envoyée aux remplaçants pour la garde du ${format(new Date(replacement.date), 'dd/MM/yyyy')} (${replacement.period}).`);
+      alert(`Notification envoyée aux remplaçants pour la garde du ${formatParisDate(replacement.date, 'dd/MM/yyyy')} (${replacement.period}).`);
     } catch (error) {
       console.error('Error notifying replacements:', error);
       alert('Une erreur est survenue lors de la notification des remplaçants.');
@@ -120,7 +121,7 @@ const ReplacementsPage: React.FC = () => {
         )
       );
       
-      alert(`La garde du ${format(new Date(replacement.date), 'dd/MM/yyyy')} (${replacement.period}) a été marquée comme pourvue.`);
+      alert(`La garde du ${formatParisDate(replacement.date, 'dd/MM/yyyy')} (${replacement.period}) a été marquée comme pourvue.`);
     } catch (error) {
       console.error('Error marking replacement as filled:', error);
       alert('Une erreur est survenue lors du marquage de la garde comme pourvue.');
@@ -170,8 +171,8 @@ const ReplacementsPage: React.FC = () => {
         <div className="flex flex-col space-y-4">
           {replacements.map(replacement => {
             const originalUser = users.find(u => u.id === replacement.originalUserId);
-            const date = new Date(replacement.date);
-            const isPast = date < new Date();
+            const date = parseParisDate(replacement.date);
+            const isPast = date < parseParisDate(formatParisDate(createParisDate(), 'yyyy-MM-dd'));
             
             return (
               <div 
@@ -187,7 +188,7 @@ const ReplacementsPage: React.FC = () => {
                 <div className="flex justify-between items-start mb-3">
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900">
-                      {format(date, 'EEEE d MMMM yyyy', { locale: fr })}
+                      {formatParisDate(date, 'EEEE d MMMM yyyy', { locale: frLocale })}
                     </h3>
                     <p className="text-sm text-gray-600">
                       {periodNames[replacement.period as keyof typeof periodNames]} - {replacement.shiftType}

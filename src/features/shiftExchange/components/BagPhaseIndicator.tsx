@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { createParisDate, formatParisDate } from '@/utils/timezoneUtils';
 import { Clock, Check, RefreshCw, Eye, Download, X } from 'lucide-react';
 import { getTimeRemaining } from '../../../utils/timeUtils';
 import { getExchangeHistory } from '../../../lib/firebase/exchange';
-import { useUsers } from '../../../features/auth/hooks';
+import { useUsers } from '../../../features/auth/hooks/useUsers';
 import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { frLocale } from '../../../utils/dateLocale';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { ShiftPeriod } from '../../../types/exchange';
@@ -44,7 +45,7 @@ const BagPhaseIndicator: React.FC = () => {
       const receiverUser = users.find(u => u.id === exchange.newUserId);
       
       return {
-        date: format(new Date(exchange.date), 'dd/MM/yyyy', { locale: fr }),
+        date: formatParisDate(new Date(exchange.date), 'dd/MM/yyyy', { locale: frLocale }),
         donor: donorUser ? `${donorUser.lastName} ${donorUser.firstName}` : 'Inconnu',
         shift: exchange.shiftType,
         period: getPeriodDisplayText(exchange.period as ShiftPeriod),
@@ -72,7 +73,7 @@ const BagPhaseIndicator: React.FC = () => {
     
     // Date d'export
     doc.setFontSize(10);
-    doc.text(`Exporté le ${format(new Date(), 'dd/MM/yyyy HH:mm', { locale: fr })}`, 14, 30);
+    doc.text(`Exporté le ${formatParisDate(createParisDate(), 'dd/MM/yyyy HH:mm', { locale: frLocale })}`, 14, 30);
 
     // Tableau
     autoTable(doc, {
@@ -91,7 +92,7 @@ const BagPhaseIndicator: React.FC = () => {
       headStyles: { fillColor: [66, 139, 202] }
     });
 
-    doc.save(`Récapitulatif_échanges_${format(new Date(), 'dd-MM-yyyy')}.pdf`);
+    doc.save(`Récapitulatif_échanges_${formatParisDate(createParisDate(), 'dd-MM-yyyy')}.pdf`);
   };
   
   if (!config.isConfigured) return null;

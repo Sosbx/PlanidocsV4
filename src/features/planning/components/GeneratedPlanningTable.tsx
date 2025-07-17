@@ -1,7 +1,21 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { format, getDaysInMonth } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { createParisDate, formatParisDate } from '@/utils/timezoneUtils';
+import { getDaysInMonth, format } from 'date-fns';
 import { getMonthsInRange, isGrayedOut } from '../../../utils/dateUtils';
+import {
+  createDate,
+  parseCellKey,
+  isPastDate,
+  formatDate,
+  formatDateAs,
+  formatDateCapitalized,
+  getMonthYearDisplay,
+  normalizeDateString,
+  DATE_FORMATS,
+  CONTEXT_FORMATS,
+  frLocale,
+  type Period
+} from '../../../utils/dates';
 import type { ShiftAssignment, Selections, ShiftReplacement } from '../types';
 import type { ShiftExchange } from '../../../types/exchange';
 import { getAllDesiderata } from '../../../lib/firebase/desiderata';
@@ -15,7 +29,7 @@ import { Portal } from '../../../components';
 import { ExchangeModal } from '../../../features/directExchange/components';
 import { useAuth } from '../../../features/auth/hooks';
 import { useDirectExchange } from '../../../features/directExchange/hooks';
-import Toast from '../../../components/common/Toast';
+import { useToastContext } from '../../../context/toast';
 import { useFeatureFlags } from '../../../context/featureFlags/FeatureFlagsContext';
 import { FEATURES } from '../../../types/featureFlags';
 import { Badge } from '../../../components/common';
@@ -95,8 +109,8 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
     existingExchangeId?: string;
   } | null>(null);
   const { proposeDirectExchange, proposeDirectCession, proposeDirectReplacement, removeExchange } = useDirectExchange({
-    onSuccess: (message) => setToast({ visible: true, message, type: 'success' }),
-    onError: (message) => setToast({ visible: true, message, type: 'error' })
+    onSuccess: (message) => showToast(message, 'success'),
+    onError: (message) => showToast(message, 'error')
   });
   const [desiderataState, setDesiderataState] = useState<Selections>({});
   // Utiliser les desiderata passés en props s'ils sont fournis, sinon utiliser l'état local
@@ -105,11 +119,7 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
   // Ajouter un état pour les échanges directs
   const [directExchanges, setDirectExchanges] = useState<Record<string, ShiftExchange>>({});
   const [replacements, setReplacements] = useState<Record<string, ShiftReplacement>>({});
-  const [toast, setToast] = useState<{ visible: boolean; message: string; type: 'success' | 'error' | 'info' }>({ 
-    visible: false, 
-    message: '', 
-    type: 'success' 
-  });
+  const { showToast } = useToastContext();
 
   // Fonction pour trouver la date de début de la bourse aux gardes
   const findBagStartDate = useCallback(() => {
@@ -118,7 +128,7 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
     if (!bagPeriod) {
       console.log("Aucune période BAG (future) trouvée");
       // Par défaut, utiliser la date actuelle si aucune période future n'est trouvée
-      return new Date();
+      return createParisDate();
     }
     
     // Retourner la date de début de la période BAG
@@ -135,8 +145,8 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
     }
     
     // Vérifier si c'est le premier jour de la période BAG
-    const dateStr = format(date, 'yyyy-MM-dd');
-    const bagStartStr = format(bagPeriod.startDate, 'yyyy-MM-dd');
+    const dateStr = normalizeDateString(date);
+    const bagStartStr = normalizeDateString(bagPeriod.startDate);
     
     const isBagStart = dateStr === bagStartStr;
     
@@ -149,17 +159,22 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
   }, [allPeriods]);
 
   // Fonction pour convertir les échanges en un objet avec les clés au format "YYYY-MM-DD-PERIOD"
-  const convertExchangesToMap = useCallback((exchanges: ShiftExchange[]) => {
-    console.log("Conversion des échanges en map. Nombre d'échanges:", exchanges.length);
+  const convertExchangesToMap = useCallback((exchanges: ShiftExchange[], filterUserId?: string) => {
+    console.log("Conversion des échanges en map. Nombre d'échanges:", exchanges.length, "filterUserId:", filterUserId);
     
     // Log détaillé des échanges à convertir
     exchanges.forEach(exchange => {
-      console.log(`Échange à convertir: id=${exchange.id}, date=${exchange.date}, period=${exchange.period}, type=${exchange.exchangeType}, operationTypes=${exchange.operationTypes?.join(',')}`);
+      console.log(`Échange à convertir: id=${exchange.id}, date=${exchange.date}, period=${exchange.period}, type=${exchange.exchangeType}, operationTypes=${exchange.operationTypes?.join(',')}, userId=${exchange.userId}`);
     });
     
     const result = exchanges.reduce((acc, exchange) => {
       if (!exchange.date || !exchange.period) {
         console.warn("Échange sans date ou période:", exchange);
+        return acc;
+      }
+      
+      // Si filterUserId est fourni, ne garder que les échanges de cet utilisateur
+      if (filterUserId && exchange.userId !== filterUserId) {
         return acc;
       }
       
@@ -200,7 +215,8 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
     const unsubscribe = subscribeToShiftExchanges((exchangeItems) => {
       // Cast des échanges au type ShiftExchange de types/exchange.ts
       const typedExchangeItems = exchangeItems as unknown as ShiftExchange[];
-      const exchangesMap = convertExchangesToMap(typedExchangeItems);
+      // Filtrer pour ne garder que les échanges de l'utilisateur connecté
+      const exchangesMap = convertExchangesToMap(typedExchangeItems, userId || undefined);
       setExchanges(exchangesMap);
     });
 
@@ -208,7 +224,7 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
     return () => {
       unsubscribe();
     };
-  }, [convertExchangesToMap]);
+  }, [convertExchangesToMap, userId]);
   
   // Fonction pour rafraîchir manuellement les échanges directs et remplacements
   const refreshDirectExchanges = useCallback(async () => {
@@ -360,31 +376,37 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
     if (!assignment) return;
     
     // Extraire la date et la période du cellKey
-    const [year, month, day, period] = cellKey.split('-');
-    const formattedDate = `${year}-${month}-${day}`;
-    const dateObj = new Date(`${year}-${month}-${day}`);
+    const cellData = parseCellKey(cellKey);
+    if (!cellData) {
+      console.error('Invalid cell key:', cellKey);
+      return;
+    }
+    
+    const { date: formattedDate, period } = cellData;
+    const dateObj = createDate(formattedDate);
     
     // Vérifier si la date est dans le passé
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const isPastDate = dateObj < today;
+    const isInPast = isPastDate(dateObj);
     
     // Si la date est dans le passé, désactiver l'interaction
-    if (isPastDate) {
-      setToast({
-        visible: true,
-        message: 'Les gardes passées ne peuvent pas être modifiées.',
-        type: 'info'
-      });
+    if (isInPast) {
+      showToast('Les gardes passées ne peuvent pas être modifiées.', 'info');
       return;
     }
     
     // Vérifier si la date est dans la période courante
     const isCurrentPeriodDate = isInCurrentPeriod(dateObj);
     
-    // Vérifier si la date est après le début de la bourse aux gardes (en utilisant isFirstDayOfBagPeriod)
+    // Vérifier si la date est après ou égale au début de la bourse aux gardes
     // Si isFirstDayOfBagPeriod n'est pas fourni, considérer que toutes les dates sont après la bourse
-    const isAfterBagStart = isFirstDayOfBagPeriod ? dateObj >= findBagStartDate() : true;
+    const bagStartDate = findBagStartDate();
+    const isAfterBagStart = isFirstDayOfBagPeriod ? dateObj >= bagStartDate : true;
+    
+    // Vérifier spécifiquement si c'est le premier jour de la BaG
+    const isFirstDayOfBag = isFirstDayOfBagPeriod && isFirstDayOfBagPeriod(dateObj);
+    
+    // Log pour debug
+    console.log(`handleCellClick - Date: ${formattedDate}, bagStartDate: ${formatDateAs(bagStartDate, DATE_FORMATS.ISO_DATE)}, dateObj: ${formatDateAs(dateObj, DATE_FORMATS.ISO_DATE)}, isAfterBagStart: ${isAfterBagStart}, isFirstDayOfBag: ${isFirstDayOfBag}`);
     
     // NOUVEAU: Vérifier si cette garde appartient à une période importée sans BAG
     const isInPeriodWithoutBag = isPeriodWithoutBag(dateObj);
@@ -399,11 +421,7 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
       
       // Vérifier si le modal est activé
       if (!isDirectExchangeModalEnabled) {
-        setToast({
-          visible: true,
-          message: 'Les échanges directs ne sont pas disponibles actuellement.',
-          type: 'info'
-        });
+        showToast('Les échanges directs ne sont pas disponibles actuellement.', 'info');
         return;
       }
       
@@ -450,11 +468,7 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
     
     // En Phase 2 (distribution) - désactiver les interactions pour les utilisateurs
     if (bagPhaseConfig.phase === 'distribution' && !isAdminView) {
-      setToast({
-        visible: true,
-        message: 'La répartition des gardes est en cours. Veuillez patienter.',
-        type: 'info'
-      });
+      showToast('La répartition des gardes est en cours. Veuillez patienter.', 'info');
       return;
     }
     
@@ -463,11 +477,7 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
       if (isCurrentPeriodDate) {
         // Vérifier si le modal est activé
         if (!isDirectExchangeModalEnabled) {
-          setToast({
-            visible: true,
-            message: 'Les échanges directs ne sont pas disponibles actuellement.',
-            type: 'info'
-          });
+          showToast('Les échanges directs ne sont pas disponibles actuellement.', 'info');
           return;
         }
         
@@ -524,19 +534,16 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
         });
       } else {
         // Si la garde n'est pas dans la période courante, afficher un message
-        setToast({
-          visible: true,
-          message: 'La période d\'échange est terminée pour cette garde.',
-          type: 'info'
-        });
+        showToast('La période d\'échange est terminée pour cette garde.', 'info');
       }
       return;
     }
     
     // En Phase 1 (submission)
     if (bagPhaseConfig.phase === 'submission' && !isAdminView) {
-      if (isAfterBagStart) {
-        // Pour les dates après le début de la bourse aux gardes, ouvrir la modale de la bourse
+      // Pour les dates à partir du début de la bourse aux gardes (incluant le premier jour), ouvrir la modale de la bourse
+      if (isAfterBagStart || isFirstDayOfBag) {
+        console.log(`Date ${formattedDate} - Ouverture de la modale BaG (isAfterBagStart=${isAfterBagStart}, isFirstDayOfBag=${isFirstDayOfBag})`);
         setSelectedCell({
           key: cellKey,
           position: { x: event.clientX, y: event.clientY },
@@ -548,13 +555,11 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
         });
       } else {
         // Pour les dates avant le début de la bourse aux gardes, ouvrir la modale d'échange direct
+        console.log(`Date ${formattedDate} - Tentative d'ouverture de la modale d'échange direct (avant le début de la BaG)`);
+        // Pour les dates avant le début de la bourse aux gardes, ouvrir la modale d'échange direct
         // Vérifier si le modal est activé
         if (!isDirectExchangeModalEnabled) {
-          setToast({
-            visible: true,
-            message: 'Les échanges directs ne sont pas disponibles actuellement.',
-            type: 'info'
-          });
+          showToast('Les échanges directs ne sont pas disponibles actuellement.', 'info');
           return;
         }
         
@@ -607,7 +612,7 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
         period: period as 'M' | 'AM' | 'S'
       }
     });
-  }, [bagPhaseConfig.phase, isAdminView, isInCurrentPeriod, user, directExchanges, exchanges, replacements, setToast, setSelectedDirectExchangeCell, setSelectedCell, findBagStartDate, isPeriodWithoutBag, isFeatureEnabled]);
+  }, [bagPhaseConfig.phase, isAdminView, isInCurrentPeriod, user, directExchanges, exchanges, replacements, showToast, setSelectedDirectExchangeCell, setSelectedCell, findBagStartDate, isPeriodWithoutBag, isFeatureEnabled, isFirstDayOfBagPeriod, refreshDirectExchanges]);
   
   // Fonction pour gérer la soumission d'un échange direct
   const handleDirectExchangeSubmit = useCallback(async (comment: string, operationTypes: OperationType[]) => {
@@ -708,18 +713,10 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
         {
           removeExchange: removeExchange,
           onSuccess: (message) => {
-            setToast({
-              visible: true,
-              message: message,
-              type: 'success'
-            });
+            showToast(message, 'success');
           },
           onError: (message) => {
-            setToast({
-              visible: true,
-              message: message,
-              type: 'error'
-            });
+            showToast(message, 'error');
           },
           onComplete: async () => {
             console.log("Traitement terminé, rafraîchissement des données...");
@@ -748,13 +745,12 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
             setSelectedDirectExchangeCell(null);
             
             // Message de confirmation que les modifications ont été appliquées
-            setToast({
-              visible: true,
-              message: operationTypes.length === 0 
+            showToast(
+              operationTypes.length === 0 
                 ? "Propositions retirées avec succès" 
                 : "Propositions mises à jour avec succès",
-              type: "success"
-            });
+              "success"
+            );
           }
         }
       );
@@ -762,14 +758,10 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
       // La gestion du remplacement est maintenant intégrée dans submitDirectExchange
     } catch (error) {
       console.error('Error handling direct exchange:', error);
-      setToast({
-        visible: true,
-        message: `Erreur: ${error instanceof Error ? error.message : 'Une erreur est survenue'}`,
-        type: 'error'
-      });
+      showToast(`Erreur: ${error instanceof Error ? error.message : 'Une erreur est survenue'}`, 'error');
       setSelectedDirectExchangeCell(null);
     }
-  }, [user, selectedDirectExchangeCell, directExchanges, exchanges, replacements, removeExchange, refreshDirectExchanges]);
+  }, [user, selectedDirectExchangeCell, directExchanges, exchanges, replacements, removeExchange, refreshDirectExchanges, showToast]);
 
   // Charger les desiderata pour affichage en superposition si non fournis en props
   useEffect(() => {
@@ -845,13 +837,12 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
     
     // Vérifier si on est en phase de soumission
     if (bagPhaseConfig.phase !== 'submission') {
-      setToast({
-        visible: true,
-        message: bagPhaseConfig.phase === 'distribution' 
+      showToast(
+        bagPhaseConfig.phase === 'distribution' 
           ? 'La répartition des gardes est en cours. Veuillez patienter.' 
           : 'La période d\'échange est terminée.',
-        type: 'info'
-      });
+        'info'
+      );
       setSelectedCell(null);
       return;
     }
@@ -868,39 +859,30 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
         timeSlot,
         comment: comment || '',
         status: 'pending',
-        lastModified: new Date().toISOString(),
+        lastModified: createParisDate().toISOString(),
         operationTypes: ['exchange'] // Valeur par défaut pour operationTypes
       });
       
-      setToast({
-        visible: true,
-        message: 'Garde ajoutée à la bourse aux gardes',
-        type: 'success'
-      });
+      showToast('Garde ajoutée à la bourse aux gardes', 'success');
     } catch (error) {
       console.error('Error adding to exchange:', error);
-      setToast({
-        visible: true,
-        message: 'Erreur lors de l\'ajout à la bourse aux gardes',
-        type: 'error'
-      });
+      showToast('Erreur lors de l\'ajout à la bourse aux gardes', 'error');
     }
     
     setSelectedCell(null);
-  }, [user, selectedCell, bagPhaseConfig.phase, setToast, setSelectedCell]);
+  }, [user, selectedCell, bagPhaseConfig.phase, showToast, setSelectedCell]);
 
   const handleRemoveFromExchange = useCallback(async () => {
     if (!selectedCell || !user) return;
     
     // Vérifier si on est en phase de soumission
     if (bagPhaseConfig.phase !== 'submission') {
-      setToast({
-        visible: true,
-        message: bagPhaseConfig.phase === 'distribution' 
+      showToast(
+        bagPhaseConfig.phase === 'distribution' 
           ? 'La répartition des gardes est en cours. Veuillez patienter.' 
           : 'La période d\'échange est terminée.',
-        type: 'info'
-      });
+        'info'
+      );
       setSelectedCell(null);
       return;
     }
@@ -916,11 +898,7 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
     
     // Vérifier que l'utilisateur est propriétaire de cette garde
     if (exchange.userId !== user.id) {
-      setToast({
-        visible: true,
-        message: 'Vous ne pouvez pas retirer une garde qui ne vous appartient pas',
-        type: 'error'
-      });
+      showToast('Vous ne pouvez pas retirer une garde qui ne vous appartient pas', 'error');
       setSelectedCell(null);
       return;
     }
@@ -933,22 +911,14 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
       await removeShiftExchange(exchangeId);
       
       // Ne pas dépendre de l'état exchanges après la suppression
-      setToast({
-        visible: true,
-        message: 'Garde retirée de la bourse aux gardes',
-        type: 'success'
-      });
+      showToast('Garde retirée de la bourse aux gardes', 'success');
     } catch (error) {
       console.error('Error removing from exchange:', error);
-      setToast({
-        visible: true,
-        message: 'Erreur lors du retrait de la garde',
-        type: 'error'
-      });
+      showToast('Erreur lors du retrait de la garde', 'error');
     }
     
     setSelectedCell(null);
-  }, [user, selectedCell, bagPhaseConfig.phase, exchanges, setToast, setSelectedCell]);
+  }, [user, selectedCell, bagPhaseConfig.phase, exchanges, showToast, setSelectedCell]);
 
   const renderMonthTable = (month: Date) => {
     // Créer un tableau de tous les jours du mois
@@ -977,7 +947,7 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
           <thead>
             <tr>
               <th colSpan={4} className="px-3 py-2 text-xs font-medium text-gray-500 border-b bg-gray-50/70">
-                {format(month, 'MMMM', { locale: fr }).charAt(0).toUpperCase() + format(month, 'MMMM', { locale: fr }).slice(1) + ' ' + format(month, 'yyyy')}
+                {getMonthYearDisplay(month)}
               </th>
             </tr>
             <tr className="bg-gray-50/70">
@@ -989,7 +959,7 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
           </thead>
           <tbody>
             {filteredDays.map(day => {
-              const dateStr = format(day, 'yyyy-MM-dd');
+              const dateStr = normalizeDateString(day);
               const grayedOut = isGrayedOut(day);
               return (
                 <tr key={dateStr}>
@@ -1001,13 +971,13 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
                       </div>
                     )}
                     {/* Référence pour le scroll vers la date actuelle - sans bordure visible */}
-                    {new Date().toDateString() === day.toDateString() && (
+                    {createParisDate().toDateString() === day.toDateString() && (
                       <div ref={todayRef} className="absolute top-0 left-0 right-0 bottom-0 z-5 pointer-events-none"></div>
                     )}
                     <div className="flex justify-start items-center">
-                      <span>{format(day, 'd', { locale: fr })}</span>
+                      <span>{formatDate(day, DATE_FORMATS.DAY_ONLY)}</span>
                       <span className="text-gray-400 text-[10px] ml-1">
-                        {format(day, 'EEEEEE', { locale: fr }).charAt(0).toUpperCase() + format(day, 'EEEEEE', { locale: fr }).slice(1).toLowerCase()}
+                        {formatDateCapitalized(day, 'EEEEEE')}
                       </span>
                     </div>
                   </td>
@@ -1058,10 +1028,13 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
     // Obtenir les types d'opération à partir de l'échange
     // Prioriser le tableau operationTypes s'il existe
     // Sinon, déterminer les types à partir de operationType
-    const operationTypes = exchange?.operationTypes?.length ? 
-      exchange.operationTypes : 
-      (exchange?.operationType === 'both' ? ['exchange', 'give'] : 
-       exchange?.operationType ? [exchange.operationType] : []);
+    // IMPORTANT: Ne récupérer les operationTypes que si l'échange appartient à l'utilisateur connecté
+    const operationTypes = (exchange && exchange.userId === userId) ? 
+      (exchange.operationTypes?.length ? 
+        exchange.operationTypes : 
+        (exchange.operationType === 'both' ? ['exchange', 'give'] : 
+         exchange.operationType ? [exchange.operationType] : [])) 
+      : [];
     
                     // Déterminer les combinaisons de types d'opérations
                     const hasExchangeOp = operationTypes.includes('exchange');
@@ -1262,7 +1235,7 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
                           </span>
                           
                           {/* Badges pour les différents types d'opérations */}
-                          <div className="absolute -top-2 -right-2 flex space-x-1">
+                          <div className="absolute -top-1 -right-1 flex space-x-1">
                             {/* Badge pour les intéressés */}
                             {bagPhaseConfig.phase !== 'completed' && hasProposedGuard && interestedCount > 0 && !isReceivedShift && (
                               <span className="badge-appear">
@@ -1358,7 +1331,7 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
             
             {/* Titre du mois */}
             <h3 className="text-lg font-medium text-gray-700">
-              {format(month, 'MMMM', { locale: fr }).charAt(0).toUpperCase() + format(month, 'MMMM', { locale: fr }).slice(1) + ' ' + format(month, 'yyyy')}
+              {formatParisDate(month, 'MMMM', { locale: frLocale }).charAt(0).toUpperCase() + formatParisDate(month, 'MMMM', { locale: frLocale }).slice(1) + ' ' + formatParisDate(month, 'yyyy')}
             </h3>
           </div>
           <table className="w-full border border-gray-200 bg-white">
@@ -1388,7 +1361,7 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
                   return startOfDay >= compareStart && startOfDay <= compareEnd;
                 })
                 .map(day => {
-                  const dateStr = format(day, 'yyyy-MM-dd');
+                  const dateStr = normalizeDateString(day);
                   const grayedOut = isGrayedOut(day);
                   // Déterminer si ce jour est le premier jour de la période BAG
                   const isBagPeriodStart = isFirstDayOfBagPeriod && isFirstDayOfBagPeriod(day);
@@ -1406,13 +1379,13 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
                           </div>
                         )}
                         {/* Référence pour le scroll vers la date actuelle - sans bordure visible */}
-                        {new Date().toDateString() === day.toDateString() && (
+                        {createParisDate().toDateString() === day.toDateString() && (
                           <div ref={todayRef} className="absolute top-0 left-0 right-0 bottom-0 z-5 pointer-events-none"></div>
                         )}
                         <div className="flex justify-start items-center">
-                          <span>{format(day, 'd', { locale: fr })}</span>
+                          <span>{formatDate(day, DATE_FORMATS.DAY_ONLY)}</span>
                           <span className="text-gray-400 text-[10px] ml-1">
-                            {format(day, 'EEEE', { locale: fr }).substring(0, 1).toUpperCase() + format(day, 'EEEE', { locale: fr }).substring(1, 3).toLowerCase()}
+                            {formatDateCapitalized(day, 'EEE')}
                           </span>
                           {isBagPeriodStart && bagPhaseConfig.phase !== 'completed' && (
                             <span className="text-red-500/50 text-[10px] ml-auto font-medium">BàG</span>
@@ -1563,10 +1536,11 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
             todayRef={todayRef}
             isFirstDayOfBagPeriod={isFirstDayOfBagPeriod}
             onCellClick={handleCellClick}
-            height={600}
+            height="calc(100vh - 250px)" // Hauteur dynamique optimisée pour petits écrans
             width="100%"
             onLoadPreviousMonth={onLoadPreviousMonth}
             onLoadNextMonth={onLoadNextMonth}
+            maxMonths={7} // Limiter à 7 mois maximum
           />
         </div>
       ) : (
@@ -1620,13 +1594,6 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
           />
         </Portal>
       )}
-
-      <Toast 
-        message={toast.message}
-        isVisible={toast.visible}
-        type={toast.type}
-        onClose={() => setToast(prev => ({ ...prev, visible: false }))}
-      />
     </>
   );
 };

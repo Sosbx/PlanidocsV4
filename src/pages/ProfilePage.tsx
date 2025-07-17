@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { parseParisDate } from '@/utils/timezoneUtils';
 import { 
   User, 
   AlertCircle, 
@@ -114,7 +115,7 @@ const ProfilePage: React.FC = () => {
       const savedNotificationSettings = localStorage.getItem(`notification_settings_${user.id}`);
       if (savedNotificationSettings) {
         try {
-          setNotificationSettings(JSON.parse(savedNotificationSettings));
+          setNotificationSettings(JSON.parseParisDate(savedNotificationSettings));
         } catch (e) {
           console.error('Error parsing notification settings:', e);
         }
@@ -124,7 +125,7 @@ const ProfilePage: React.FC = () => {
       const savedReplacementSettings = localStorage.getItem(`replacement_settings_${user.id}`);
       if (savedReplacementSettings) {
         try {
-          setReplacementSettings(JSON.parse(savedReplacementSettings));
+          setReplacementSettings(JSON.parseParisDate(savedReplacementSettings));
         } catch (e) {
           console.error('Error parsing replacement settings:', e);
         }

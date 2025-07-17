@@ -1,8 +1,17 @@
+// Configuration du fuseau horaire temporairement désactivée pour corriger la récursion
+// import './config/dateConfig';
+
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { GoogleOAuthProvider } from '@react-oauth/google';
 import App from './App.tsx';
 import './index.css';
 import './styles/BadgeStyles.css';
+import { GOOGLE_CLIENT_ID } from './lib/google/googleCalendarConfig';
+
+// Nettoyage des Service Workers problématiques
+import './utils/swCleanup';
+
 
 // Filtrer les avertissements COOP de Firebase Auth en développement
 if (import.meta.env.DEV) {
@@ -23,16 +32,15 @@ if (import.meta.env.DEV) {
       originalWarn.apply(console, args);
     }
   };
-  
-  console.log = (...args) => {
-    if (!filterCOOP(originalLog, args)) {
-      originalLog.apply(console, args);
-    }
-  };
 }
 
-createRoot(document.getElementById('root')!).render(
+const root = createRoot(document.getElementById('root')!);
+
+root.render(
   <StrictMode>
-    <App />
+    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+      <App />
+    </GoogleOAuthProvider>
   </StrictMode>
 );
+

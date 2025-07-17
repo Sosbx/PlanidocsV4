@@ -1,7 +1,8 @@
 import jsPDF from 'jspdf';
+import { formatParisDate } from '@/utils/timezoneUtils';
 import autoTable from 'jspdf-autotable';
 import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { frLocale } from '../../../utils/dateLocale';
 import { getDaysArray, getMonthsInRange, isGrayedOut } from '../../../utils/dateUtils';
 import type { ShiftAssignment } from '../types';
 
@@ -46,7 +47,7 @@ export const exportPlanningToPDF = (options: ExportPlanningOptions): void => {
   // Log des informations pour le développement
   console.log('Données pour l\'exportation PDF:', {
     userName,
-    période: `${format(startDate, 'dd/MM/yyyy', { locale: fr })} - ${format(endDate, 'dd/MM/yyyy', { locale: fr })}`,
+    période: `${formatParisDate(startDate, 'dd/MM/yyyy', { locale: frLocale })} - ${formatParisDate(endDate, 'dd/MM/yyyy', { locale: frLocale })}`,
     nombreSélections: Object.keys(selections).length
   });
 };
@@ -87,6 +88,6 @@ export const exportAllPlanningsToPDFZip = async (
   // Log des informations pour le développement
   console.log('Données pour l\'exportation ZIP:', {
     nombreUtilisateurs: users.length,
-    période: `${format(startDate, 'dd/MM/yyyy', { locale: fr })} - ${format(endDate, 'dd/MM/yyyy', { locale: fr })}`
+    période: `${formatParisDate(startDate, 'dd/MM/yyyy', { locale: frLocale })} - ${formatParisDate(endDate, 'dd/MM/yyyy', { locale: frLocale })}`
   });
 };

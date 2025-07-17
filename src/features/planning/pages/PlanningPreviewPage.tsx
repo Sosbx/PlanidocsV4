@@ -11,7 +11,7 @@ import { LoadingSpinner } from '../../../components/common';
 import { usePlanningConfig } from '../../../context/planning/PlanningContext';
 import { useAssociation } from '../../../context/association/AssociationContext';
 import type { User } from '../../../features/users/types';
-import { getCollectionName } from '../../../lib/firebase/users';
+import { getCollectionName } from '../../../utils/collectionUtils';
 import { ASSOCIATIONS } from '../../../constants/associations';
 
 const PlanningPreviewPage: React.FC = () => {

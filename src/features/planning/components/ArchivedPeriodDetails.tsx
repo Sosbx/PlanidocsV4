@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { firebaseTimestampToParisDate, formatParisDate } from '@/utils/timezoneUtils';
 import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '../../../lib/firebase/config';
 import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { frLocale } from '../../../utils/dateLocale';
 import LoadingSpinner from '../../../components/common/LoadingSpinner';
 import PlanningPreview from './PlanningPreview';
 import { ArchivedPeriod } from '../../../context/planning/PlanningContext';
@@ -43,11 +44,11 @@ const ArchivedPeriodDetails: React.FC<ArchivedPeriodDetailsProps> = ({ periodId 
           id: periodDoc.id,
           config: {
             ...periodData.config,
-            startDate: periodData.config.startDate.toDate(),
-            endDate: periodData.config.endDate.toDate(),
-            deadline: periodData.config.deadline.toDate(),
+            startDate: firebaseTimestampToParisDate(periodData.config.startDate),
+            endDate: firebaseTimestampToParisDate(periodData.config.endDate),
+            deadline: firebaseTimestampToParisDate(periodData.config.deadline),
           },
-          archivedAt: periodData.archivedAt.toDate(),
+          archivedAt: firebaseTimestampToParisDate(periodData.archivedAt),
           name: periodData.name,
           validatedDesiderataCount: periodData.validatedDesiderataCount || 0
         };
@@ -127,18 +128,18 @@ const ArchivedPeriodDetails: React.FC<ArchivedPeriodDetailsProps> = ({ periodId 
       <div className="flex justify-between items-center">
         <h3 className="text-xl font-semibold">{period.name}</h3>
         <div className="text-sm text-gray-500">
-          Archivé le {format(period.archivedAt, 'dd MMMM yyyy', { locale: fr })}
+          Archivé le {formatParisDate(period.archivedAt, 'dd MMMM yyyy', { locale: frLocale })}
         </div>
       </div>
 
       <div className="bg-gray-50 p-4 rounded-lg grid grid-cols-2 gap-4 text-sm">
         <div>
           <span className="font-medium">Période:</span>{' '}
-          {format(period.config.startDate, 'dd/MM/yyyy', { locale: fr })} - {format(period.config.endDate, 'dd/MM/yyyy', { locale: fr })}
+          {formatParisDate(period.config.startDate, 'dd/MM/yyyy', { locale: frLocale })} - {formatParisDate(period.config.endDate, 'dd/MM/yyyy', { locale: frLocale })}
         </div>
         <div>
           <span className="font-medium">Date limite:</span>{' '}
-          {format(period.config.deadline, 'dd/MM/yyyy HH:mm', { locale: fr })}
+          {formatParisDate(period.config.deadline, 'dd/MM/yyyy HH:mm', { locale: frLocale })}
         </div>
         <div>
           <span className="font-medium">Desiderata primaires:</span>{' '}

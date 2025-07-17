@@ -1,6 +1,7 @@
 import React from 'react';
+import { formatParisDate } from '@/utils/timezoneUtils';
 import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { frLocale } from '../../../../utils/dateLocale';
 import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 import { ViewType, DateRange } from '../../types/viewTypes';
 
@@ -28,17 +29,17 @@ const PeriodNavigation: React.FC<PeriodNavigationProps> = ({
     
     switch (viewType) {
       case 'month':
-        return format(startDate, 'MMMM yyyy', { locale: fr });
+        return formatParisDate(startDate, 'MMMM yyyy', { locale: frLocale });
       case 'quadrimester':
-        return `${format(startDate, 'MMM', { locale: fr })} - ${format(endDate, 'MMM yyyy', { locale: fr })}`;
+        return `${formatParisDate(startDate, 'MMM', { locale: frLocale })} - ${formatParisDate(endDate, 'MMM yyyy', { locale: frLocale })}`;
       case 'semester':
-        return `${format(startDate, 'MMM', { locale: fr })} - ${format(endDate, 'MMM yyyy', { locale: fr })}`;
+        return `${formatParisDate(startDate, 'MMM', { locale: frLocale })} - ${formatParisDate(endDate, 'MMM yyyy', { locale: frLocale })}`;
       case 'year':
-        return format(startDate, 'yyyy');
+        return formatParisDate(startDate, 'yyyy');
       case 'custom':
-        return `${format(startDate, 'dd MMM', { locale: fr })} - ${format(endDate, 'dd MMM yyyy', { locale: fr })}`;
+        return `${formatParisDate(startDate, 'dd MMM', { locale: frLocale })} - ${formatParisDate(endDate, 'dd MMM yyyy', { locale: frLocale })}`;
       default:
-        return `${format(startDate, 'dd/MM/yyyy')} - ${format(endDate, 'dd/MM/yyyy')}`;
+        return `${formatParisDate(startDate, 'dd/MM/yyyy')} - ${formatParisDate(endDate, 'dd/MM/yyyy')}`;
     }
   };
 

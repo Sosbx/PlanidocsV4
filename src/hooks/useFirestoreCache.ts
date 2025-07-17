@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { doc, getDoc, DocumentSnapshot, collection, getDocs, query, Query, QuerySnapshot, DocumentData, onSnapshot } from 'firebase/firestore';
 import { db } from "../lib/firebase/config";
+import { generateUserCacheKey } from "../lib/firebase/userIsolatedCache";
+import { useCurrentUser } from './useCurrentUser';
 
 interface CacheEntry<T> {
   data: T;
@@ -21,12 +23,14 @@ type QueryOptions = {
   cacheKey?: string;      // Clé unique pour l'entrée de cache
 };
 
-// Singleton pour le cache global partagé entre tous les hooks
+// Singleton pour le cache global avec isolation par utilisateur
 class FirestoreCache {
   private static instance: FirestoreCache;
   private cache: Map<string, CacheEntry<any>>;
   private subscribers: Map<string, Set<(data: any) => void>>;
   private DEFAULT_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes par défaut
+  private currentUserId: string | null = null;
+  private currentAssociationId: string | null = null;
   
   private constructor() {
     this.cache = new Map();
@@ -44,25 +48,29 @@ class FirestoreCache {
   }
   
   public set<T>(key: string, data: T, duration: number = this.DEFAULT_CACHE_DURATION): void {
+    // Générer une clé isolée par utilisateur
+    const isolatedKey = this.getIsolatedKey(key);
     const now = Date.now();
-    this.cache.set(key, {
+    this.cache.set(isolatedKey, {
       data,
       timestamp: now,
       expiresAt: now + duration
     });
     
     // Notifier les abonnés
-    this.notifySubscribers(key, data);
+    this.notifySubscribers(isolatedKey, data);
   }
   
   public get<T>(key: string): T | null {
-    const entry = this.cache.get(key) as CacheEntry<T> | undefined;
+    // Utiliser la clé isolée par utilisateur
+    const isolatedKey = this.getIsolatedKey(key);
+    const entry = this.cache.get(isolatedKey) as CacheEntry<T> | undefined;
     
     if (!entry) return null;
     
     // Vérifier si l'entrée est expirée
     if (Date.now() > entry.expiresAt) {
-      this.cache.delete(key);
+      this.cache.delete(isolatedKey);
       return null;
     }
     
@@ -107,9 +115,12 @@ class FirestoreCache {
   }
   
   public invalidate(keyPrefix: string): void {
-    // Invalider toutes les entrées dont la clé commence par keyPrefix
+    // Ajouter l'isolation utilisateur au préfixe
+    const isolatedPrefix = this.getIsolatedKey(keyPrefix);
+    
+    // Invalider toutes les entrées dont la clé commence par le préfixe isolé
     for (const key of this.cache.keys()) {
-      if (key.startsWith(keyPrefix)) {
+      if (key.startsWith(isolatedPrefix)) {
         this.cache.delete(key);
       }
     }
@@ -117,6 +128,52 @@ class FirestoreCache {
   
   public clear(): void {
     this.cache.clear();
+  }
+  
+  /**
+   * Définit l'utilisateur actuel pour l'isolation du cache
+   */
+  public setCurrentUser(userId: string | null, associationId: string | null): void {
+    // Si on change d'utilisateur, nettoyer le cache de l'ancien utilisateur
+    if (this.currentUserId && this.currentUserId !== userId) {
+      this.clearUserCache();
+    }
+    
+    this.currentUserId = userId;
+    this.currentAssociationId = associationId;
+  }
+  
+  /**
+   * Génère une clé isolée incluant l'utilisateur et l'association
+   */
+  private getIsolatedKey(baseKey: string): string {
+    if (!this.currentUserId || !this.currentAssociationId) {
+      // Si pas d'utilisateur, utiliser une clé temporaire
+      return `temp_${baseKey}`;
+    }
+    
+    try {
+      return generateUserCacheKey(baseKey);
+    } catch {
+      // Fallback si le service d'isolation n'est pas prêt
+      return `${this.currentUserId}_${this.currentAssociationId}_${baseKey}`;
+    }
+  }
+  
+  /**
+   * Nettoie le cache de l'utilisateur actuel
+   */
+  private clearUserCache(): void {
+    if (!this.currentUserId || !this.currentAssociationId) return;
+    
+    const prefix = `${this.currentUserId}_${this.currentAssociationId}_`;
+    
+    // Supprimer toutes les entrées de l'utilisateur actuel
+    for (const key of this.cache.keys()) {
+      if (key.startsWith(prefix)) {
+        this.cache.delete(key);
+      }
+    }
   }
 }
 
@@ -136,10 +193,20 @@ export function useFirestoreDocument<T = DocumentData>(
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<Error | null>(null);
+  const { user } = useCurrentUser();
   
   // Générer une clé de cache unique
   const cacheKeyValue = cacheKey || `doc:${collectionPath}/${docId}`;
   const cache = FirestoreCache.getInstance();
+  
+  // Mettre à jour l'utilisateur actuel dans le cache
+  useEffect(() => {
+    if (user) {
+      cache.setCurrentUser(user.id, user.associationId || 'RD');
+    } else {
+      cache.setCurrentUser(null, null);
+    }
+  }, [user]);
   
   const fetchDocument = useCallback(async () => {
     try {
@@ -236,6 +303,7 @@ export function useFirestoreCollection<T = DocumentData>(
   const [data, setData] = useState<T[] | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<Error | null>(null);
+  const { user } = useCurrentUser();
   
   // Déterminer si c'est une requête ou un chemin
   const isQuery = typeof queryOrPath !== 'string';
@@ -248,6 +316,15 @@ export function useFirestoreCollection<T = DocumentData>(
   );
   
   const cache = FirestoreCache.getInstance();
+  
+  // Mettre à jour l'utilisateur actuel dans le cache
+  useEffect(() => {
+    if (user) {
+      cache.setCurrentUser(user.id, user.associationId || 'RD');
+    } else {
+      cache.setCurrentUser(null, null);
+    }
+  }, [user]);
   
   const fetchCollection = useCallback(async () => {
     try {

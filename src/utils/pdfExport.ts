@@ -1,18 +1,16 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { format, isWeekend } from 'date-fns';
+import { frLocale } from '../utils/dateLocale';
 import JSZip from 'jszip';
 import { getDaysArray, getMonthsInRange, isGrayedOut } from './dateUtils';
 import { calculatePercentages } from './planningUtils';
+import { isHoliday } from './holidayUtils';
+import { formatParisDate, toParisTime } from './timezoneUtils';
 import type { Selections, ShiftAssignment, PeriodSelection } from '../types/planning';
 import type { User } from '../features/users/types';
 
-// Définir une configuration locale pour éviter l'import manquant
-const planningConfig = {
-  primaryDesiderataLimit: 30,
-  secondaryDesiderataLimit: 20
-};
+// Configuration sera passée en paramètre depuis l'appelant
 
 interface ExportPlanningOptions {
   userName: string;
@@ -24,6 +22,19 @@ interface ExportPlanningOptions {
   secondaryLimit?: number;
   showAssignmentsOnly?: boolean;
   showComments?: boolean;
+  returnDocument?: boolean; // Si true, retourne le document au lieu de le télécharger
+}
+
+// Numéros pour la numérotation des commentaires
+const commentNumbers = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15'];
+
+// Interface pour stocker les commentaires par page
+interface PageComment {
+  number: string;
+  date: string;
+  period: string;
+  comment: string;
+  type: 'primary' | 'secondary' | null;
 }
 
 export const exportPlanningToPDF = ({
@@ -35,8 +46,9 @@ export const exportPlanningToPDF = ({
   primaryLimit,
   secondaryLimit,
   showAssignmentsOnly = false,
-  showComments = false
-}: ExportPlanningOptions): void => {
+  showComments = false,
+  returnDocument = false
+}: ExportPlanningOptions): jsPDF | void => {
   const doc = new jsPDF({
     orientation: 'landscape',
     unit: 'mm',
@@ -50,55 +62,70 @@ export const exportPlanningToPDF = ({
   // Transformer les desiderata pour correspondre au type Selections
   const transformedDesiderata: Selections = {};
 
-  // Recueillir tous les commentaires
-  const comments: { date: string; period: string; comment: string }[] = [];
+  // Map pour stocker les commentaires avec leur numéro
+  const commentMap = new Map<string, PageComment>();
   
-  // Si on a des commentaires, les extraire pour l'affichage
+  // Stocker les commentaires par mois pour affichage en bas de page
+  const commentsByMonth = new Map<string, PageComment[]>();
+  
+  // Ordre des périodes pour le tri
+  const periodOrder: Record<string, number> = { 'M': 1, 'AM': 2, 'S': 3 };
+  
+  // Si on a des commentaires, les extraire, trier et numéroter
   if (showComments && desiderata) {
+    // D'abord, collecter tous les commentaires avec leurs métadonnées
+    const commentsToSort: Array<{key: string, value: any, dateObj: Date, period: string}> = [];
+    
     Object.entries(desiderata).forEach(([key, value]) => {
-      // Pour les objets avec une structure comme { type: 'primary', comment: '...' }
       if (typeof value === 'object' && value !== null) {
         const valueObj = value as any;
-        // Vérifier si c'est un objet transformedDesiderata ou s'il a une structure avec comment
-        const comment = valueObj.comment || (valueObj.type && valueObj.type.comment);
+        const comment = valueObj.comment;
         
         if (comment) {
-          const [dateStr, period] = key.split('-');
-          const date = format(new Date(dateStr), 'dd/MM/yyyy', { locale: fr });
-          const periodName = period === 'M' ? 'Matin' : period === 'AM' ? 'Après-midi' : 'Soir';
-          comments.push({
-            date,
-            period: periodName,
-            comment
-          });
+          const parts = key.split('-');
+          const dateStr = `${parts[0]}-${parts[1]}-${parts[2]}`;
+          const period = parts[3];
+          const dateObj = new Date(dateStr);
+          
+          commentsToSort.push({ key, value: valueObj, dateObj, period });
         }
       }
     });
+    
+    // Trier par date puis par période
+    commentsToSort.sort((a, b) => {
+      const dateCompare = a.dateObj.getTime() - b.dateObj.getTime();
+      if (dateCompare !== 0) return dateCompare;
+      return periodOrder[a.period] - periodOrder[b.period];
+    });
+    
+    // Maintenant numéroter dans l'ordre chronologique
+    commentsToSort.forEach((item, index) => {
+      const monthKey = formatParisDate(item.dateObj, 'yyyy-MM');
+      const periodName = item.period === 'M' ? 'Matin' : item.period === 'AM' ? 'Après-midi' : 'Soir';
+      
+      const pageComment: PageComment = {
+        number: commentNumbers[index] || `${index + 1}`,
+        date: formatParisDate(item.dateObj, 'dd/MM/yyyy', { locale: frLocale }),
+        period: periodName,
+        comment: item.value.comment,
+        type: item.value.type
+      };
+      
+      commentMap.set(item.key, pageComment);
+      
+      // Grouper par mois
+      if (!commentsByMonth.has(monthKey)) {
+        commentsByMonth.set(monthKey, []);
+      }
+      commentsByMonth.get(monthKey)!.push(pageComment);
+    });
   }
   
-  // Parcourir les selections originales pour trouver d'autres commentaires
-  Object.entries(transformedDesiderata).forEach(([key, value]) => {
-    if (value && value.comment) {
-      // Vérifier si ce commentaire n'est pas déjà dans la liste
-      const [dateStr, period] = key.split('-');
-      const date = format(new Date(dateStr), 'dd/MM/yyyy', { locale: fr });
-      const periodName = period === 'M' ? 'Matin' : period === 'AM' ? 'Après-midi' : 'Soir';
-      
-      const exists = comments.some(
-        c => c.date === date && c.period === periodName
-      );
-      
-      if (!exists) {
-        comments.push({
-          date,
-          period: periodName,
-          comment: value.comment
-        });
-      }
-    }
-  });
-  
-  console.log(`Nombre de commentaires trouvés: ${comments.length}`);
+  console.log(`Nombre de commentaires trouvés: ${commentMap.size}`);
+  if (commentMap.size > 0) {
+    console.log('Commentaires numérotés:', Array.from(commentMap.values()));
+  }
   if (!showAssignmentsOnly && desiderata) {
     Object.entries(desiderata).forEach(([key, value]) => {
       // Extraire le type et le commentaire si l'entrée est un objet
@@ -121,7 +148,7 @@ export const exportPlanningToPDF = ({
   const percentages = !showAssignmentsOnly ? calculatePercentages(transformedDesiderata, startDate, endDate) : null;
 
   // Titre du document
-  const title = `Planning ${userName} - ${format(startDate, 'dd/MM/yyyy')} au ${format(endDate, 'dd/MM/yyyy')}`;
+  const title = `Planning ${userName} - ${formatParisDate(startDate, 'dd/MM/yyyy')} au ${formatParisDate(endDate, 'dd/MM/yyyy')}`;
     
   doc.setFontSize(11);
   doc.text(title, margin, margin);
@@ -155,24 +182,27 @@ export const exportPlanningToPDF = ({
     );
 
     return {
-      monthTitle: format(month, 'MMMM yyyy', { locale: fr }).toUpperCase(),
+      monthTitle: formatParisDate(month, 'MMMM yyyy', { locale: frLocale }).toUpperCase(),
+      monthKey: formatParisDate(month, 'yyyy-MM'),
       data: days.map(day => {
-        const dateStr = format(day, 'yyyy-MM-dd');
-        const dayLabel = `${format(day, 'd', { locale: fr })} ${format(day, 'EEEEEE', { locale: fr }).toLowerCase()}`;
+        const dateStr = formatParisDate(day, 'yyyy-MM-dd');
+        const dayLabel = `${formatParisDate(day, 'd', { locale: frLocale })} ${formatParisDate(day, 'EEEEEE', { locale: frLocale }).toLowerCase()}`;
         const isGrayed = isGrayedOut(day);
         
         return {
           dayLabel,
           isGrayed,
+          date: day, // Ajouter la date complète pour vérifier week-end/férié
           periods: ['M', 'AM', 'S'].map(period => {
             const cellKey = `${dateStr}-${period}`;
             const assignment = assignments[cellKey];
-            const desideratum = !showAssignmentsOnly ? desiderata[cellKey] : null;
+            const desideratum = !showAssignmentsOnly ? transformedDesiderata[cellKey] : null;
             
             return {
               assignment,
               desideratum,
-              isGrayed
+              isGrayed,
+              cellKey // Ajouter pour récupérer le commentaire
             };
           })
         };
@@ -217,7 +247,7 @@ export const exportPlanningToPDF = ({
   };
 
   // Génération des tableaux pour chaque mois
-  monthTables.forEach(({ monthTitle, data }, monthIndex) => {
+  monthTables.forEach(({ monthTitle, monthKey, data }, monthIndex) => {
     // En-tête du mois
     autoTable(doc, {
       startY,
@@ -240,13 +270,14 @@ export const exportPlanningToPDF = ({
     autoTable(doc, {
       startY: startY + 8,
       head: [['Jour', 'M', 'AM', 'S']],
-      body: data.map(({ dayLabel, isGrayed, periods }) => [
-        { content: dayLabel, isGrayed, isDay: true },
+      body: data.map(({ dayLabel, isGrayed, date, periods }) => [
+        { content: dayLabel, isGrayed, isDay: true, date },
         ...periods.map(p => ({
           content: p.assignment?.shiftType || '',
           assignment: p.assignment,
           desideratum: p.desideratum,
-          isGrayed
+          isGrayed,
+          cellKey: p.cellKey
         }))
       ]),
       theme: 'grid',
@@ -290,7 +321,20 @@ export const exportPlanningToPDF = ({
           if (cellData.isDay) {
             data.cell.text = [cellData.content];
             data.cell.styles.halign = 'left';
-            data.cell.styles.fontStyle = 'normal'; 
+            
+            // Vérifier si c'est un week-end ou jour férié
+            const rowData = data.row.raw as any;
+            if (rowData && rowData[0] && rowData[0].date) {
+              const date = new Date(rowData[0].date);
+              if (isWeekend(date) || isHoliday(date)) {
+                data.cell.styles.fontStyle = 'bold';
+              } else {
+                data.cell.styles.fontStyle = 'normal';
+              }
+            } else {
+              data.cell.styles.fontStyle = 'normal';
+            }
+            
             if (cellData.isGrayed) {
               data.cell.styles.fillColor = colors.grayed.bg as [number, number, number];
               data.cell.styles.textColor = colors.grayed.text as [number, number, number];
@@ -328,18 +372,24 @@ export const exportPlanningToPDF = ({
             
             // Vérifier d'abord si la cellule a un commentaire - priorité au style de commentaire
             if (hasComment) {
-              console.log("Cellule avec commentaire");
+              // Récupérer le cellKey depuis les données de ligne
+              const rowData = data.row.raw as any[];
+              const cellKey = rowData[data.column.index]?.cellKey;
+              const comment = cellKey ? commentMap.get(cellKey) : null;
+              
+              console.log("Cellule avec commentaire, cellKey:", cellKey);
+              
               // Appliquer le style de commentaire (jaune)
               data.cell.styles.fillColor = colors.comment.bg;
               data.cell.styles.textColor = colors.comment.text;
               
-              // Ajouter l'indicateur selon le type de desiderata
-              if (desideratumType === 'primary') {
-                data.cell.text = ["P*"]; // Primary avec commentaire
-              } else if (desideratumType === 'secondary') {
-                data.cell.text = ["S*"]; // Secondary avec commentaire
+              // Ajouter l'indicateur avec numéro et le type de garde
+              const shiftType = cellData.assignment?.shiftType || '';
+              if (comment) {
+                data.cell.text = [shiftType ? `${shiftType} ${comment.number}` : `${comment.number}`];
               } else {
-                data.cell.text = ["💬"]; // Juste un commentaire sans désiderata
+                // Fallback si on ne trouve pas le commentaire
+                data.cell.text = [shiftType ? `${shiftType} *` : "*"];
               }
             }
             // Si pas de commentaire, mais il y a un desiderata
@@ -347,12 +397,12 @@ export const exportPlanningToPDF = ({
               console.log("Coloration en primary");
               data.cell.styles.fillColor = colors.primary.bg;
               data.cell.styles.textColor = colors.primary.text;
-              data.cell.text = ["P"];
+              data.cell.text = [cellData.assignment?.shiftType || ''];
             } else if (desideratumType === 'secondary') {
               console.log("Coloration en secondary");
               data.cell.styles.fillColor = colors.secondary.bg;
               data.cell.styles.textColor = colors.secondary.text;
-              data.cell.text = ["S"];
+              data.cell.text = [cellData.assignment?.shiftType || ''];
             }
           } else {
             // Afficher le type de garde seulement si pas de desiderata
@@ -370,9 +420,11 @@ export const exportPlanningToPDF = ({
     startX += tableWidth + (monthIndex < months.length - 1 ? 0.2 : 0);
   });
   
-  // Ajouter les commentaires si présents
-  if (showComments && comments.length > 0) {
-    // Ajouter un saut de page si nécessaire
+  // Ajouter les commentaires sur une page séparée avec références
+  const allComments = Array.from(commentMap.values());
+  
+  if (showComments && allComments.length > 0) {
+    // Ajouter un saut de page
     doc.addPage();
     
     // Titre de la section commentaires
@@ -380,28 +432,39 @@ export const exportPlanningToPDF = ({
     doc.setFont('helvetica', 'bold');
     doc.text('Commentaires', margin, margin + 5);
     
-    // Tableau des commentaires
+    // Tableau des commentaires avec références
     autoTable(doc, {
       startY: margin + 10,
-      head: [['Date', 'Période', 'Commentaire']],
-      body: comments.map(({ date, period, comment }) => [date, period, comment]),
+      head: [['Réf.', 'Date', 'Période', 'Commentaire']],
+      body: allComments.map((comment) => [
+        comment.number,
+        comment.date,
+        comment.period,
+        comment.comment
+      ]),
       theme: 'grid',
       styles: {
         fontSize: 8,
         cellPadding: 2
       },
       columnStyles: {
-        0: { cellWidth: 25 },
-        1: { cellWidth: 25 },
-        2: { cellWidth: 'auto' }
+        0: { cellWidth: 10, halign: 'center' }, // Référence
+        1: { cellWidth: 25 }, // Date
+        2: { cellWidth: 25 }, // Période
+        3: { cellWidth: 'auto' } // Commentaire
       },
       margin: { left: margin, right: margin }
     });
   }
 
   // Génération du fichier
+  // Si on veut juste retourner le document sans le télécharger
+  if (returnDocument) {
+    return doc;
+  }
+  
   const prefix = showAssignmentsOnly ? 'Planning' : 'Planning_avec_desiderata';
-  const fileName = `${prefix}_${userName.toUpperCase()}_${format(startDate, 'yyyy-MM-dd')}.pdf`;
+  const fileName = `${prefix}_${userName.toUpperCase()}_${formatParisDate(startDate, 'yyyy-MM-dd')}.pdf`;
   
   try {
     console.log('Début de la génération du PDF...');
@@ -474,14 +537,16 @@ export const exportAllPlanningsToPDFZip = async (
   users: User[],
   desiderataData: Record<string, { selections: Record<string, any>; validatedAt?: string }>,
   startDate: Date,
-  endDate: Date
+  endDate: Date,
+  primaryLimit?: number,
+  secondaryLimit?: number
 ): Promise<void> => {
   console.log("Début exportAllPlanningsToPDFZip, nombre d'utilisateurs:", users.length);
-  console.log("Format des données de desiderata:", desiderataData);
+  console.log("Format des données de desiderata:", Object.keys(desiderataData).length, "utilisateurs avec des données");
 
   const zip = new JSZip();
   // Créer le dossier avec le format "Desiderata_pdf_dateDebut"
-  const folderName = `Desiderata_pdf_${format(startDate, 'dd-MM-yyyy')}`;
+  const folderName = `Desiderata_pdf_${formatParisDate(startDate, 'dd-MM-yyyy')}`;
   const folder = zip.folder(folderName);
   if (!folder) return;
 
@@ -516,8 +581,13 @@ export const exportAllPlanningsToPDFZip = async (
     });
 
     const margin = 10;
-    const comments: { date: string; period: string; comment: string }[] = [];
     const pageWidth = doc.internal.pageSize.width;
+    
+    // Map pour stocker les commentaires avec leur numéro
+    const commentMap = new Map<string, PageComment>();
+    
+    // Stocker les commentaires par mois pour affichage en bas de page
+    const commentsByMonth = new Map<string, PageComment[]>();
     
     // Transformer les données pour calculer les pourcentages
     const transformedSelections: Selections = {};
@@ -542,28 +612,30 @@ export const exportAllPlanningsToPDFZip = async (
     const percentages = calculatePercentages(transformedSelections, startDate, endDate);
 
     // Titre du document
-    const title = `Desiderata ${user.lastName} ${user.firstName} - ${format(startDate, 'dd/MM/yyyy')} au ${format(endDate, 'dd/MM/yyyy')}`;
+    const title = `Desiderata ${user.lastName} ${user.firstName} - ${formatParisDate(startDate, 'dd/MM/yyyy')} au ${formatParisDate(endDate, 'dd/MM/yyyy')}`;
     doc.setFontSize(11);
     doc.text(title, margin, margin);
 
-    // Afficher les pourcentages
-    doc.setFontSize(9);
-    
-    const primaryText = `Primaire: ${percentages.primary.toFixed(1)}% / ${planningConfig.primaryDesiderataLimit}%`;
-    const secondaryText = `Secondaire: ${percentages.secondary.toFixed(1)}% / ${planningConfig.secondaryDesiderataLimit}%`;
-    
-    // Ajouter des points colorés
-    doc.setFillColor(255, 205, 210); // bg-red-100
-    doc.circle(margin, margin + 5, 1.5, 'F');
-    doc.setFillColor(219, 234, 254); // bg-blue-100
-    doc.circle(margin + 60, margin + 5, 1.5, 'F');
-    
-    // Texte des pourcentages
-    doc.setTextColor(percentages.primary > planningConfig.primaryDesiderataLimit ? 220 : 75, 85, 99);
-    doc.text(primaryText, margin + 4, margin + 6);
-    
-    doc.setTextColor(percentages.secondary > planningConfig.secondaryDesiderataLimit ? 220 : 75, 85, 99);
-    doc.text(secondaryText, margin + 64, margin + 6);
+    // Afficher les pourcentages si les limites sont définies
+    if (primaryLimit !== undefined && secondaryLimit !== undefined) {
+      doc.setFontSize(9);
+      
+      const primaryText = `Primaire: ${percentages.primary.toFixed(1)}% / ${primaryLimit}%`;
+      const secondaryText = `Secondaire: ${percentages.secondary.toFixed(1)}% / ${secondaryLimit}%`;
+      
+      // Ajouter des points colorés
+      doc.setFillColor(255, 205, 210); // bg-red-100
+      doc.circle(margin, margin + 5, 1.5, 'F');
+      doc.setFillColor(219, 234, 254); // bg-blue-100
+      doc.circle(margin + 60, margin + 5, 1.5, 'F');
+      
+      // Texte des pourcentages
+      doc.setTextColor(percentages.primary > primaryLimit ? 220 : 75, 85, 99);
+      doc.text(primaryText, margin + 4, margin + 6);
+      
+      doc.setTextColor(percentages.secondary > secondaryLimit ? 220 : 75, 85, 99);
+      doc.text(secondaryText, margin + 64, margin + 6);
+    }
 
     // Préparation des données par mois
     const months = getMonthsInRange(startDate, endDate);
@@ -573,15 +645,17 @@ export const exportAllPlanningsToPDFZip = async (
       );
 
       return {
-        monthTitle: format(month, 'MMMM yyyy', { locale: fr }).toUpperCase(),
+        monthTitle: formatParisDate(month, 'MMMM yyyy', { locale: frLocale }).toUpperCase(),
+        monthKey: formatParisDate(month, 'yyyy-MM'),
         data: days.map(day => {
-          const dateStr = format(day, 'yyyy-MM-dd');
-          const dayLabel = `${format(day, 'd', { locale: fr })} ${format(day, 'EEEEEE', { locale: fr }).toLowerCase()}`;
+          const dateStr = formatParisDate(day, 'yyyy-MM-dd');
+          const dayLabel = `${formatParisDate(day, 'd', { locale: frLocale })} ${formatParisDate(day, 'EEEEEE', { locale: frLocale }).toLowerCase()}`;
           const isGrayed = isGrayedOut(day);
           
           return {
             dayLabel,
             isGrayed,
+            date: day, // Ajouter la date complète pour vérifier week-end/férié
             periods: ['M', 'AM', 'S'].map(period => {
               const cellKey = `${dateStr}-${period}`;
               // Récupérer l'objet complet pour pouvoir accéder au commentaire
@@ -612,7 +686,8 @@ export const exportAllPlanningsToPDFZip = async (
                 desideratum: cellInfo.desideratum,
                 hasComment: cellInfo.hasComment,
                 comment: cellInfo.comment,
-                isGrayed
+                isGrayed,
+                cellKey // Ajouter pour récupérer le commentaire
               };
             })
           };
@@ -625,7 +700,7 @@ export const exportAllPlanningsToPDFZip = async (
     const columnWidth = tableWidth / 4;
     
     // Ajuster le startY pour tenir compte des pourcentages
-    const startY = margin + 12;
+    const startY = margin + (primaryLimit !== undefined && secondaryLimit !== undefined ? 12 : 8);
     let startX = margin;
 
     // Définition des couleurs avec tuples explicites
@@ -655,8 +730,55 @@ export const exportAllPlanningsToPDFZip = async (
       }
     };
 
+    // Ordre des périodes pour le tri
+    const periodOrder: Record<string, number> = { 'M': 1, 'AM': 2, 'S': 3 };
+    
+    // Créer la map des commentaires numérotés en ordre chronologique
+    // D'abord, collecter tous les commentaires avec leurs métadonnées
+    const commentsToSort: Array<{key: string, value: any, dateObj: Date, period: string}> = [];
+    
+    Object.entries(userData.selections).forEach(([key, value]) => {
+      if (typeof value === 'object' && value !== null && value.comment) {
+        const parts = key.split('-');
+        const dateStr = `${parts[0]}-${parts[1]}-${parts[2]}`;
+        const period = parts[3];
+        const dateObj = new Date(dateStr);
+        
+        commentsToSort.push({ key, value, dateObj, period });
+      }
+    });
+    
+    // Trier par date puis par période
+    commentsToSort.sort((a, b) => {
+      const dateCompare = a.dateObj.getTime() - b.dateObj.getTime();
+      if (dateCompare !== 0) return dateCompare;
+      return periodOrder[a.period] - periodOrder[b.period];
+    });
+    
+    // Maintenant numéroter dans l'ordre chronologique
+    commentsToSort.forEach((item, index) => {
+      const monthKey = formatParisDate(item.dateObj, 'yyyy-MM');
+      const periodName = item.period === 'M' ? 'Matin' : item.period === 'AM' ? 'Après-midi' : 'Soir';
+      
+      const pageComment: PageComment = {
+        number: commentNumbers[index] || `${index + 1}`,
+        date: formatParisDate(item.dateObj, 'dd/MM/yyyy', { locale: frLocale }),
+        period: periodName,
+        comment: item.value.comment,
+        type: item.value.type
+      };
+      
+      commentMap.set(item.key, pageComment);
+      
+      // Grouper par mois
+      if (!commentsByMonth.has(monthKey)) {
+        commentsByMonth.set(monthKey, []);
+      }
+      commentsByMonth.get(monthKey)!.push(pageComment);
+    });
+    
     // Génération des tableaux pour chaque mois
-    monthTables.forEach(({ monthTitle, data }, monthIndex) => {
+    monthTables.forEach(({ monthTitle, monthKey, data }, monthIndex) => {
       // En-tête du mois
       autoTable(doc, {
         startY,
@@ -679,13 +801,15 @@ export const exportAllPlanningsToPDFZip = async (
       autoTable(doc, {
         startY: startY + 8,
         head: [['Jour', 'M', 'AM', 'S']],
-        body: data.map(({ dayLabel, isGrayed, periods }) => [
-          { content: dayLabel, isGrayed, isDay: true },
+        body: data.map(({ dayLabel, isGrayed, date, periods }) => [
+          { content: dayLabel, isGrayed, isDay: true, date },
           ...periods.map(p => ({
             content: '',
             assignment: p.assignment,
             desideratum: p.desideratum,
-            isGrayed
+            isGrayed,
+            hasComment: p.hasComment,
+            cellKey: p.cellKey
           }))
         ]),
         theme: 'grid',
@@ -729,7 +853,20 @@ export const exportAllPlanningsToPDFZip = async (
             if (cellData.isDay) {
               data.cell.text = [cellData.content];
               data.cell.styles.halign = 'left';
-              data.cell.styles.fontStyle = 'normal'; 
+              
+              // Vérifier si c'est un week-end ou jour férié
+              const rowData = data.row.raw as any;
+              if (rowData && rowData[0] && rowData[0].date) {
+                const date = new Date(rowData[0].date);
+                if (isWeekend(date) || isHoliday(date)) {
+                  data.cell.styles.fontStyle = 'bold';
+                } else {
+                  data.cell.styles.fontStyle = 'normal';
+                }
+              } else {
+                data.cell.styles.fontStyle = 'normal';
+              }
+              
               if (cellData.isGrayed) {
                 data.cell.styles.fillColor = colors.grayed.bg as [number, number, number];
                 data.cell.styles.textColor = colors.grayed.text as [number, number, number];
@@ -749,17 +886,22 @@ export const exportAllPlanningsToPDFZip = async (
             
             // Vérifier d'abord si la cellule a un commentaire (priorité au commentaire)
             if (hasComment) {
+              // Récupérer le cellKey depuis les données de ligne
+              const rowData = data.row.raw as any[];
+              const cellKey = rowData[data.column.index]?.cellKey;
+              const comment = cellKey ? commentMap.get(cellKey) : null;
+              
               // Appliquer le style de commentaire (jaune)
               data.cell.styles.fillColor = colors.comment.bg as [number, number, number];
               data.cell.styles.textColor = colors.comment.text as [number, number, number];
               
-              // Ajouter l'indicateur selon le type de desiderata
-              if (desideratumType === 'primary') {
-                data.cell.text = ["P*"]; // Primary avec commentaire
-              } else if (desideratumType === 'secondary') {
-                data.cell.text = ["S*"]; // Secondary avec commentaire
+              // Ajouter l'indicateur avec numéro et le type de garde
+              const shiftType = cellData.assignment?.shiftType || '';
+              if (comment) {
+                data.cell.text = [shiftType ? `${shiftType} ${comment.number}` : `${comment.number}`];
               } else {
-                data.cell.text = ["💬"]; // Juste un commentaire sans désiderata
+                // Fallback si on ne trouve pas le commentaire
+                data.cell.text = [shiftType ? `${shiftType} *` : "*"];
               }
             }
             // Si pas de commentaire, mais il y a un desideratum
@@ -768,12 +910,12 @@ export const exportAllPlanningsToPDFZip = async (
                 data.cell.styles.fillColor = colors.primary.bg as [number, number, number];
                 data.cell.styles.textColor = colors.primary.text as [number, number, number];
                 // Ajouter la lettre "P" pour primaire
-                data.cell.text = ["P"];
+                data.cell.text = [cellData.assignment?.shiftType || ''];
               } else if (desideratumType === 'secondary') {
                 data.cell.styles.fillColor = colors.secondary.bg as [number, number, number];
                 data.cell.styles.textColor = colors.secondary.text as [number, number, number];
                 // Ajouter la lettre "S" pour secondaire
-                data.cell.text = ["S"];
+                data.cell.text = [cellData.assignment?.shiftType || ''];
               } else {
                 data.cell.text = [cellData.content || ''];
               }
@@ -793,28 +935,11 @@ export const exportAllPlanningsToPDFZip = async (
       startX += tableWidth + (monthIndex < months.length - 1 ? 0.2 : 0);
     });
 
-    // Extraction des commentaires
-    const extractedComments: { date: string; period: string; comment: string }[] = [];
-    Object.entries(userData.selections).forEach(([key, value]) => {
-      // Pour les objets avec une structure comme { type: 'primary', comment: '...' }
-      if (typeof value === 'object' && value !== null) {
-        const comment = (value as any).comment;
-        if (comment) {
-          const [dateStr, period] = key.split('-');
-          const date = format(new Date(dateStr), 'dd/MM/yyyy', { locale: fr });
-          const periodName = period === 'M' ? 'Matin' : period === 'AM' ? 'Après-midi' : 'Soir';
-          extractedComments.push({
-            date,
-            period: periodName,
-            comment
-          });
-        }
-      }
-    });
+    // Ajouter les commentaires sur une page séparée avec références
+    const allComments = Array.from(commentMap.values());
     
-    // Ajouter les commentaires si présents
-    if (extractedComments.length > 0) {
-      console.log(`${extractedComments.length} commentaires trouvés pour ${user.lastName}`);
+    if (allComments.length > 0) {
+      console.log(`${allComments.length} commentaires trouvés pour ${user.lastName}`);
       
       // Ajouter un saut de page
       doc.addPage();
@@ -824,20 +949,26 @@ export const exportAllPlanningsToPDFZip = async (
       doc.setFont('helvetica', 'bold');
       doc.text('Commentaires', margin, margin + 5);
       
-      // Tableau des commentaires
+      // Tableau des commentaires avec références
       autoTable(doc, {
         startY: margin + 10,
-        head: [['Date', 'Période', 'Commentaire']],
-        body: extractedComments.map(({ date, period, comment }) => [date, period, comment]),
+        head: [['Réf.', 'Date', 'Période', 'Commentaire']],
+        body: allComments.map((comment) => [
+          comment.number,
+          comment.date,
+          comment.period,
+          comment.comment
+        ]),
         theme: 'grid',
         styles: {
           fontSize: 8,
           cellPadding: 2
         },
         columnStyles: {
-          0: { cellWidth: 25 },
-          1: { cellWidth: 25 },
-          2: { cellWidth: 'auto' }
+          0: { cellWidth: 10, halign: 'center' }, // Référence
+          1: { cellWidth: 25 }, // Date
+          2: { cellWidth: 25 }, // Période
+          3: { cellWidth: 'auto' } // Commentaire
         },
         margin: { left: margin, right: margin }
       });
@@ -845,7 +976,7 @@ export const exportAllPlanningsToPDFZip = async (
 
     // Ajouter le PDF au dossier zip
     folder.file(
-      `${user.lastName.toUpperCase()}_${format(startDate, 'dd-MM-yyyy')}.pdf`,
+      `${user.lastName.toUpperCase()}_${formatParisDate(startDate, 'dd-MM-yyyy')}.pdf`,
       doc.output(),
       { binary: true }
     );

@@ -1,4 +1,5 @@
 import { getYear, addDays, subDays, isSameDay } from 'date-fns';
+import { createParisDate, toParisTime } from './timezoneUtils';
 
 // Calcul de Pâques selon l'algorithme de Meeus/Jones/Butcher
 function getEasterDate(year: number): Date {
@@ -17,7 +18,7 @@ function getEasterDate(year: number): Date {
   const month = Math.floor((h + l - 7 * m + 114) / 31) - 1;
   const day = ((h + l - 7 * m + 114) % 31) + 1;
   
-  return new Date(year, month, day);
+  return createParisDate(year, month, day);
 }
 
 // Calcul des jours fériés pour une année donnée
@@ -28,18 +29,18 @@ function getHolidaysForYear(year: number): Date[] {
   const pentecostMonday = addDays(easter, 50);
 
   return [
-    new Date(year, 0, 1),   // Jour de l'an
-    easter,                 // Pâques
-    easterMonday,          // Lundi de Pâques
-    new Date(year, 4, 1),   // Fête du Travail
-    new Date(year, 4, 8),   // Victoire 1945
-    ascension,             // Ascension
-    pentecostMonday,       // Lundi de Pentecôte
-    new Date(year, 6, 14),  // Fête Nationale
-    new Date(year, 7, 15),  // Assomption
-    new Date(year, 10, 1),  // Toussaint
-    new Date(year, 10, 11), // Armistice
-    new Date(year, 11, 25), // Noël
+    createParisDate(year, 0, 1),   // Jour de l'an
+    easter,                        // Pâques
+    easterMonday,                  // Lundi de Pâques
+    createParisDate(year, 4, 1),   // Fête du Travail
+    createParisDate(year, 4, 8),   // Victoire 1945
+    ascension,                     // Ascension
+    pentecostMonday,               // Lundi de Pentecôte
+    createParisDate(year, 6, 14),  // Fête Nationale
+    createParisDate(year, 7, 15),  // Assomption
+    createParisDate(year, 10, 1),  // Toussaint
+    createParisDate(year, 10, 11), // Armistice
+    createParisDate(year, 11, 25), // Noël
   ];
 }
 
@@ -75,6 +76,11 @@ export function isBridgeDay(date: Date): boolean {
 
   // Lundi pont (mardi férié)
   if (dayOfWeek === 1 && isHoliday(nextDay)) {
+    return true;
+  }
+
+  // Samedi pont (vendredi férié)
+  if (dayOfWeek === 6 && isHoliday(prevDay)) {
     return true;
   }
 

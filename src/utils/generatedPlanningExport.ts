@@ -1,11 +1,16 @@
 import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { createParisDate, formatParisDate } from '@/utils/timezoneUtils';
+import { frLocale } from '../utils/dateLocale';
+import { parseParisDate, formatParisDate, createParisDate } from '../utils/timezoneUtils';
 import JSZip from 'jszip';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getDaysArray, getMonthsInRange, isGrayedOut } from './dateUtils';
-import type { ShiftAssignment } from '../types/planning';
+import type { ShiftAssignment, PeriodSelection } from '../types/planning';
 import type { User } from '../features/users/types';
+import { exportPlanningToPDF } from './pdfExport';
+import { calculatePercentages } from './planningUtils';
+import { isHoliday } from './holidayUtils';
 
 export const exportGeneratedPlanningToCSV = (
   assignments: Record<string, ShiftAssignment>,
@@ -19,7 +24,7 @@ export const exportGeneratedPlanningToCSV = (
     const { shiftType, timeSlot, site } = assignment;
     
     // Formater la date en DD-MM-YY en utilisant la date de l'assignment
-    const formattedDate = format(new Date(assignment.date), 'dd-MM-yy');
+    const formattedDate = formatParisDate(assignment.date, 'dd-MM-yy');
 
     rows.push(`${formattedDate},${timeSlot},${shiftType},${site || ''}`);
   });
@@ -29,7 +34,7 @@ export const exportGeneratedPlanningToCSV = (
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
-  link.download = `Planning_${userName}_${format(new Date(), 'yyyy-MM-dd')}.csv`;
+  link.download = `Planning_${userName}_${formatParisDate(createParisDate(), 'yyyy-MM-dd')}.csv`;
   link.click();
   URL.revokeObjectURL(link.href);
 };
@@ -38,158 +43,33 @@ export const exportGeneratedPlanningToPDF = (
   assignments: Record<string, ShiftAssignment>,
   userName: string,
   startDate: Date,
-  endDate: Date
-): jsPDF => {
-  const doc = new jsPDF({
-    orientation: 'landscape',
-    unit: 'mm',
-    format: 'a4'
+  endDate: Date,
+  desiderata?: Record<string, 'primary' | 'secondary' | null | PeriodSelection>,
+  showAssignmentsOnly: boolean = true
+): void => {
+  // Toujours utiliser exportPlanningToPDF pour garantir la même présentation
+  exportPlanningToPDF({
+    userName,
+    startDate,
+    endDate,
+    assignments,
+    desiderata: desiderata || {},
+    showAssignmentsOnly,
+    showComments: !showAssignmentsOnly // Afficher les commentaires seulement si on affiche les desiderata
   });
-
-  const periodNames = { M: 'Matin', AM: 'Après-midi', S: 'Soir' };
-  const margin = 10;
-  const pageWidth = doc.internal.pageSize.width;
-
-  // Titre du document
-  const title = `Planning ${userName} - ${format(startDate, 'dd/MM/yyyy')} au ${format(endDate, 'dd/MM/yyyy')}`;
-  doc.setFontSize(11);
-  doc.text(title, margin, margin);
-
-  // Préparation des données par mois
-  const months = getMonthsInRange(startDate, endDate);
-  const monthTables = months.map(month => {
-    const days = getDaysArray(startDate, endDate).filter(day => 
-      day.getMonth() === month.getMonth() && day.getFullYear() === month.getFullYear()
-    );
-
-    return {
-      monthTitle: format(month, 'MMMM yyyy', { locale: fr }).toUpperCase(),
-      data: days.map(day => {
-        const dateStr = format(day, 'yyyy-MM-dd');
-        const dayLabel = `${format(day, 'd', { locale: fr })} ${format(day, 'EEEEEE', { locale: fr })}`;
-        const isGrayed = isGrayedOut(day);
-        
-        return {
-          dayLabel,
-          isGrayed,
-          periods: ['M', 'AM', 'S'].map(period => {
-            const cellKey = `${dateStr}-${period}`;
-            const assignment = assignments[cellKey];
-            return assignment ? {
-              content: assignment.shiftType,
-              site: assignment.site,
-              timeSlot: assignment.timeSlot
-            } : null;
-          })
-        };
-      })
-    };
-  });
-
-  // Calcul des dimensions des tableaux
-  const tableWidth = (pageWidth - (2 * margin) - ((months.length - 1) * 2)) / months.length;
-  const columnWidth = tableWidth / 4;
-  const startY = margin + 8;
-  let startX = margin;
-
-  // Définition des couleurs avec tuples de 3 éléments pour compatibilité avec jsPDF
-  const colors = {
-    grayed: {
-      bg: [243, 244, 246] as [number, number, number], // bg-gray-100
-      text: [75, 85, 99] as [number, number, number]   // text-gray-600
-    },
-    header: {
-      bg: [243, 244, 246] as [number, number, number], // bg-gray-100
-      text: [31, 41, 55] as [number, number, number]   // text-gray-800
-    }
-  };
-
-  // Génération des tableaux pour chaque mois
-  monthTables.forEach(({ monthTitle, data }, monthIndex) => {
-    // En-tête du mois
-    autoTable(doc, {
-      startY,
-      head: [[monthTitle]],
-      body: [],
-      theme: 'grid',
-      styles: {
-        fontSize: 8,
-        fontStyle: 'bold',
-        halign: 'center',
-        fillColor: colors.header.bg,
-        textColor: colors.header.text,
-        cellPadding: 2
-      },
-      margin: { left: startX },
-      tableWidth
-    });
-
-    // Corps du tableau
-    autoTable(doc, {
-      startY: startY + 8,
-      head: [['Jour', 'M', 'AM', 'S']],
-      body: data.map(({ dayLabel, isGrayed, periods }) => [
-        { content: dayLabel, isGrayed },
-        ...periods.map(p => ({
-          content: p?.content || '',
-          timeSlot: p?.timeSlot || '',
-          isGrayed
-        }))
-      ]),
-      theme: 'grid',
-      styles: {
-        fontSize: 7,
-        cellPadding: 1,
-        lineColor: [0, 0, 0],
-        lineWidth: 0.1,
-        minCellHeight: 4
-      },
-      headStyles: {
-        fillColor: colors.header.bg,
-        textColor: colors.header.text,
-        fontStyle: 'bold'
-      },
-      columnStyles: {
-        0: { cellWidth: columnWidth * 1.5 },
-        1: { cellWidth: columnWidth * 0.8, halign: 'center' },
-        2: { cellWidth: columnWidth * 0.8, halign: 'center' },
-        3: { cellWidth: columnWidth * 0.8, halign: 'center' }
-      },
-      didParseCell: (data) => {
-        if (data.section === 'body') {
-          const cellData = data.cell.raw as { 
-            content: string;
-            isGrayed: boolean 
-          };
-          if (!cellData) return;
-
-          if (cellData.isGrayed) {
-            data.cell.styles.fillColor = colors.grayed.bg;
-            data.cell.styles.textColor = colors.grayed.text;
-          }
-
-          data.cell.text = [cellData.content];
-        }
-      },
-      margin: { left: startX },
-      tableWidth
-    });
-
-    startX += tableWidth + (monthIndex < months.length - 1 ? 2 : 0);
-  });
-
-  return doc;
 };
 
 export const exportAllGeneratedPlanningsToPDFZip = async (
   users: User[],
   plannings: Record<string, Record<string, ShiftAssignment>>,
   startDate: Date,
-  endDate: Date
+  endDate: Date,
+  desiderataMap?: Record<string, Record<string, 'primary' | 'secondary' | null | PeriodSelection>>,
+  showAssignmentsOnly: boolean = true
 ): Promise<void> => {
   const zip = new JSZip();
   // Créer le dossier avec le format "Plannings_pdf_dateDebut"
-  const folderName = `Plannings_pdf_${format(startDate, 'dd-MM-yyyy')}`;
+  const folderName = `Plannings_pdf_${formatParisDate(startDate, 'dd-MM-yyyy')}`;
   const folder = zip.folder(folderName);
   if (!folder) return;
 
@@ -199,17 +79,29 @@ export const exportAllGeneratedPlanningsToPDFZip = async (
     if (!planning) continue;
 
     // Générer le PDF pour cet utilisateur
-    const doc = exportGeneratedPlanningToPDF(
+    const userDesiderata = desiderataMap ? desiderataMap[user.id] : undefined;
+    
+    // Créer un nouveau document PDF sans le télécharger
+    const doc = new jsPDF({
+      orientation: 'landscape',
+      unit: 'mm',
+      format: 'a4'
+    });
+
+    // Créer le PDF en utilisant la fonction helper
+    const pdfDoc = await createPlanningPDFForZip(
       planning,
       `${user.lastName} ${user.firstName}`,
       startDate,
-      endDate
+      endDate,
+      userDesiderata,
+      showAssignmentsOnly
     );
-
+    
     // Ajouter le PDF au dossier zip
     folder.file(
-      `Planning_${user.lastName.toUpperCase()}_${format(startDate, 'dd-MM-yyyy')}.pdf`,
-      doc.output('arraybuffer')
+      `Planning_${user.lastName.toUpperCase()}_${formatParisDate(startDate, 'dd-MM-yyyy')}.pdf`,
+      pdfDoc.output('arraybuffer')
     );
   }
 
@@ -222,6 +114,31 @@ export const exportAllGeneratedPlanningsToPDFZip = async (
   URL.revokeObjectURL(link.href);
 };
 
+// Fonction pour créer un PDF pour le ZIP (sans téléchargement direct)
+const createPlanningPDFForZip = async (
+  assignments: Record<string, ShiftAssignment>,
+  userName: string,
+  startDate: Date,
+  endDate: Date,
+  desiderata?: Record<string, 'primary' | 'secondary' | null | PeriodSelection>,
+  showAssignmentsOnly: boolean = true
+): Promise<jsPDF> => {
+  // Utiliser exportPlanningToPDF avec returnDocument=true
+  const doc = exportPlanningToPDF({
+    userName,
+    startDate,
+    endDate,
+    assignments,
+    desiderata: desiderata || {},
+    showAssignmentsOnly,
+    showComments: !showAssignmentsOnly,
+    returnDocument: true
+  }) as jsPDF;
+  
+  return doc;
+};
+
+
 export const exportAllGeneratedPlanningsToCSVZip = async (
   users: User[],
   plannings: Record<string, Record<string, ShiftAssignment>>,
@@ -229,7 +146,7 @@ export const exportAllGeneratedPlanningsToCSVZip = async (
 ): Promise<void> => {
   const zip = new JSZip();
   // Créer le dossier avec le format "Plannings_csv_dateDebut"
-  const folderName = `Plannings_csv_${format(startDate, 'dd-MM-yyyy')}`;
+  const folderName = `Plannings_csv_${formatParisDate(startDate, 'dd-MM-yyyy')}`;
   const folder = zip.folder(folderName);
   if (!folder) return;
 
@@ -241,13 +158,13 @@ export const exportAllGeneratedPlanningsToCSVZip = async (
     // Générer le contenu CSV
     const rows = ['Date,Créneau,Type,Site'];
     Object.entries(planning).forEach(([key, assignment]) => {
-      const formattedDate = format(new Date(assignment.date), 'dd-MM-yy');
+      const formattedDate = formatParisDate(assignment.date, 'dd-MM-yy');
       rows.push(`${formattedDate},${assignment.timeSlot},${assignment.shiftType},${assignment.site || ''}`);
     });
 
     // Ajouter le CSV au dossier zip
     folder.file(
-      `Planning_${user.lastName.toUpperCase()}_${format(startDate, 'dd-MM-yyyy')}.csv`,
+      `Planning_${user.lastName.toUpperCase()}_${formatParisDate(startDate, 'dd-MM-yyyy')}.csv`,
       rows.join('\n')
     );
   }

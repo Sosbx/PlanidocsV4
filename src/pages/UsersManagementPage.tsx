@@ -3,7 +3,7 @@ import { UserPlus } from 'lucide-react';
 import { AddUserModal } from '../features/users/components/AddUserModal';
 import { EditUserModal } from '../features/users/components/EditUserModal';
 import { UsersList } from '../features/users/components/UsersList';
-import { useUsers } from '../features/auth/hooks';
+import { useUsers } from '../features/auth/hooks/useUsers';
 import type { User } from '../features/users/types';
 
 const UsersManagementPage: React.FC = () => {

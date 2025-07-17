@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
+import { formatParisDate } from '@/utils/timezoneUtils';
 import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { frLocale } from '../../../../utils/dateLocale';
 import { saveGeneratedPlanning, createPlanningPeriod, deletePlanningPeriod, updatePlanningPeriod, deletePlanningForPeriod, validateBagAndMergePeriods } from '../../../../lib/firebase/planning';
 import { useImportExport } from '../../hooks';
 import { usePlanningPeriod } from '../../../../context/planning';
@@ -378,7 +379,7 @@ const ImportedPlanningsManager: React.FC<ImportedPlanningsManagerProps> = ({
   
   // Formater la date de manière courte
   const formatShortDate = (date: Date): string => {
-    return format(new Date(date), 'dd/MM/yy', { locale: fr });
+    return formatParisDate(new Date(date), 'dd/MM/yy', { locale: frLocale });
   };
 
   return (

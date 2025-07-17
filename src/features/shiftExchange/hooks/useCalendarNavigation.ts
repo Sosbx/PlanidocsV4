@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { createParisDate, startOfMonthParis, endOfMonthParis, addMonthsParis, subMonthsParis } from '@/utils/timezoneUtils';
 import { startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths, addDays, subDays, parseISO } from 'date-fns';
 import { useSwipeDetection } from '../../../hooks/useSwipeDetection';
 
@@ -25,7 +26,7 @@ interface CalendarNavigationResult {
  */
 export const useCalendarNavigation = (initialViewMode: ViewMode = 'list'): CalendarNavigationResult => {
   // État de navigation du calendrier - sera initialisé correctement plus tard
-  const [currentMonth, setCurrentMonth] = useState<Date>(() => new Date());
+  const [currentMonth, setCurrentMonth] = useState<Date>(() => createParisDate());
   
   // Pour suivre si c'est le premier chargement de données et si le mois a été défini manuellement
   const hasBeenManuallySet = useRef(false);
@@ -42,12 +43,12 @@ export const useCalendarNavigation = (initialViewMode: ViewMode = 'list'): Calen
   // Fonctions de navigation du calendrier - uniquement mode mois
   const goToPrevious = useCallback(() => {
     // En mode mois, reculer d'un mois
-    setCurrentMonth(prevMonth => subMonths(prevMonth, 1));
+    setCurrentMonth(prevMonth => subMonthsParis(prevMonth, 1));
   }, []);
   
   const goToNext = useCallback(() => {
     // En mode mois, avancer d'un mois
-    setCurrentMonth(prevMonth => addMonths(prevMonth, 1));
+    setCurrentMonth(prevMonth => addMonthsParis(prevMonth, 1));
   }, []);
   
   // Utiliser le hook de détection de swipe
@@ -67,8 +68,8 @@ export const useCalendarNavigation = (initialViewMode: ViewMode = 'list'): Calen
   const getDaysToDisplay = useCallback(() => {
     try {
       // Mode mois uniquement
-      const start = startOfMonth(currentMonth);
-      const end = endOfMonth(currentMonth);
+      const start = startOfMonthParis(currentMonth);
+      const end = endOfMonthParis(currentMonth);
       
       // Ajuster pour commencer par un lundi
       // Calculer le décalage pour démarrer au lundi

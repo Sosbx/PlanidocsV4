@@ -1,4 +1,5 @@
 import { collection, getDocs, query, where, orderBy, doc, getDoc, deleteDoc, runTransaction, Timestamp, serverTimestamp } from 'firebase/firestore';
+import { createParisDate } from '@/utils/timezoneUtils';
 import { db } from '../config';
 import { COLLECTIONS, createExchangeValidationError, ExchangeHistory, CacheEntry } from './types';
 import { findAssignmentInPlanning, removeAssignmentFromPlanningData, addAssignmentToPlanningData } from './planning-operations';
@@ -35,7 +36,7 @@ export const getExchangeHistory = async (): Promise<ExchangeHistory[]> => {
         const result: ExchangeHistory = {
           date: data.date || '',
           period: data.period || '',
-          exchangedAt: data.exchangedAt || new Date().toISOString(),
+          exchangedAt: data.exchangedAt || createParisDate().toISOString(),
           originalUserId: data.originalUserId || '',
           newUserId: data.newUserId || '',
           shiftType: data.shiftType || '',
@@ -68,7 +69,7 @@ export const getExchangeHistory = async (): Promise<ExchangeHistory[]> => {
             const result: ExchangeHistory = {
               date: data.date || '',
               period: data.period || '',
-              exchangedAt: data.exchangedAt || new Date().toISOString(),
+              exchangedAt: data.exchangedAt || createParisDate().toISOString(),
               originalUserId: data.originalUserId || '',
               newUserId: data.newUserId || '',
               shiftType: data.shiftType || '',

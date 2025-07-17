@@ -1,4 +1,5 @@
 import { httpsCallable } from 'firebase/functions';
+import { createParisDate } from '@/utils/timezoneUtils';
 import { app, functions } from './config';
 import { NotificationType } from './notifications';
 import { formatDate } from '../../utils/dateUtils';
@@ -126,7 +127,7 @@ export const sendDesiderataReminderPushNotification = async (
     data: {
       deadline: deadlineStr,
       link: '/desiderata',
-      createdAt: new Date().toISOString()
+      createdAt: createParisDate().toISOString()
     }
   });
 };

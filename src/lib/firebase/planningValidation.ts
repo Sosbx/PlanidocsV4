@@ -1,4 +1,5 @@
 import { doc, runTransaction, serverTimestamp, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { createParisDate, firebaseTimestampToParisDate } from '@/utils/timezoneUtils';
 import { db } from './config';
 import { finalizeAllExchanges } from './exchange';
 import { addDirectExchange } from './directExchange';
@@ -70,8 +71,8 @@ export const validateBagPlanning = async (): Promise<void> => {
       } else {
         // Si le document n'existe pas, le créer
         currentPeriod = {
-          startDate: new Date(),
-          endDate: new Date(new Date().setMonth(new Date().getMonth() + 3))
+          startDate: createParisDate(),
+          endDate: new Date(createParisDate().setMonth(createParisDate().getMonth() + 3))
         };
         
         transaction.set(periodsRef, {
@@ -93,11 +94,11 @@ export const validateBagPlanning = async (): Promise<void> => {
       if (currentPeriod) {
         const startDate = currentPeriod.startDate instanceof Date 
           ? currentPeriod.startDate 
-          : currentPeriod.startDate.toDate();
+          : firebaseTimestampToParisDate(currentPeriod.startDate);
         
         const endDate = currentPeriod.endDate instanceof Date 
           ? currentPeriod.endDate 
-          : currentPeriod.endDate.toDate();
+          : firebaseTimestampToParisDate(currentPeriod.endDate);
         
         for (const docSnapshot of finalizedExchangesSnapshot.docs) {
           const exchange = docSnapshot.data() as ShiftExchange;
@@ -161,8 +162,8 @@ export const setNextPlanningPeriod = async (startDate: Date, endDate: Date): Pro
         // Si le document n'existe pas, le créer
         transaction.set(periodsRef, {
           currentPeriod: {
-            startDate: new Date(),
-            endDate: new Date(new Date().setMonth(new Date().getMonth() + 3))
+            startDate: createParisDate(),
+            endDate: new Date(createParisDate().setMonth(createParisDate().getMonth() + 3))
           },
           futurePeriod: {
             startDate,
@@ -231,8 +232,8 @@ const transferToDirectExchanges = async (): Promise<void> => {
       
       // Vérifier si l'échange est dans la période courante
       const exchangeDate = new Date(exchange.date);
-      const startDate = new Date(currentPeriod.startDate.toDate());
-      const endDate = new Date(currentPeriod.endDate.toDate());
+      const startDate = new Date(firebaseTimestampToParisDate(currentPeriod.startDate));
+      const endDate = new Date(firebaseTimestampToParisDate(currentPeriod.endDate));
       
       if (exchangeDate >= startDate && exchangeDate <= endDate) {
         try {
@@ -247,7 +248,7 @@ const transferToDirectExchanges = async (): Promise<void> => {
             operationType: 'exchange',
             operationTypes: ['exchange'],
             status: 'pending',
-            lastModified: new Date().toISOString(),
+            lastModified: createParisDate().toISOString(),
             interestedUsers: []
           });
         } catch (error) {
@@ -281,10 +282,10 @@ export const isDateInBagPeriod = async (date: Date): Promise<boolean> => {
     const checkDate = new Date(date);
     checkDate.setHours(0, 0, 0, 0);
     
-    const startDate = new Date(futurePeriod.startDate.toDate());
+    const startDate = new Date(firebaseTimestampToParisDate(futurePeriod.startDate));
     startDate.setHours(0, 0, 0, 0);
     
-    const endDate = new Date(futurePeriod.endDate.toDate());
+    const endDate = new Date(firebaseTimestampToParisDate(futurePeriod.endDate));
     endDate.setHours(23, 59, 59, 999);
     
     return checkDate >= startDate && checkDate <= endDate;

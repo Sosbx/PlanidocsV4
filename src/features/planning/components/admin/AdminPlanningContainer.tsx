@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { PlanningContainer } from '../shared';
-import { PlanningToolbar, UserSelector, ImportDropZone } from './';
+import { PlanningToolbar, UserSelector, ImportDropZone, ExportPDFModal } from './';
 import { useImportExport } from '../../hooks';
+import { useAuth } from '../../../../features/auth/hooks';
 import type { User } from '../../../../types/users';
 import type { ShiftAssignment, GeneratedPlanning } from '../../../../types/planning';
 import type { ShiftExchange } from '../../../../types/exchange';
@@ -76,6 +77,16 @@ const AdminPlanningContainer: React.FC<AdminPlanningContainerProps> = ({
   // État pour les notifications
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   
+  // État pour le modal d'export PDF
+  const [showExportPDFModal, setShowExportPDFModal] = useState(false);
+  const [pendingPDFExport, setPendingPDFExport] = useState<{ userId?: string; isAll?: boolean } | null>(null);
+  const [exportDates, setExportDates] = useState<{ startDate: Date; endDate: Date } | null>(null);
+  
+  
+  // Récupérer l'utilisateur courant pour l'association
+  const { user } = useAuth();
+  const associationId = user?.associationId || 'RD';
+  
   // Forcer le re-rendu lorsque showDesiderata change
   React.useEffect(() => {
     console.log("AdminPlanningContainer: showDesiderata a changé:", showDesiderata);
@@ -110,6 +121,40 @@ const AdminPlanningContainer: React.FC<AdminPlanningContainerProps> = ({
     endDate
   });
 
+  // Fonctions pour gérer l'export PDF avec modal
+  const handlePDFExportClick = (userId?: string, isAll: boolean = false) => {
+    setPendingPDFExport({ userId, isAll });
+    setShowExportPDFModal(true);
+  };
+
+  const handleExportWithDesiderata = async (customStartDate: Date, customEndDate: Date) => {
+    setExportDates({ startDate: customStartDate, endDate: customEndDate });
+    if (pendingPDFExport?.isAll) {
+      await handleExportAllPDF(true, customStartDate, customEndDate);
+    } else if (pendingPDFExport?.userId) {
+      await handleExportPDF(pendingPDFExport.userId, true, customStartDate, customEndDate);
+    }
+    setShowExportPDFModal(false);
+    setPendingPDFExport(null);
+    setExportDates(null);
+  };
+
+  const handleExportWithoutDesiderata = async (customStartDate: Date, customEndDate: Date) => {
+    setExportDates({ startDate: customStartDate, endDate: customEndDate });
+    if (pendingPDFExport?.isAll) {
+      await handleExportAllPDF(false, customStartDate, customEndDate);
+    } else if (pendingPDFExport?.userId) {
+      await handleExportPDF(pendingPDFExport.userId, false, customStartDate, customEndDate);
+    }
+    setShowExportPDFModal(false);
+    setPendingPDFExport(null);
+    setExportDates(null);
+  };
+
+  // Trouver le nom de l'utilisateur sélectionné
+  const selectedUser = users.find(u => u.id === selectedUserId);
+  const selectedUserName = selectedUser ? `${selectedUser.lastName} ${selectedUser.firstName}` : '';
+
   return (
     <div className="flex flex-col h-full">
       {/* Sélecteur d'utilisateur */}
@@ -124,9 +169,9 @@ const AdminPlanningContainer: React.FC<AdminPlanningContainerProps> = ({
       
       {/* Barre d'outils */}
       <PlanningToolbar
-        onExportPDF={() => handleExportPDF(selectedUserId)}
+        onExportPDF={() => handlePDFExportClick(selectedUserId)}
         onExportCSV={() => handleExportCSV(selectedUserId)}
-        onExportAllPDF={handleExportAllPDF}
+        onExportAllPDF={() => handlePDFExportClick(undefined, true)}
         onExportAllCSV={handleExportAllCSV}
         onToggleDesiderata={onToggleDesiderata}
         showDesiderata={showDesiderata}
@@ -178,6 +223,22 @@ const AdminPlanningContainer: React.FC<AdminPlanningContainerProps> = ({
         onCellClick={onCellClick}
         showPeriodSelector={true}
       />
+      
+      {/* Modal d'export PDF */}
+      <ExportPDFModal
+        isOpen={showExportPDFModal}
+        onClose={() => {
+          setShowExportPDFModal(false);
+          setPendingPDFExport(null);
+        }}
+        onExportWithDesiderata={handleExportWithDesiderata}
+        onExportWithoutDesiderata={handleExportWithoutDesiderata}
+        userName={pendingPDFExport?.isAll ? 'Tous les utilisateurs' : selectedUserName}
+        isLoading={isProcessing}
+        defaultStartDate={startDate}
+        defaultEndDate={endDate}
+      />
+      
     </div>
   );
 };

@@ -1,6 +1,7 @@
 // Service worker pour Firebase Cloud Messaging
-importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-messaging-compat.js');
+// Utilisation de la version 10.8.0 pour correspondre à la version de l'app
+importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js');
 
 // Initialiser l'application Firebase avec les valeurs réelles du projet
 firebase.initializeApp({

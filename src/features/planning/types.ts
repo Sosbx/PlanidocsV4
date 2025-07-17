@@ -1,3 +1,5 @@
+import { createParisDate } from '@/utils/timezoneUtils';
+
 /**
  * Types pour le module de planning
  */
@@ -22,7 +24,7 @@ export interface BagPhaseConfig {
 
 export const defaultBagPhaseConfig: BagPhaseConfig = {
   phase: 'submission',
-  submissionDeadline: new Date(),
+  submissionDeadline: createParisDate(),
   isConfigured: false,
   isValidated: false
 };
@@ -98,9 +100,9 @@ export interface ExchangeHistory {
 }
 
 export const defaultConfig: PlanningConfig = {
-  startDate: new Date(),
-  endDate: new Date(),
-  deadline: new Date(),
+  startDate: createParisDate(),
+  endDate: createParisDate(),
+  deadline: createParisDate(),
   primaryDesiderataLimit: 0,
   secondaryDesiderataLimit: 0,
   isConfigured: false,

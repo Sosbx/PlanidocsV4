@@ -46,7 +46,7 @@ const ShiftExchangePage: React.FC = () => {
   } = useShiftExchangeCore({
     enableHistory: false, // Pas besoin de l'historique pour la page utilisateur
     enableConflictCheck: true,
-    limitResults: 100
+    limitResults: 0 // Pas de limite pour voir toutes les gardes disponibles
   });
   
   const bottomNavPadding = useBottomNavPadding();

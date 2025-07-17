@@ -107,6 +107,41 @@ Les opérations importantes (comme les échanges) doivent être atomiques:
 - Suivre la convention de séparation des mécanismes de lecture et d'écriture
 - Respecter la structure feature-first pour toute nouvelle fonctionnalité
 
+### ⚠️ IMPORTANT : Gestion des dates et fuseaux horaires
+
+**L'application DOIT utiliser exclusivement le fuseau horaire Europe/Paris pour toutes les dates.**
+
+#### Règles obligatoires pour les dates :
+
+1. **JAMAIS utiliser `new Date()` directement**
+   - ❌ `const today = new Date()`
+   - ✅ `const today = createParisDate()`
+
+2. **Importer les utilitaires de timezone** :
+   ```typescript
+   import { createParisDate, toParisTime, startOfMonthParis, endOfMonthParis, addMonthsParis, subMonthsParis } from '../utils/timezoneUtils';
+   ```
+
+3. **Conversions obligatoires** :
+   - `new Date()` → `createParisDate()`
+   - `new Date(year, month, day)` → `createParisDate(year, month, day)`
+   - `startOfMonth(date)` → `startOfMonthParis(date)`
+   - `endOfMonth(date)` → `endOfMonthParis(date)`
+   - `addMonths(date, n)` → `addMonthsParis(date, n)`
+   - `subMonths(date, n)` → `subMonthsParis(date, n)`
+   - `firebaseTimestamp.toDate()` → `firebaseTimestampToParisDate(firebaseTimestamp)`
+
+4. **Exceptions autorisées** :
+   - `Date.now()` uniquement pour mesurer des performances (non pour des dates métier)
+   - Timestamps de cache local (car relatifs)
+
+5. **Vérification avant tout commit** :
+   - Rechercher tous les `new Date(` dans le code modifié
+   - S'assurer que toutes les dates passent par les utilitaires Paris
+   - Tester avec un utilisateur dans un fuseau horaire différent
+
+Cette règle garantit que tous les utilisateurs voient exactement les mêmes dates, peu importe leur localisation géographique.
+
 ## Directives spécifiques
 
 Comme indiqué dans CLAUDE.local.md, pour toute modification:

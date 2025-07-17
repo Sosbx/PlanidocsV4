@@ -9,7 +9,7 @@ import Logo from './common/Logo';
 import NotificationBell from './common/NotificationBell';
 import { Link, NavLink } from 'react-router-dom';
 import { getUserInitials } from '../features/users/utils/userUtils';
-import { toast } from 'react-toastify';
+import { useToastContext } from '../context/toast';
 
 interface AdminMenuItemProps {
   to: string;
@@ -84,14 +84,7 @@ const NavItem: React.FC<NavItemProps & { disabled?: boolean }> = ({ to, icon: Ic
     // N'afficher le toast que si aucun n'a été affiché dans les 5 dernières secondes
     if (now - lastToastTime > 5000) {
       // Message plus court
-      toast.info(`${featureName} en développement`, {
-        position: "top-center",
-        autoClose: 2000,
-        hideProgressBar: false,
-        closeOnClick: true,
-        pauseOnHover: true,
-        draggable: true
-      });
+      showToast(`${featureName} en développement`, 'info');
       
       // Enregistrer le moment où ce toast a été affiché
       navItemRecentToasts[featureName] = now;
@@ -144,14 +137,17 @@ const Navbar = () => {
   const { notifications, markAsRead, markAllAsRead } = useNotifications();
   const { isFeatureEnabled, getFeatureStatus, isSuperAdmin } = useFeatureFlags();
   const { canAccessSuperAdmin, isSuperAdminMode } = useSuperAdmin();
+  const { showToast } = useToastContext();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isAdminMenuOpen, setIsAdminMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
 
   // Définition des liens communs à tous les utilisateurs
   const commonLinks: NavLinkDefinition[] = useMemo(() => [
-    { to: "/user", icon: Calendar, label: "Desiderata", requiredRoles: ['isUser', 'isManager', 'isAdmin'], disabled: getFeatureStatus(FEATURES.DESIDERATA) === 'dev' },
     { to: "/planning", icon: CalendarClock, label: "Mon Planning", requiredRoles: ['isUser', 'isManager', 'isAdmin'], disabled: getFeatureStatus(FEATURES.PLANNING) === 'dev' },
+    { to: "/direct-exchange", icon: RefreshCw, label: "Échanges", requiredRoles: ['isUser', 'isManager', 'isAdmin'], disabled: getFeatureStatus(FEATURES.DIRECT_EXCHANGE) === 'dev' },
+    { to: "/shift-exchange", icon: Repeat, label: "Bourse aux Gardes", requiredRoles: ['isUser', 'isManager', 'isAdmin'], disabled: getFeatureStatus(FEATURES.SHIFT_EXCHANGE) === 'dev' },
+    { to: "/user", icon: Calendar, label: "Desiderata", requiredRoles: ['isUser', 'isManager', 'isAdmin'], disabled: getFeatureStatus(FEATURES.DESIDERATA) === 'dev' },
   ], [getFeatureStatus]);
 
   // Liens spécifiques pour le menu d'administration (uniquement pour les administrateurs)
@@ -165,8 +161,6 @@ const Navbar = () => {
 
   // Liens pour les fonctionnalités en développement (communs à tous les utilisateurs)
   const devFeatureLinks: NavLinkDefinition[] = useMemo(() => [
-    { to: "/shift-exchange", icon: Repeat, label: "Bourse aux Gardes", requiredRoles: ['isUser', 'isManager', 'isAdmin'], disabled: getFeatureStatus(FEATURES.SHIFT_EXCHANGE) === 'dev' },
-    { to: "/direct-exchange", icon: RefreshCw, label: "Échanges", requiredRoles: ['isUser', 'isManager', 'isAdmin'], disabled: getFeatureStatus(FEATURES.DIRECT_EXCHANGE) === 'dev' },
   ], [getFeatureStatus]);
 
   // Déterminer les liens à afficher dans la barre de navigation principale

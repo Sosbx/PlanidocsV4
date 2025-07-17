@@ -10,6 +10,7 @@ import {
   query,
   where
 } from 'firebase/firestore';
+import { createParisDate, firebaseTimestampToParisDate } from '@/utils/timezoneUtils';
 import { db } from './config';
 import { FeatureFlag, FeatureFlagUpdate, DEFAULT_FEATURES, FeatureKey } from '../../types/featureFlags';
 
@@ -46,7 +47,7 @@ export const featureFlagsService = {
       return snapshot.docs.map(doc => ({
         ...doc.data(),
         id: doc.id,
-        lastUpdated: doc.data().lastUpdated?.toDate() || new Date()
+        lastUpdated: doc.data().lastUpdated?.toDate() || createParisDate()
       } as FeatureFlag));
     } catch (error) {
       console.error('Error fetching feature flags:', error);
@@ -61,7 +62,7 @@ export const featureFlagsService = {
         return {
           ...docRef.data(),
           id: docRef.id,
-          lastUpdated: docRef.data().lastUpdated?.toDate() || new Date()
+          lastUpdated: docRef.data().lastUpdated?.toDate() || createParisDate()
         } as FeatureFlag;
       }
       return null;
@@ -102,7 +103,7 @@ export const featureFlagsService = {
         const flags = snapshot.docs.map(doc => ({
           ...doc.data(),
           id: doc.id,
-          lastUpdated: doc.data().lastUpdated?.toDate() || new Date()
+          lastUpdated: doc.data().lastUpdated?.toDate() || createParisDate()
         } as FeatureFlag));
         callback(flags);
       },

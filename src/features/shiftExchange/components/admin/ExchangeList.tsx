@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
+import { formatParisDate } from '@/utils/timezoneUtils';
 import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
-import { X, AlertTriangle, UserPlus } from 'lucide-react';
+import { frLocale } from '../../../../utils/dateLocale';
+import { X, AlertTriangle, UserPlus, TrendingUp, TrendingDown } from 'lucide-react';
 import { proposeToReplacements, cancelPropositionToReplacements } from '../../../../lib/firebase/exchange';
 import type { BagPhaseConfig, ShiftAssignment } from '../../../../types/planning';
 import type { ShiftExchange as PlanningShiftExchange } from '../../../../types/planning';
@@ -10,6 +11,7 @@ import type { ShiftExchange as FeatureShiftExchange } from '../../types';
 // Type union pour accepter les deux types de ShiftExchange
 type ShiftExchange = PlanningShiftExchange | FeatureShiftExchange;
 import type { User } from '../../../../types/users';
+import type { SuggestionScore } from '../../types/scoring';
 import { isGrayedOut } from '../../../../utils/dateUtils';
 import InterestedUserCard from './InterestedUserCard';
 import { ConfirmationModal } from '../../../../components/modals';
@@ -22,12 +24,17 @@ interface ExchangeListProps {
   conflictStates: Record<string, Record<string, boolean>>;
   conflictShiftTypes?: Record<string, Record<string, string>>;
   userAssignments: Record<string, Record<string, ShiftAssignment>>;
+  suggestions?: Record<string, SuggestionScore[]>;
+  showSuggestions?: boolean;
   onValidateExchange: (exchangeId: string, interestedUserId: string, hasConflict: boolean) => void;
   onRejectExchange: (exchangeId: string) => void;
   onRemoveUser: (exchangeId: string, userId: string) => void;
   history: any[]; // Added history prop
   selectedForReplacements?: Set<string>;
   onSelectedForReplacementsChange?: (selected: Set<string>) => void;
+  filterPeriod?: 'all' | 'M' | 'AM' | 'S';
+  showOnlyWithInterested?: boolean;
+  filterUserId?: string;
 }
 
 const periodNames = {
@@ -43,12 +50,17 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
   conflictStates,
   conflictShiftTypes,
   userAssignments,
+  suggestions = {},
+  showSuggestions = true,
   onValidateExchange,
   onRejectExchange,
   onRemoveUser,
   history, // Added history prop
   selectedForReplacements: externalSelected,
-  onSelectedForReplacementsChange
+  onSelectedForReplacementsChange,
+  filterPeriod = 'all',
+  showOnlyWithInterested = false,
+  filterUserId = ''
 }) => {
   const [showRejectConfirmation, setShowRejectConfirmation] = useState(false);
   const [exchangeToReject, setExchangeToReject] = useState<string | null>(null);
@@ -56,6 +68,10 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
   const [selectedForReplacements, setSelectedForReplacements] = useState<Set<string>>(
     externalSelected || new Set()
   );
+  
+  // États pour le tri des colonnes
+  const [sortColumn, setSortColumn] = useState<'date' | 'doctor' | 'type' | 'interested'>('date');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   const handleRejectClick = (exchangeId: string) => {
     setExchangeToReject(exchangeId);
@@ -89,7 +105,7 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
     try {
       setProposingToReplacements(exchange.id);
       await proposeToReplacements(exchange as PlanningShiftExchange);
-      alert(`La garde du ${format(new Date(exchange.date), 'dd/MM/yyyy')} (${exchange.period}) a été proposée aux remplaçants.`);
+      alert(`La garde du ${formatParisDate(new Date(exchange.date), 'dd/MM/yyyy')} (${exchange.period}) a été proposée aux remplaçants.`);
     } catch (error) {
       console.error('Error proposing to replacements:', error);
       alert('Une erreur est survenue lors de la proposition aux remplaçants.');
@@ -106,11 +122,76 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
            bagPhaseConfig.phase === 'distribution';
   };
 
-  // Trier les échanges par date uniquement, pour garder les échanges désactivés à leur place chronologique
-  const sortedExchanges = [...exchanges].sort((a, b) => {
-    // Trier uniquement par date pour maintenir l'ordre chronologique
-    return a.date.localeCompare(b.date);
-  });
+  // Fonction pour gérer le clic sur une colonne triable
+  const handleSort = (column: 'date' | 'doctor' | 'type' | 'interested') => {
+    if (sortColumn === column) {
+      // Si on clique sur la même colonne, inverser la direction
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // Si on clique sur une nouvelle colonne, la définir avec direction ascendante
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  // Filtrer et trier les échanges
+  const sortedExchanges = useMemo(() => {
+    // D'abord filtrer par période si nécessaire
+    let filtered = filterPeriod === 'all' 
+      ? exchanges 
+      : exchanges.filter(exchange => exchange.period === filterPeriod);
+    
+    // Ensuite filtrer par intéressés si nécessaire
+    if (showOnlyWithInterested) {
+      filtered = filtered.filter(exchange => 
+        exchange.interestedUsers && exchange.interestedUsers.length > 0
+      );
+    }
+    
+    // Filtrer par utilisateur si nécessaire
+    if (filterUserId) {
+      filtered = filtered.filter(exchange => 
+        // L'utilisateur est le propriétaire de la garde
+        exchange.userId === filterUserId ||
+        // OU l'utilisateur est dans la liste des intéressés
+        (exchange.interestedUsers && exchange.interestedUsers.includes(filterUserId))
+      );
+    }
+    
+    // Ensuite trier
+    const sorted = [...filtered].sort((a, b) => {
+      let comparison = 0;
+      
+      switch (sortColumn) {
+        case 'date':
+          comparison = a.date.localeCompare(b.date);
+          break;
+          
+        case 'doctor':
+          const userA = users.find(u => u.id === a.userId);
+          const userB = users.find(u => u.id === b.userId);
+          const nameA = userA?.lastName || '';
+          const nameB = userB?.lastName || '';
+          comparison = nameA.localeCompare(nameB);
+          break;
+          
+        case 'type':
+          comparison = a.shiftType.localeCompare(b.shiftType);
+          break;
+          
+        case 'interested':
+          const countA = a.interestedUsers?.length || 0;
+          const countB = b.interestedUsers?.length || 0;
+          comparison = countB - countA; // Inversé pour avoir les plus intéressés en premier
+          break;
+      }
+      
+      // Appliquer la direction
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+    
+    return sorted;
+  }, [exchanges, sortColumn, sortDirection, users, filterPeriod, showOnlyWithInterested, filterUserId]);
 
   if (sortedExchanges.length === 0) {
     return (
@@ -129,20 +210,56 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                <div className="w-20">Médecin</div>
+              <th 
+                scope="col" 
+                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                onClick={() => handleSort('doctor')}
+              >
+                <div className="w-20 flex items-center gap-1">
+                  Médecin
+                  {sortColumn === 'doctor' && (
+                    sortDirection === 'asc' ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />
+                  )}
+                </div>
               </th>
-              <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                <div className="w-24">Date</div>
+              <th 
+                scope="col" 
+                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                onClick={() => handleSort('date')}
+              >
+                <div className="w-24 flex items-center gap-1">
+                  Date
+                  {sortColumn === 'date' && (
+                    sortDirection === 'asc' ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />
+                  )}
+                </div>
               </th>
-              <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                <div className="w-20">Garde</div>
+              <th 
+                scope="col" 
+                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                onClick={() => handleSort('type')}
+              >
+                <div className="w-20 flex items-center gap-1">
+                  Garde
+                  {sortColumn === 'type' && (
+                    sortDirection === 'asc' ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />
+                  )}
+                </div>
               </th>
               <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 <div className="w-32">Commentaire</div>
               </th>
-              <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                <div className="w-32">Intéressés</div>
+              <th 
+                scope="col" 
+                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                onClick={() => handleSort('interested')}
+              >
+                <div className="w-32 flex items-center gap-1">
+                  Intéressés
+                  {sortColumn === 'interested' && (
+                    sortDirection === 'asc' ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />
+                  )}
+                </div>
               </th>
               <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 <div className="w-16">Actions</div>
@@ -182,7 +299,7 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
                   <td className={`px-4 py-4 whitespace-nowrap ${isUnavailable ? 'text-gray-400 line-through' : ''}`}>
                     <div className="flex flex-col">
                       <span className="text-sm text-gray-900">
-                        {format(date, 'EEE d MMM', { locale: fr })}
+                        {formatParisDate(date, 'EEE d MMM', { locale: frLocale })}
                       </span>
                       <span className="text-xs text-gray-500">
                         {periodNames[exchange.period]}
@@ -227,6 +344,8 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
                             onRemoveUser={onRemoveUser}
                             exchanges={exchanges}
                             history={history}
+                            suggestion={suggestions[exchange.id]?.find(s => s.userId === userId)}
+                            showSuggestion={showSuggestions}
                           />
                         ))}
                       </div>
@@ -301,7 +420,7 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
               <div className={`flex justify-between items-start mb-4 ${isUnavailable ? 'text-gray-400 line-through' : ''}`}>
                 <div>
                   <div className="text-sm font-medium text-gray-900">
-                    {format(date, 'EEEE d MMMM', { locale: fr })}
+                    {formatParisDate(date, 'EEEE d MMMM', { locale: frLocale })}
                   </div>
                   <div className="text-xs text-gray-500 mt-1">
                     {periodNames[exchange.period]}
@@ -363,6 +482,8 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
                       onRemoveUser={onRemoveUser}
                       exchanges={exchanges}
                       history={history}
+                      suggestion={suggestions[exchange.id]?.find(s => s.userId === userId)}
+                      showSuggestion={showSuggestions}
                     />
                   ))
                 ) : !isUnavailable ? (

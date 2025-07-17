@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../features/auth/hooks';
 import { requestNotificationPermission } from '../../lib/firebase/messaging';
 import { saveDeviceToken } from '../../lib/firebase/deviceTokens';

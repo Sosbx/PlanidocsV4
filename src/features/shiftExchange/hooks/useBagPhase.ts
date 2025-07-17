@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createParisDate, firebaseTimestampToParisDate } from '@/utils/timezoneUtils';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { db } from "../../../lib/firebase/config";
 import { BagPhaseConfig, defaultBagPhaseConfig } from '../types';
@@ -29,7 +30,7 @@ export const useBagPhase = (): UseBagPhaseResult => {
         setConfig({
           ...defaultBagPhaseConfig,
           ...data,
-          submissionDeadline: data.submissionDeadline.toDate(),
+          submissionDeadline: firebaseTimestampToParisDate(data.submissionDeadline),
           isConfigured: true,
         });
       } else {
@@ -115,7 +116,7 @@ export const useBagPhase = (): UseBagPhaseResult => {
             bagPhase: 'completed',
             status: 'active',
             isValidated: true,
-            validatedAt: new Date()
+            validatedAt: createParisDate()
           });
           
           // Trouver la période active actuelle et la marquer comme archivée

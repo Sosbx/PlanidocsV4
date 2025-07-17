@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import DesiderataControls from './DesiderataControls';
-import Toast from './Toast';
+import Toast from './common/Toast';
 import DesktopTable from '../features/planning/components/DesktopTable';
 import MobileTable from '../features/planning/components/MobileTable';
 import { useSelections } from '../hooks/useSelections';

@@ -3,7 +3,8 @@ import { X, CheckCircle, AlertCircle, User, Calendar, Clock } from 'lucide-react
 import { useAuth } from '../../auth/hooks';
 import { useReplacementService } from '../hooks/useReplacementService';
 import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { frLocale } from '../../../utils/dateLocale';
+import { parseParisDate, formatParisDate } from '../../../utils/timezoneUtils';
 import { standardizePeriod } from '../../../utils/periodUtils';
 
 interface ReplacementRequestModalProps {
@@ -61,8 +62,7 @@ export const ReplacementRequestModal: React.FC<ReplacementRequestModalProps> = (
   
   const formatDate = (dateString: string) => {
     try {
-      const date = new Date(dateString);
-      return format(date, 'EEEE d MMMM yyyy', { locale: fr });
+      return formatParisDate(dateString, 'EEEE d MMMM yyyy', { locale: frLocale });
     } catch (e) {
       return dateString;
     }

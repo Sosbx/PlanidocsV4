@@ -1,4 +1,5 @@
 import { collection, doc, getDocs, getDoc, updateDoc, query, where, orderBy, Timestamp, runTransaction, serverTimestamp, Transaction } from 'firebase/firestore';
+import { createParisDate, formatParisDate } from '@/utils/timezoneUtils';
 import { db } from '../config';
 import { OperationType, ShiftExchange, ShiftPeriod } from '../../../types/exchange';
 import { format } from 'date-fns';
@@ -6,7 +7,9 @@ import { normalizeFromDateUtils as normalizePeriod } from '../../../utils/period
 import { getCollectionByOperationType, removeFromShiftExchange } from './core';
 import { COLLECTIONS, DirectExchangeProposal } from './types';
 import { validateExchangeData, checkExistingExchange, checkExistingShiftExchange, checkDesiderata } from './core';
+import { checkShiftExchangeConflict, getConflictErrorMessage } from '../exchange/conflictChecker';
 import { User } from '../../../types/users';
+import { getCollectionName, COLLECTIONS as COLLECTION_NAMES } from '../../../utils/collectionUtils';
 import { 
   NotificationType, 
   sendExchangeNotification, 
@@ -201,7 +204,7 @@ export const processExchangeTransaction = async (
         );
       })(),
       (async () => {
-        bagExchangeInfo = await checkExistingShiftExchange(
+        bagExchangeInfo = await checkShiftExchangeConflict(
           exchange.userId,
           exchange.date,
           normalizedPeriod
@@ -219,7 +222,7 @@ export const processExchangeTransaction = async (
     // Formater la date au format YYYY-MM-DD
     let formattedDate = exchange.date;
     try {
-      formattedDate = format(new Date(exchange.date), 'yyyy-MM-dd');
+      formattedDate = formatParisDate(new Date(exchange.date), 'yyyy-MM-dd');
     } catch (error) {
       console.error('Erreur lors du formatage de la date:', error);
       // Continuer avec la date originale si le formatage échoue
@@ -247,6 +250,7 @@ export const processExchangeTransaction = async (
       
       // Si la garde existe déjà dans la bourse aux gardes, la supprimer
       if (bagExchangeInfo.exists && bagExchangeInfo.exchangeIds.length > 0) {
+        console.log('Garde trouvée dans la bourse aux gardes, suppression automatique des entrées:', bagExchangeInfo.exchangeIds);
         await removeFromShiftExchange(transaction, bagExchangeInfo.exchangeIds);
       }
       
@@ -286,7 +290,7 @@ export const processExchangeTransaction = async (
           period: normalizedPeriod,
           shiftType: exchange.shiftType,
           timeSlot: exchange.timeSlot,
-          exchangedAt: new Date().toISOString(),
+          exchangedAt: createParisDate().toISOString(),
           comment: exchange.comment || '',
           operationType: options.operationType,
           status: 'completed',
@@ -298,7 +302,7 @@ export const processExchangeTransaction = async (
         transaction.update(exchangeRef, {
           status: 'validated',
           acceptedBy: options.targetUserId,
-          acceptedAt: new Date().toISOString(),
+          acceptedAt: createParisDate().toISOString(),
           lastModified: serverTimestamp()
         });
         
@@ -426,7 +430,7 @@ export const getDirectExchanges = async (): Promise<ShiftExchange[]> => {
       return cachedData;
     }
     
-    const today = format(new Date(), 'yyyy-MM-dd');
+    const today = formatParisDate(createParisDate(), 'yyyy-MM-dd');
     const result: ShiftExchange[] = [];
     
     console.log('Récupération des échanges directs à partir de la date:', today);
@@ -570,19 +574,19 @@ export const acceptDirectExchange = async (
         period: exchange.period,
         shiftType: exchange.shiftType,
         timeSlot: exchange.timeSlot,
-        exchangedAt: new Date().toISOString(),
+        exchangedAt: createParisDate().toISOString(),
         comment: exchange.comment || '',
         operationType: exchange.operationType,
         status: 'completed',
         createdAt: exchange.createdAt,
-        lastModified: new Date().toISOString()
+        lastModified: createParisDate().toISOString()
       });
       
       // Mettre à jour le statut de l'échange
       transaction.update(doc(db, collectionName, exchangeId), {
         status: 'validated',
         acceptedBy: acceptingUserId,
-        acceptedAt: new Date().toISOString(),
+        acceptedAt: createParisDate().toISOString(),
         lastModified: serverTimestamp()
       });
       
@@ -651,7 +655,7 @@ export const rejectDirectExchange = async (
       transaction.update(exchangeRef, {
         status: 'cancelled',
         rejectedBy: rejectingUserId,
-        rejectedAt: new Date().toISOString(),
+        rejectedAt: createParisDate().toISOString(),
         lastModified: serverTimestamp()
       });
     });

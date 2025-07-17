@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { ChevronDown, Eye } from 'lucide-react';
-import Portal from '../../../components/Portal';
+import { Portal } from '../../../components';
 
 interface DisplayOptionsDropdownProps {
   showOwnShifts: boolean;

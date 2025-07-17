@@ -1,5 +1,6 @@
 import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { createParisDate, formatParisDate } from '@/utils/timezoneUtils';
+import { frLocale } from '../../../utils/dateLocale';
 import JSZip from 'jszip';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -19,7 +20,7 @@ export const exportGeneratedPlanningToCSV = (
     const { shiftType, timeSlot, site } = assignment;
     
     // Formater la date en DD-MM-YY en utilisant la date de l'assignment
-    const formattedDate = format(new Date(assignment.date), 'dd-MM-yy');
+    const formattedDate = formatParisDate(new Date(assignment.date), 'dd-MM-yy');
 
     rows.push(`${formattedDate},${timeSlot},${shiftType},${site || ''}`);
   });
@@ -29,7 +30,7 @@ export const exportGeneratedPlanningToCSV = (
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
-  link.download = `Planning_${userName}_${format(new Date(), 'yyyy-MM-dd')}.csv`;
+  link.download = `Planning_${userName}_${formatParisDate(createParisDate(), 'yyyy-MM-dd')}.csv`;
   link.click();
   URL.revokeObjectURL(link.href);
 };
@@ -51,7 +52,7 @@ export const exportGeneratedPlanningToPDF = (
   const pageWidth = doc.internal.pageSize.width;
 
   // Titre du document
-  const title = `Planning ${userName} - ${format(startDate, 'dd/MM/yyyy')} au ${format(endDate, 'dd/MM/yyyy')}`;
+  const title = `Planning ${userName} - ${formatParisDate(startDate, 'dd/MM/yyyy')} au ${formatParisDate(endDate, 'dd/MM/yyyy')}`;
   doc.setFontSize(11);
   doc.text(title, margin, margin);
 
@@ -63,10 +64,10 @@ export const exportGeneratedPlanningToPDF = (
     );
 
     return {
-      monthTitle: format(month, 'MMMM yyyy', { locale: fr }).toUpperCase(),
+      monthTitle: formatParisDate(month, 'MMMM yyyy', { locale: frLocale }).toUpperCase(),
       data: days.map(day => {
-        const dateStr = format(day, 'yyyy-MM-dd');
-        const dayLabel = `${format(day, 'd', { locale: fr })} ${format(day, 'EEEEEE', { locale: fr })}`;
+        const dateStr = formatParisDate(day, 'yyyy-MM-dd');
+        const dayLabel = `${formatParisDate(day, 'd', { locale: frLocale })} ${formatParisDate(day, 'EEEEEE', { locale: frLocale })}`;
         const isGrayed = isGrayedOut(day);
         
         return {
@@ -188,7 +189,7 @@ export const exportAllGeneratedPlanningsToPDFZip = async (
 ): Promise<void> => {
   const zip = new JSZip();
   // Créer le dossier avec le format "Plannings_pdf_dateDebut"
-  const folderName = `Plannings_pdf_${format(startDate, 'dd-MM-yyyy')}`;
+  const folderName = `Plannings_pdf_${formatParisDate(startDate, 'dd-MM-yyyy')}`;
   const folder = zip.folder(folderName);
   if (!folder) return;
 
@@ -207,7 +208,7 @@ export const exportAllGeneratedPlanningsToPDFZip = async (
 
     // Ajouter le PDF au dossier zip
     folder.file(
-      `Planning_${user.lastName.toUpperCase()}_${format(startDate, 'dd-MM-yyyy')}.pdf`,
+      `Planning_${user.lastName.toUpperCase()}_${formatParisDate(startDate, 'dd-MM-yyyy')}.pdf`,
       doc.output('arraybuffer')
     );
   }
@@ -228,7 +229,7 @@ export const exportAllGeneratedPlanningsToCSVZip = async (
 ): Promise<void> => {
   const zip = new JSZip();
   // Créer le dossier avec le format "Plannings_csv_dateDebut"
-  const folderName = `Plannings_csv_${format(startDate, 'dd-MM-yyyy')}`;
+  const folderName = `Plannings_csv_${formatParisDate(startDate, 'dd-MM-yyyy')}`;
   const folder = zip.folder(folderName);
   if (!folder) return;
 
@@ -240,13 +241,13 @@ export const exportAllGeneratedPlanningsToCSVZip = async (
     // Générer le contenu CSV
     const rows = ['Date,Créneau,Type,Site'];
     Object.entries(planning).forEach(([key, assignment]) => {
-      const formattedDate = format(new Date(assignment.date), 'dd-MM-yy');
+      const formattedDate = formatParisDate(new Date(assignment.date), 'dd-MM-yy');
       rows.push(`${formattedDate},${assignment.timeSlot},${assignment.shiftType},${assignment.site || ''}`);
     });
 
     // Ajouter le CSV au dossier zip
     folder.file(
-      `Planning_${user.lastName.toUpperCase()}_${format(startDate, 'dd-MM-yyyy')}.csv`,
+      `Planning_${user.lastName.toUpperCase()}_${formatParisDate(startDate, 'dd-MM-yyyy')}.csv`,
       rows.join('\n')
     );
   }

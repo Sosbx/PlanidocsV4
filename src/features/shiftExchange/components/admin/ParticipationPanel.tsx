@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { ChevronDown, ChevronUp, X, Users, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { ChevronDown, ChevronUp, X, Users, ArrowUpDown, ArrowUp, ArrowDown, ChevronRight } from 'lucide-react';
+import { format, parseISO } from 'date-fns';
+import { fr } from 'date-fns/locale';
 import type { ShiftExchange as PlanningShiftExchange } from '../../../../types/planning';
 import type { ShiftExchange as FeatureShiftExchange } from '../../types';
 import type { User } from '../../../../types/users';
@@ -29,9 +31,9 @@ type SortField = 'userName' | 'interestRate' | 'attributionRate';
 type SortDirection = 'asc' | 'desc';
 
 const ParticipationPanel: React.FC<ParticipationPanelProps> = ({
-  exchanges,
-  users,
-  history,
+  exchanges = [],
+  users = [],
+  history = [],
   isOpen,
   onToggle,
   onClose
@@ -39,56 +41,73 @@ const ParticipationPanel: React.FC<ParticipationPanelProps> = ({
   const [isMinimized, setIsMinimized] = useState(false);
   const [sortField, setSortField] = useState<SortField>('interestRate');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc'); // 'asc' pour privilégier ceux qui demandent moins
+  const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
+  
+  // S'assurer que les données sont des tableaux valides
+  const safeExchanges = Array.isArray(exchanges) ? exchanges : [];
+  const safeUsers = Array.isArray(users) ? users : [];
+  const safeHistory = Array.isArray(history) ? history : [];
 
   // Calculer les statistiques pour chaque utilisateur
   const userStats = useMemo(() => {
-    const stats: Record<string, UserStats> = {};
-    const totalPositions = exchanges.length;
+    try {
+      const stats: Record<string, UserStats> = {};
+      const totalPositions = safeExchanges.length;
 
-    // Initialiser les stats pour tous les utilisateurs
-    users.forEach(user => {
-      stats[user.id] = {
-        userId: user.id,
-        userName: user.lastName?.toUpperCase() || 'INCONNU',
-        interestCount: 0,
-        interestRate: 0,
-        receivedCount: 0,
-        successRate: 0
-      };
-    });
-
-    // Compter les intérêts
-    exchanges.forEach(exchange => {
-      if (exchange.interestedUsers) {
-        exchange.interestedUsers.forEach(userId => {
-          if (stats[userId]) {
-            stats[userId].interestCount++;
-          }
-        });
+      // Si pas de données utilisateurs, retourner un tableau vide
+      if (safeUsers.length === 0) {
+        return [];
       }
-    });
 
-    // Compter les postes reçus
-    history.forEach(h => {
-      if (h.newUserId && stats[h.newUserId]) {
-        stats[h.newUserId].receivedCount++;
-      }
-    });
+      // Initialiser les stats pour tous les utilisateurs
+      safeUsers.forEach(user => {
+        if (!user || !user.id) return;
+        stats[user.id] = {
+          userId: user.id,
+          userName: user.lastName?.toUpperCase() || 'INCONNU',
+          interestCount: 0,
+          interestRate: 0,
+          receivedCount: 0,
+          attributionRate: 0
+        };
+      });
 
-    // Calculer les taux
-    Object.values(stats).forEach(stat => {
-      stat.interestRate = totalPositions > 0 
-        ? Math.round((stat.interestCount / totalPositions) * 100) 
-        : 0;
-      
-      stat.attributionRate = stat.interestCount > 0 
-        ? Math.round((stat.receivedCount / stat.interestCount) * 100)
-        : 0;
-    });
+      // Compter les intérêts
+      safeExchanges.forEach(exchange => {
+        if (exchange && exchange.interestedUsers && Array.isArray(exchange.interestedUsers)) {
+          exchange.interestedUsers.forEach(userId => {
+            if (stats[userId]) {
+              stats[userId].interestCount++;
+            }
+          });
+        }
+      });
 
-    // Filtrer uniquement les utilisateurs qui ont au moins manifesté un intérêt
-    return Object.values(stats).filter(stat => stat.interestCount > 0);
-  }, [exchanges, users, history]);
+      // Compter les postes reçus
+      safeHistory.forEach(h => {
+        if (h && h.newUserId && stats[h.newUserId]) {
+          stats[h.newUserId].receivedCount++;
+        }
+      });
+
+      // Calculer les taux
+      Object.values(stats).forEach(stat => {
+        stat.interestRate = totalPositions > 0 
+          ? Math.round((stat.interestCount / totalPositions) * 100) 
+          : 0;
+        
+        stat.attributionRate = stat.interestCount > 0 
+          ? Math.round((stat.receivedCount / stat.interestCount) * 100)
+          : 0;
+      });
+
+      // Filtrer uniquement les utilisateurs qui ont au moins manifesté un intérêt
+      return Object.values(stats).filter(stat => stat.interestCount > 0);
+    } catch (error) {
+      console.error('Erreur dans le calcul des stats ParticipationPanel:', error);
+      return [];
+    }
+  }, [safeExchanges, safeUsers, safeHistory]);
 
   // Fonction de tri
   const sortedStats = useMemo(() => {
@@ -125,7 +144,6 @@ const ParticipationPanel: React.FC<ParticipationPanelProps> = ({
     }
   };
 
-  if (!isOpen) return null;
 
   const getColorForInterestRate = (rate: number) => {
     // Inversé : moins de demandes = mieux
@@ -149,6 +167,49 @@ const ParticipationPanel: React.FC<ParticipationPanelProps> = ({
       ? <ArrowUp className="h-3 w-3 text-indigo-600" />
       : <ArrowDown className="h-3 w-3 text-indigo-600" />;
   };
+
+  // Fonction pour récupérer les détails des gardes d'un utilisateur
+  const getUserExchangeDetails = (userId: string) => {
+    return safeExchanges
+      .filter(exchange => exchange.interestedUsers?.includes(userId))
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .map(exchange => ({
+        id: exchange.id,
+        date: exchange.date,
+        period: exchange.period,
+        shiftType: exchange.shiftType,
+        isAttributed: safeHistory.some(h => 
+          h.originalExchangeId === exchange.id && h.newUserId === userId
+        )
+      }));
+  };
+
+  // Helper pour obtenir la couleur de la période
+  const getPeriodColor = (period: string) => {
+    switch (period) {
+      case 'M': return 'bg-amber-100 text-amber-700';
+      case 'AM': return 'bg-sky-100 text-sky-700';
+      case 'S': return 'bg-violet-100 text-violet-700';
+      default: return 'bg-gray-100 text-gray-700';
+    }
+  };
+
+  // Fonction pour formater la date
+  const formatDate = (dateStr: string) => {
+    try {
+      return format(parseISO(dateStr), 'dd/MM', { locale: fr });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  // Gérer le clic sur un utilisateur
+  const handleUserClick = (userId: string) => {
+    setExpandedUserId(expandedUserId === userId ? null : userId);
+  };
+
+  // Vérification après tous les hooks
+  if (!isOpen) return null;
 
   return (
     <div className={`fixed right-4 top-20 z-50 transition-all duration-300 ${
@@ -189,7 +250,7 @@ const ParticipationPanel: React.FC<ParticipationPanelProps> = ({
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div>
                   <span className="text-gray-600">Total postes BAG:</span>
-                  <span className="font-semibold ml-1">{exchanges.length}</span>
+                  <span className="font-semibold ml-1">{safeExchanges.length}</span>
                 </div>
                 <div>
                   <span className="text-gray-600">Médecins actifs:</span>
@@ -236,14 +297,24 @@ const ParticipationPanel: React.FC<ParticipationPanelProps> = ({
                 </thead>
                 <tbody>
                   {sortedStats.map((stat) => (
+                    <React.Fragment key={stat.userId}>
                       <tr 
-                        key={stat.userId} 
                         className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
                       >
                         <td className="py-2 px-1">
-                          <span className="font-medium truncate block max-w-[140px]" title={stat.userName}>
-                            {stat.userName}
-                          </span>
+                          <button
+                            onClick={() => handleUserClick(stat.userId)}
+                            className="flex items-center gap-1 text-left hover:text-indigo-600 transition-colors"
+                          >
+                            <ChevronRight 
+                              className={`h-3 w-3 transition-transform ${
+                                expandedUserId === stat.userId ? 'rotate-90' : ''
+                              }`}
+                            />
+                            <span className="font-medium truncate block max-w-[120px]" title={stat.userName}>
+                              {stat.userName}
+                            </span>
+                          </button>
                         </td>
                         <td className="text-center py-2 px-1">
                           <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-full ${getBackgroundForInterestRate(stat.interestRate)}`}>
@@ -251,7 +322,7 @@ const ParticipationPanel: React.FC<ParticipationPanelProps> = ({
                               {stat.interestRate}%
                             </span>
                             <span className="text-xs text-gray-600">
-                              ({stat.interestCount}/{exchanges.length})
+                              ({stat.interestCount}/{safeExchanges.length})
                             </span>
                           </div>
                         </td>
@@ -274,6 +345,31 @@ const ParticipationPanel: React.FC<ParticipationPanelProps> = ({
                           </div>
                         </td>
                       </tr>
+                      {expandedUserId === stat.userId && (
+                        <tr className="animate-in slide-in-from-top-1 duration-200">
+                          <td colSpan={3} className="px-2 py-2 bg-gray-50 border-l-2 border-indigo-400">
+                            <div className="space-y-1 text-xs">
+                              {getUserExchangeDetails(stat.userId).length > 0 ? (
+                                getUserExchangeDetails(stat.userId).map((detail, idx) => (
+                                  <div key={idx} className="flex items-center gap-2 py-0.5">
+                                    <span className="text-gray-600 font-medium">{formatDate(detail.date)}</span>
+                                    <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${getPeriodColor(detail.period)}`}>
+                                      {detail.period}
+                                    </span>
+                                    <span className="text-gray-700">{detail.shiftType}</span>
+                                    {detail.isAttributed && (
+                                      <span className="text-green-600 text-xs font-medium">✓ Attribué</span>
+                                    )}
+                                  </div>
+                                ))
+                              ) : (
+                                <div className="text-gray-500 italic">Aucune garde demandée</div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   ))}
                 </tbody>
               </table>

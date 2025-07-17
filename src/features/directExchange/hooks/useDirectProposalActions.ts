@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { formatParisDate } from '@/utils/timezoneUtils';
 import { useAuth } from '../../../features/auth/hooks';
 import { 
   acceptProposal, 
@@ -211,7 +212,7 @@ export const useDirectProposalActions = (
           try {
             // Si on a la date complète de l'assignation, l'utiliser comme source de vérité
             if (assignment?.date) {
-              formattedDate = format(new Date(assignment.date), 'yyyy-MM-dd');
+              formattedDate = formatParisDate(new Date(assignment.date), 'yyyy-MM-dd');
             }
             // Sinon, essayer de formater la date extraite de la clé
             else {
@@ -229,7 +230,7 @@ export const useDirectProposalActions = (
                   // Dernier recours: parser avec Date()
                   const dateObj = new Date(date);
                   if (!isNaN(dateObj.getTime())) {
-                    formattedDate = format(dateObj, 'yyyy-MM-dd');
+                    formattedDate = formatParisDate(dateObj, 'yyyy-MM-dd');
                   }
                 }
               }
@@ -705,7 +706,7 @@ export const useDirectProposalActions = (
       
       setToast({
         visible: true,
-        message: `Garde du ${format(new Date(selectedShift.date), 'dd/MM/yyyy')} (${selectedShift.period}) acceptée avec succès`,
+        message: `Garde du ${formatParisDate(new Date(selectedShift.date), 'dd/MM/yyyy')} (${selectedShift.period}) acceptée avec succès`,
         type: 'success'
       });
       
@@ -770,7 +771,7 @@ export const useDirectProposalActions = (
               
               setToast({
                 visible: true,
-                message: `Garde du ${format(new Date(rejectedShift.date), 'dd/MM/yyyy')} (${rejectedShift.period}) rejetée avec succès`,
+                message: `Garde du ${formatParisDate(new Date(rejectedShift.date), 'dd/MM/yyyy')} (${rejectedShift.period}) rejetée avec succès`,
                 type: 'success'
               });
             } else {
@@ -790,7 +791,7 @@ export const useDirectProposalActions = (
               
               setToast({
                 visible: true,
-                message: `Garde du ${format(new Date(rejectedShift.date), 'dd/MM/yyyy')} (${rejectedShift.period}) rejetée avec succès`,
+                message: `Garde du ${formatParisDate(new Date(rejectedShift.date), 'dd/MM/yyyy')} (${rejectedShift.period}) rejetée avec succès`,
                 type: 'success'
               });
             }

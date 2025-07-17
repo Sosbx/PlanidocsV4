@@ -1,13 +1,16 @@
 import { useState, useCallback } from 'react';
+import { createParisDate } from '@/utils/timezoneUtils';
 import { User } from '../../../types/users';
-import { ShiftAssignment, GeneratedPlanning } from '../../../types/planning';
+import { ShiftAssignment, GeneratedPlanning, PeriodSelection } from '../../../types/planning';
+import { getAllDesiderata } from '../../../lib/firebase/desiderata';
+import { useAssociation } from '../../../context/association/AssociationContext';
 
 interface UseExportOptions {
   users: User[];
   loadExporters?: () => Promise<{
-    toPdf: (assignments: Record<string, ShiftAssignment>, userName: string, startDate: Date, endDate: Date) => Promise<void>;
+    toPdf: (assignments: Record<string, ShiftAssignment>, userName: string, startDate: Date, endDate: Date, desiderata?: Record<string, 'primary' | 'secondary' | null | PeriodSelection>, showAssignmentsOnly?: boolean) => Promise<void>;
     toCsv: (assignments: Record<string, ShiftAssignment>, userName: string) => Promise<void>;
-    allToPdf: (users: User[], planningsMap: Record<string, Record<string, ShiftAssignment>>, startDate: Date, endDate: Date) => Promise<void>;
+    allToPdf: (users: User[], planningsMap: Record<string, Record<string, ShiftAssignment>>, startDate: Date, endDate: Date, desiderataMap?: Record<string, Record<string, 'primary' | 'secondary' | null | PeriodSelection>>, showAssignmentsOnly?: boolean) => Promise<void>;
     allToCsv: (users: User[], planningsMap: Record<string, Record<string, ShiftAssignment>>, startDate: Date) => Promise<void>;
   }>;
   plannings?: Record<string, Record<string, GeneratedPlanning>>;
@@ -21,17 +24,23 @@ export const useExport = ({
   users,
   loadExporters,
   plannings,
-  startDate = new Date(),
-  endDate = new Date(new Date().setMonth(new Date().getMonth() + 3)),
+  startDate = createParisDate(),
+  endDate = new Date(createParisDate().setMonth(createParisDate().getMonth() + 3)),
   onSuccess,
   onError
 }: UseExportOptions) => {
   const [isProcessing, setIsProcessing] = useState(false);
+  const { currentAssociation } = useAssociation();
 
   /**
    * Exporte le planning d'un utilisateur en PDF
    */
-  const handleExportPDF = useCallback(async (userId?: string) => {
+  const handleExportPDF = useCallback(async (
+    userId?: string, 
+    includeDesiderata: boolean = false,
+    customStartDate?: Date,
+    customEndDate?: Date
+  ) => {
     if (!loadExporters) {
       onError?.('Fonction d\'export non disponible');
       return;
@@ -74,8 +83,43 @@ export const useExport = ({
       // Charger dynamiquement les exporteurs
       const exporters = await loadExporters();
       
-      // Exporter en PDF
-      await exporters.toPdf(userPlanning, userName, startDate, endDate);
+      // Récupérer les desiderata si demandé
+      let userDesiderata = undefined;
+      if (includeDesiderata && currentAssociation) {
+        try {
+          // getAllDesiderata retourne les desiderata d'un seul utilisateur
+          const desiderataData = await getAllDesiderata(
+            userId,
+            true, // includeArchived
+            false, // currentPeriodOnly
+            currentAssociation.id
+          );
+          
+          // Convertir en format attendu par exportPlanningToPDF
+          if (desiderataData?.selections) {
+            userDesiderata = {};
+            Object.entries(desiderataData.selections).forEach(([key, value]) => {
+              if (value && typeof value === 'object' && 'type' in value) {
+                userDesiderata[key] = value.type;
+              } else if (value === 'primary' || value === 'secondary' || value === null) {
+                userDesiderata[key] = value;
+              }
+            });
+          }
+        } catch (error) {
+          console.error('Erreur lors de la récupération des desiderata:', error);
+        }
+      }
+      
+      // Exporter en PDF avec ou sans desiderata
+      await exporters.toPdf(
+        userPlanning,
+        userName,
+        customStartDate || startDate,
+        customEndDate || endDate,
+        userDesiderata,
+        !includeDesiderata // showAssignmentsOnly est l'inverse de includeDesiderata
+      );
       
       onSuccess?.('Export PDF réussi');
     } catch (error: any) {
@@ -85,7 +129,7 @@ export const useExport = ({
     } finally {
       setIsProcessing(false);
     }
-  }, [loadExporters, plannings, users, startDate, endDate, onSuccess, onError]);
+  }, [loadExporters, plannings, users, startDate, endDate, onSuccess, onError, currentAssociation]);
 
   /**
    * Exporte le planning d'un utilisateur en CSV
@@ -149,7 +193,11 @@ export const useExport = ({
   /**
    * Exporte tous les plannings en PDF
    */
-  const handleExportAllPDF = useCallback(async () => {
+  const handleExportAllPDF = useCallback(async (
+    includeDesiderata: boolean = false,
+    customStartDate?: Date,
+    customEndDate?: Date
+  ) => {
     if (!loadExporters) {
       onError?.('Fonction d\'export non disponible');
       return;
@@ -202,12 +250,52 @@ export const useExport = ({
       // Charger dynamiquement les exporteurs
       const exporters = await loadExporters();
       
-      // Exporter tous les PDF
+      // Récupérer les desiderata si demandé
+      let desiderataMap = undefined;
+      if (includeDesiderata && currentAssociation) {
+        try {
+          // Récupérer les desiderata pour chaque utilisateur individuellement
+          desiderataMap = {};
+          
+          for (const user of usersWithPlannings) {
+            try {
+              const desiderataData = await getAllDesiderata(
+                user.id,
+                true, // includeArchived
+                false, // currentPeriodOnly
+                currentAssociation.id
+              );
+              
+              // Convertir en format attendu par exportPlanningToPDF
+              if (desiderataData?.selections) {
+                const userDesiderata = {};
+                Object.entries(desiderataData.selections).forEach(([key, value]) => {
+                  if (value && typeof value === 'object' && 'type' in value) {
+                    userDesiderata[key] = value.type;
+                  } else if (value === 'primary' || value === 'secondary' || value === null) {
+                    userDesiderata[key] = value;
+                  }
+                });
+                desiderataMap[user.id] = userDesiderata;
+              }
+            } catch (userError) {
+              console.error(`Erreur lors de la récupération des desiderata pour ${user.id}:`, userError);
+              // Continuer avec les autres utilisateurs
+            }
+          }
+        } catch (error) {
+          console.error('Erreur lors de la récupération des desiderata:', error);
+        }
+      }
+      
+      // Exporter tous les PDF avec ou sans desiderata
       await exporters.allToPdf(
         usersWithPlannings,
         planningsMap,
-        startDate,
-        endDate
+        customStartDate || startDate,
+        customEndDate || endDate,
+        desiderataMap,
+        !includeDesiderata // showAssignmentsOnly est l'inverse de includeDesiderata
       );
       
       onSuccess?.('Export PDF réussi');
@@ -218,7 +306,7 @@ export const useExport = ({
     } finally {
       setIsProcessing(false);
     }
-  }, [loadExporters, plannings, users, startDate, endDate, onSuccess, onError]);
+  }, [loadExporters, plannings, users, startDate, endDate, onSuccess, onError, currentAssociation]);
 
   /**
    * Exporte tous les plannings en CSV

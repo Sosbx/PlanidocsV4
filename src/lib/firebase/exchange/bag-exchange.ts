@@ -1,4 +1,5 @@
 import { collection, doc, getDoc, getDocs, query, where, runTransaction, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { createParisDate, firebaseTimestampToParisDate } from '@/utils/timezoneUtils';
 import { db } from '../config';
 import { COLLECTIONS, createExchangeValidationError, ShiftExchange } from './types';
 import { verifyExchangeStatus, verifyPlanningAssignment } from './validation';
@@ -277,15 +278,15 @@ export const validateShiftExchange = async (
         timeSlot: originalAssignment.timeSlot,
         comment: exchange.comment || '',
         interestedUsers: exchange.interestedUsers || [],
-        exchangedAt: new Date().toISOString(),
+        exchangedAt: createParisDate().toISOString(),
         createdAt: (() => {
           if (exchange.createdAt && typeof exchange.createdAt === 'object') {
             const timestamp = exchange.createdAt as Timestamp;
             if (typeof timestamp.toDate === 'function') {
-              return timestamp.toDate().toISOString();
+              return firebaseTimestampToParisDate(timestamp).toISOString();
             }
           }
-          return typeof exchange.createdAt === 'string' ? exchange.createdAt : new Date().toISOString();
+          return typeof exchange.createdAt === 'string' ? exchange.createdAt : createParisDate().toISOString();
         })(),
         isPermutation: exchangeType === 'permutation',
         status: 'completed',

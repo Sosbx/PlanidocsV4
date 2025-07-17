@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { toast } from 'react-toastify';
+import { useToastContext } from '../../context/toast';
 import { useFeatureFlags } from '../../context/featureFlags/FeatureFlagsContext';
 import { FeatureKey } from '../../types/featureFlags';
 
@@ -24,6 +24,7 @@ const UnderDevelopmentRedirect: React.FC<UnderDevelopmentRedirectProps> = ({
 }) => {
   const location = useLocation();
   const { getFeatureStatus, isSuperAdmin } = useFeatureFlags();
+  const { showToast } = useToastContext();
   
   useEffect(() => {
     // Super admin a toujours accès
@@ -54,14 +55,7 @@ const UnderDevelopmentRedirect: React.FC<UnderDevelopmentRedirectProps> = ({
     // N'afficher le toast que si aucun n'a été affiché dans les 5 dernières secondes
     if (now - lastToastTime > 5000) {
       // Afficher un message plus court
-      toast.info(message, {
-        position: "top-center",
-        autoClose: 2000,
-        hideProgressBar: false,
-        closeOnClick: true,
-        pauseOnHover: true,
-        draggable: true
-      });
+      showToast(message, 'info');
       
       // Enregistrer le moment où ce toast a été affiché
       recentToasts[featureName] = now;

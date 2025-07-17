@@ -1,11 +1,13 @@
 import React, { useState, useEffect, lazy, Suspense, useRef } from 'react';
+import { createParisDate, firebaseTimestampToParisDate, formatParisDate } from '@/utils/timezoneUtils';
 import { Calendar, Download, HelpCircle, X, Mail, Grid, Settings, FileSpreadsheet, Import, CheckCircle2 } from 'lucide-react';
 import { ChevronDown, FileText, Columns, LayoutList } from 'lucide-react';
 import { useAuth } from '../../../features/auth/hooks';
 import { doc, onSnapshot, collection, getDocs, query, where } from 'firebase/firestore';
 import { useBagPhase } from "../../../features/shiftExchange/hooks";
 import { usePlanningPeriod } from "../../../context/planning";
-import { Switch } from "../../../components/common";
+import { Switch, SuspenseWrapper, ProgressiveLoader } from "../../../components/common";
+import { SkeletonPlanningGrid } from "../../../components/skeleton";
 import { Info, Clock, AlertTriangle } from 'lucide-react';
 import { db } from "../../../lib/firebase/config";
 import { getTimeRemaining } from "../../../utils/timeUtils";
@@ -14,9 +16,10 @@ import LoadingSpinner from "../../../components/common/LoadingSpinner";
 import PlanningTutorial from "../components/PlanningTutorial";
 import { format } from 'date-fns';
 import type { GeneratedPlanning, ExchangeHistory, ShiftAssignment } from "../types";
-import Toast from "../../../components/Toast";
+import { useToastContext } from "../../../context/toast";
 import { getAllDesiderata } from "../../../lib/firebase/desiderata";
 import { useAssociation } from "../../../context/association/AssociationContext";
+import { getCollectionName, COLLECTIONS } from "../../../utils/collectionUtils";
 import { useBottomNavPadding } from "../../../hooks/useBottomNavPadding";
 
 // Importation dynamique des fonctions d'export volumineuses
@@ -28,6 +31,11 @@ import {
 
 // Importation dynamique du composant table de planning
 const GeneratedPlanningTable = lazy(() => import('../components/GeneratedPlanningTable'));
+
+// Import des composants Google Calendar et modals
+import { GoogleCalendarSyncCompact, SyncResultsDetails } from '../../../components';
+import { UserExportPDFModal } from '../components/UserExportPDFModal';
+import { UserExportModal } from '../components/UserExportModal';
 
 const UserPlanningPage: React.FC = () => {
   const { user } = useAuth();
@@ -48,11 +56,10 @@ const UserPlanningPage: React.FC = () => {
     console.log("UserPlanningPage: showDesiderata a changé:", showDesiderata);
   }, [showDesiderata]);
   const [showTutorial, setShowTutorial] = useState(false);
-  const [toast, setToast] = useState({ visible: false, message: '', type: 'success' as 'success' | 'error' });
+  const { showToast } = useToastContext();
   const [showImportHelp, setShowImportHelp] = useState(false);
   const [desiderata, setDesiderata] = useState<Record<string, 'primary' | 'secondary' | null>>({});
   const [desiderataForDisplay, setDesiderataForDisplay] = useState<Record<string, { type: 'primary' | 'secondary' | null }>>({});
-  const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [viewMode, setViewMode] = useState<'multiColumn' | 'singleColumn'>('multiColumn');
   const [timeLeft, setTimeLeft] = useState(getTimeRemaining(bagPhaseConfig.submissionDeadline));
@@ -65,31 +72,17 @@ const UserPlanningPage: React.FC = () => {
     shiftType: string;
     timeSlot: string;
   }>>({});
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [pendingExportType, setPendingExportType] = useState<'csv' | 'ics' | null>(null);
+  const [showPdfExportModal, setShowPdfExportModal] = useState(false);
 
   // Charger les desiderata pour l'export et l'affichage (incluant les desiderata archivés)
   useEffect(() => {
     if (!user) return;
     const loadDesiderata = async () => {
       try {
-        console.log(`UserPlanningPage: Chargement des désiderata pour l'utilisateur ${user.id} de l'association ${currentAssociation}`);
-        
-        // Récupérer d'abord uniquement les désiderata actifs pour les examiner
-        const activeData = await getAllDesiderata(user.id, false, false, currentAssociation);
-        console.log("UserPlanningPage: Désiderata actifs récupérés:", 
-                    activeData?.selections ? Object.keys(activeData.selections).length : 0);
-        
-        if (activeData?.selections && Object.keys(activeData.selections).length > 0) {
-          const firstKey = Object.keys(activeData.selections)[0];
-          console.log("UserPlanningPage: Exemple de désiderata actif:", 
-                      firstKey, activeData.selections[firstKey]);
-          console.log("UserPlanningPage: Type du premier désiderata actif:", 
-                      typeof activeData.selections[firstKey]);
-        }
-        
         // Inclure les desiderata archivés pour l'affichage complet
         const data = await getAllDesiderata(user.id, true, false, currentAssociation);
-        console.log("UserPlanningPage: Total des désiderata (actifs + archivés):", 
-                    data?.selections ? Object.keys(data.selections).length : 0);
         
         if (data?.selections) {
           // Convertir les données de type Selections en Record<string, 'primary' | 'secondary' | null>
@@ -100,40 +93,20 @@ const UserPlanningPage: React.FC = () => {
           const formattedDesiderata: Record<string, { type: 'primary' | 'secondary' | null }> = {};
           
           Object.entries(data.selections).forEach(([key, value]) => {
-            // Vérifier le format de chaque désiderata
-            console.log(`UserPlanningPage: Traitement du désiderata ${key}:`, value);
-            
             if (value && typeof value === 'object' && 'type' in value) {
               // Si c'est déjà un objet avec une propriété type
               simplifiedDesiderata[key] = value.type;
               formattedDesiderata[key] = { type: value.type };
-              console.log(`UserPlanningPage: Désiderata ${key} déjà au bon format:`, value.type);
             } else if (value === 'primary' || value === 'secondary' || value === null) {
               // Si c'est directement une chaîne 'primary' ou 'secondary'
               simplifiedDesiderata[key] = value;
               formattedDesiderata[key] = { type: value };
-              console.log(`UserPlanningPage: Désiderata ${key} converti de chaîne:`, value);
             } else {
               // Format inconnu
-              console.warn(`UserPlanningPage: Format inconnu pour le désiderata ${key}:`, value);
               simplifiedDesiderata[key] = null;
               formattedDesiderata[key] = { type: null };
             }
           });
-          
-          // Vérifier les désiderata de septembre-octobre 2025
-          const septOctDesiderata = Object.keys(formattedDesiderata).filter(key => 
-            key.startsWith('2025-09') || key.startsWith('2025-10')
-          );
-          console.log("UserPlanningPage: Désiderata de sept-oct 2025 après transformation:", 
-                      septOctDesiderata.length, septOctDesiderata);
-          
-          if (septOctDesiderata.length > 0) {
-            // Vérifier le format d'un exemple
-            const exampleKey = septOctDesiderata[0];
-            console.log(`UserPlanningPage: Exemple de désiderata sept-oct après transformation:`, 
-                        exampleKey, formattedDesiderata[exampleKey]);
-          }
           
           setDesiderata(simplifiedDesiderata);
           setDesiderataForDisplay(formattedDesiderata);
@@ -178,40 +151,66 @@ const UserPlanningPage: React.FC = () => {
     return () => window.removeEventListener('resize', checkScreenSize);
   }, []);
 
-  const handleExportCSV = async () => {
+  const handleExportCSV = async (mode: 'grouped' | 'separated', startDate: Date, endDate: Date) => {
     if (!planning || !user) {
-      setToast({
-        visible: true,
-        message: 'Aucun planning disponible à exporter',
-        type: 'error'
-      });
+      showToast('Aucun planning disponible à exporter', 'error');
       return;
     }
 
     try {
-      setToast({
-        visible: true,
-        message: 'Préparation de l\'export CSV...',
-        type: 'success'
-      });
+      showToast('Préparation de l\'export CSV...', 'success');
       
       // Charger dynamiquement l'exporteur CSV
       const exportPlanningToGoogleCalendarCSV = await loadCsvExporter();
       
-      // Utiliser les assignments du planning actuel
+      // Filtrer les assignments pour la période sélectionnée
+      const filteredAssignments: Record<string, ShiftAssignment> = {};
+      Object.entries(planning.assignments).forEach(([key, assignment]) => {
+        const assignmentDate = new Date(assignment.date);
+        if (assignmentDate >= startDate && assignmentDate <= endDate) {
+          filteredAssignments[key] = assignment;
+        }
+      });
+      
+      // Utiliser les assignments filtrés
       exportPlanningToGoogleCalendarCSV(
-        planning.assignments,
-        `${user.lastName}_${user.firstName}`
+        filteredAssignments,
+        `${user.lastName}_${user.firstName}`,
+        mode
       );
     } catch (error) {
       console.error('Error exporting CSV:', error);
-      setToast({
-        visible: true,
-        message: 'Erreur lors de l\'export du planning',
-        type: 'error'
-      });
+      showToast('Erreur lors de l\'export du planning', 'error');
     }
   };
+
+  const handleExportICS = async (mode: 'grouped' | 'separated', startDate: Date, endDate: Date) => {
+    if (!planning || !user) return;
+    
+    try {
+      showToast('Préparation de l\'export ICS...', 'success');
+      const exportPlanningToICS = await loadIcsExporter();
+      
+      // Filtrer les assignments pour la période sélectionnée
+      const filteredAssignments: Record<string, ShiftAssignment> = {};
+      Object.entries(planning.assignments).forEach(([key, assignment]) => {
+        const assignmentDate = new Date(assignment.date);
+        if (assignmentDate >= startDate && assignmentDate <= endDate) {
+          filteredAssignments[key] = assignment;
+        }
+      });
+      
+      exportPlanningToICS(
+        filteredAssignments,
+        `${user.lastName}_${user.firstName}`,
+        mode
+      );
+    } catch (error) {
+      console.error('Error exporting ICS:', error);
+      showToast('Erreur lors de l\'export ICS', 'error');
+    }
+  };
+
 
   useEffect(() => {
     if (!user) return;
@@ -221,7 +220,7 @@ const UserPlanningPage: React.FC = () => {
       try {
         // Utiliser une requête avec where pour filtrer directement les échanges pertinents
         const historyQuery = query(
-          collection(db, 'exchange_history'),
+          collection(db, getCollectionName('exchange_history', currentAssociation)),
           where('status', '==', 'completed')
         );
         
@@ -259,7 +258,7 @@ const UserPlanningPage: React.FC = () => {
 
     // Charger tous les plannings de l'utilisateur en temps réel
     const unsubscribe = onSnapshot(
-      doc(db, 'generated_plannings', user.id),
+      doc(db, getCollectionName(COLLECTIONS.GENERATED_PLANNINGS, currentAssociation), user.id),
       (doc) => {
         setLoading(false);
         if (doc.exists()) {
@@ -288,7 +287,7 @@ const UserPlanningPage: React.FC = () => {
                 
                 // Convertir le timestamp Firestore en Date
                 const uploadedAt = periodData.uploadedAt && typeof periodData.uploadedAt.toDate === 'function' 
-                  ? periodData.uploadedAt.toDate() 
+                  ? firebaseTimestampToParisDate(periodData.uploadedAt) 
                   : new Date(periodData.uploadedAt || Date.now());
                 
                 // Stocker le planning dans la structure par période
@@ -323,7 +322,7 @@ const UserPlanningPage: React.FC = () => {
             
             // Convertir le timestamp Firestore en Date
             const uploadedAt = data.uploadedAt && typeof data.uploadedAt.toDate === 'function' 
-              ? data.uploadedAt.toDate() 
+              ? firebaseTimestampToParisDate(data.uploadedAt) 
               : new Date(data.uploadedAt);
             
             const periodId = data.periodId || 'current';
@@ -395,7 +394,7 @@ const UserPlanningPage: React.FC = () => {
       setShowPastDates(true);
       
       // Charger 1 mois en arrière à partir d'aujourd'hui
-      const today = new Date();
+      const today = createParisDate();
       const newStartDate = new Date(today);
       newStartDate.setMonth(today.getMonth() - 1);
       newStartDate.setDate(1); // Premier jour du mois précédent
@@ -443,7 +442,7 @@ const UserPlanningPage: React.FC = () => {
   const mergeAllPlannings = (planningsByPeriod: Record<string, GeneratedPlanning>) => {
     const mergedAssignments: Record<string, ShiftAssignment> = {};
     const allDates: Date[] = [];
-    const today = new Date();
+    const today = createParisDate();
     today.setHours(0, 0, 0, 0); // Normaliser à minuit
     
     console.log("Fusion des plannings - Périodes disponibles:", Object.keys(planningsByPeriod));
@@ -532,27 +531,20 @@ const UserPlanningPage: React.FC = () => {
       );
       
       // Pour l'affichage initial, utiliser aujourd'hui comme date de début
-      let displayStartDate = today;
+      const displayStartDate = today;
       
-      // Pour l'affichage initial, limiter à 5 mois à partir d'aujourd'hui
-      let displayEndDate = new Date(today);
-      displayEndDate.setMonth(displayEndDate.getMonth() + 5);
+      // Pour l'affichage initial, afficher tous les mois jusqu'à la dernière garde
+      // Utiliser maxDate (date de la dernière garde) au lieu d'une limite arbitraire
+      let displayEndDate = new Date(maxDate);
       
-      // Si des désiderata de septembre-octobre 2025 sont présents, étendre la plage de dates
-      if (septOctDesiderata.length > 0) {
-        console.log("UserPlanningPage: Extension de la plage de dates pour inclure les désiderata de sept-oct 2025");
-        
-        // Créer une date pour septembre 2025
-        const sept2025 = new Date(2025, 8, 1); // Mois 8 = septembre (0-indexed)
-        
-        // Créer une date pour octobre 2025
-        const oct2025 = new Date(2025, 9, 31); // Mois 9 = octobre (0-indexed)
-        
-        // Si septembre 2025 est après la date de fin actuelle, étendre la plage
-        if (sept2025 > displayEndDate) {
-          console.log("UserPlanningPage: Extension de la date de fin pour inclure septembre-octobre 2025");
-          displayEndDate = new Date(oct2025);
-        }
+      // Ajouter un mois de marge après la dernière garde pour une meilleure visibilité
+      displayEndDate.setMonth(displayEndDate.getMonth() + 1);
+      
+      // S'assurer que la date de fin est au moins aujourd'hui + 1 mois
+      const minDisplayEndDate = new Date(today);
+      minDisplayEndDate.setMonth(minDisplayEndDate.getMonth() + 1);
+      if (displayEndDate < minDisplayEndDate) {
+        displayEndDate = minDisplayEndDate;
       }
       
       console.log(`Plage de données complète: ${adjustedMinDate.toISOString()} - ${adjustedMaxDate.toISOString()}`);
@@ -563,8 +555,8 @@ const UserPlanningPage: React.FC = () => {
     } else {
       console.warn("Aucune date valide trouvée, utilisation des dates de configuration par défaut");
       // Si aucune date valide n'est trouvée, utiliser une plage par défaut (6 mois)
-      const defaultStartDate = new Date();
-      const defaultEndDate = new Date();
+      const defaultStartDate = createParisDate();
+      const defaultEndDate = createParisDate();
       defaultEndDate.setMonth(defaultEndDate.getMonth() + 6);
       
       console.log(`Plage de dates par défaut: ${defaultStartDate.toISOString()} - ${defaultEndDate.toISOString()}`);
@@ -610,7 +602,7 @@ const UserPlanningPage: React.FC = () => {
     // Si la période existe et est soit en phase 'completed' soit a le statut 'active',
     // alors c'est une période importée sans BAG - ignorer la détection de début de BAG
     if (matchingPeriod && (matchingPeriod.bagPhase === 'completed' || matchingPeriod.status === 'active')) {
-      console.log(`Date ${format(date, 'yyyy-MM-dd')} appartient à une période importée sans BAG: ${matchingPeriod.name}`);
+      console.log(`Date ${formatParisDate(date, 'yyyy-MM-dd')} appartient à une période importée sans BAG: ${matchingPeriod.name}`);
       return false;
     }
     
@@ -622,8 +614,8 @@ const UserPlanningPage: React.FC = () => {
     }
     
     // Vérifier si c'est le premier jour de la période BAG
-    const dateStr = format(date, 'yyyy-MM-dd');
-    const bagStartStr = format(bagPeriod.startDate, 'yyyy-MM-dd');
+    const dateStr = formatParisDate(date, 'yyyy-MM-dd');
+    const bagStartStr = formatParisDate(bagPeriod.startDate, 'yyyy-MM-dd');
     
     const isBagStart = dateStr === bagStartStr;
     
@@ -678,13 +670,6 @@ const UserPlanningPage: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-2 sm:px-4 py-4 sm:py-8">
-      <Toast 
-        message={toast.message}
-        isVisible={toast.visible}
-        type={toast.type}
-        onClose={() => setToast(prev => ({ ...prev, visible: false }))}
-      />
-
       <div className="bg-white rounded-lg shadow-md p-3 sm:p-6">
         <div className="mb-6">
           <div className="flex items-center justify-between mb-4">
@@ -724,7 +709,8 @@ const UserPlanningPage: React.FC = () => {
                           <div className="py-1" role="menu">
                             <button
                               onClick={() => {
-                                handleExportCSV();
+                                setPendingExportType('csv');
+                                setShowExportModal(true);
                                 setShowExportMenu(false);
                               }}
                               className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
@@ -734,28 +720,10 @@ const UserPlanningPage: React.FC = () => {
                               CSV (Google Calendar)
                             </button>
                             <button
-                              onClick={async () => {
-                                if (!planning || !user) return;
-                                setToast({
-                                  visible: true,
-                                  message: 'Préparation de l\'export ICS...',
-                                  type: 'success'
-                                });
-                                try {
-                                  const exportPlanningToICS = await loadIcsExporter();
-                                  exportPlanningToICS(
-                                    planning.assignments,
-                                    `${user.lastName}_${user.firstName}`
-                                  );
-                                  setShowExportMenu(false);
-                                } catch (error) {
-                                  console.error('Error exporting ICS:', error);
-                                  setToast({
-                                    visible: true,
-                                    message: 'Erreur lors de l\'export ICS',
-                                    type: 'error'
-                                  });
-                                }
+                              onClick={() => {
+                                setPendingExportType('ics');
+                                setShowExportModal(true);
+                                setShowExportMenu(false);
                               }}
                               className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
                               role="menuitem"
@@ -765,7 +733,7 @@ const UserPlanningPage: React.FC = () => {
                             </button>
                             <button
                               onClick={() => {
-                                setShowDownloadModal(true);
+                                setShowPdfExportModal(true);
                                 setShowExportMenu(false);
                               }}
                               className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
@@ -791,10 +759,20 @@ const UserPlanningPage: React.FC = () => {
                       </>
                     )}
                   </div>
+                  
+                  {/* Google Calendar Sync Compact */}
+                  <GoogleCalendarSyncCompact 
+                    assignments={planning.assignments || {}}
+                    disabled={!planning.assignments || Object.keys(planning.assignments).length === 0}
+                  />
                 </div>
               </div>
             )}
           </div>
+          
+          {/* Sync Results Details */}
+          {planning && <SyncResultsDetails />}
+          
           <div className="flex items-center justify-between mt-2 mb-4">
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2" data-tutorial="toggle-desiderata">
@@ -846,10 +824,7 @@ const UserPlanningPage: React.FC = () => {
                     </div>
                   </div>
                   <div className="text-[10px] text-gray-500 italic">
-                    MàJ : {(planning.uploadedAt as Date).toLocaleDateString('fr-FR', {
-                      day: 'numeric',
-                      month: 'short',
-                    })}
+                    MàJ : {formatParisDate(planning.uploadedAt as Date, 'dd MMM')}
                   </div>
                 </div>
               ) : bagPhaseConfig.phase === 'distribution' ? (
@@ -859,10 +834,7 @@ const UserPlanningPage: React.FC = () => {
                     <span>Répartition en cours</span>
                   </div>
                   <div className="text-[10px] text-gray-500 italic">
-                    MàJ : {(planning.uploadedAt as Date).toLocaleDateString('fr-FR', {
-                      day: 'numeric',
-                      month: 'short',
-                    })}
+                    MàJ : {formatParisDate(planning.uploadedAt as Date, 'dd MMM')}
                   </div>
                 </div>
               ) : (
@@ -872,23 +844,23 @@ const UserPlanningPage: React.FC = () => {
                     <span>Phase terminée</span>
                   </div>
                   <div className="text-[10px] text-gray-500 italic">
-                    MàJ : {(planning.uploadedAt as Date).toLocaleDateString('fr-FR', {
-                      day: 'numeric',
-                      month: 'short',
-                    })}
+                    MàJ : {formatParisDate(planning.uploadedAt as Date, 'dd MMM')}
                   </div>
                 </div>
               )}
             </div>
-            <div data-tutorial="planning-grid" className="w-full overflow-hidden">
+            <div data-tutorial="planning-grid" className="w-full" style={{ minHeight: 'calc(100vh - 350px)' }}>
               
-              <div className="w-full">
-                <Suspense fallback={
-                  <div className="flex justify-center items-center py-20">
-                    <LoadingSpinner />
-                    <span className="ml-2 text-sm text-gray-500">Chargement du planning...</span>
-                  </div>
-                }>
+              <div className="w-full h-full">
+                <SuspenseWrapper 
+                  fallback="planning-grid"
+                  fallbackProps={{ 
+                    days: 20, 
+                    months: 2,
+                    showMonthHeader: true 
+                  }}
+                  className="py-4"
+                >
                   <GeneratedPlanningTable
                     startDate={dynamicDateRange ? dynamicDateRange.startDate : config.startDate}
                     endDate={dynamicDateRange ? dynamicDateRange.endDate : config.endDate}
@@ -904,7 +876,7 @@ const UserPlanningPage: React.FC = () => {
                     onLoadPreviousMonth={loadPreviousMonth}
                     onLoadNextMonth={loadNextMonth}
                   />
-                </Suspense>
+                </SuspenseWrapper>
               </div>
             </div>
           </>
@@ -922,89 +894,72 @@ const UserPlanningPage: React.FC = () => {
       </div>
       <PlanningTutorial isOpen={showTutorial} onClose={() => setShowTutorial(false)} />
       
-      {/* Modal de téléchargement PDF */}
-      {showDownloadModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">
-              Télécharger le planning en PDF
-            </h3>
-            <div className="space-y-4">
-              <button
-                onClick={async () => {
-                  if (!planning || !user) return;
-                  try {
-                    setToast({
-                      visible: true,
-                      message: 'Préparation de l\'export PDF...',
-                      type: 'success'
-                    });
-                    const exportPlanningToPDF = await loadPdfExporter();
-                    await exportPlanningToPDF({
-                      userName: `${user.lastName} ${user.firstName}`,
-                      startDate: config.startDate,
-                      endDate: config.endDate,
-                      assignments: planning.assignments,
-                      showAssignmentsOnly: true
-                    });
-                    setShowDownloadModal(false);
-                  } catch (error) {
-                    console.error('Error exporting PDF:', error);
-                    setToast({
-                      visible: true,
-                      message: 'Erreur lors de l\'export PDF',
-                      type: 'error'
-                    });
-                  }
-                }}
-                className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
-              >
-                Planning seul
-              </button>
-              <button
-                onClick={async () => {
-                  if (!planning || !user) return;
-                  try {
-                    setToast({
-                      visible: true,
-                      message: 'Préparation de l\'export PDF avec desiderata...',
-                      type: 'success'
-                    });
-                    const exportPlanningToPDF = await loadPdfExporter();
-                    await exportPlanningToPDF({
-                      userName: `${user.lastName} ${user.firstName}`,
-                      startDate: config.startDate,
-                      endDate: config.endDate,
-                      assignments: planning.assignments,
-                      desiderata: desiderata,
-                      showAssignmentsOnly: false,
-                      showComments: true
-                    });
-                    setShowDownloadModal(false);
-                  } catch (error) {
-                    console.error('Error exporting PDF with desiderata:', error);
-                    setToast({
-                      visible: true,
-                      message: 'Erreur lors de l\'export PDF avec desiderata',
-                      type: 'error'
-                    });
-                  }
-                }}
-                className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
-              >
-                Planning avec desiderata
-              </button>
-              <div className="pt-4 flex justify-end">
-                <button
-                  onClick={() => setShowDownloadModal(false)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-500"
-                >
-                  Fermer
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* Modal de sélection de dates et options PDF */}
+      <UserExportPDFModal
+        isOpen={showPdfExportModal}
+        onClose={() => setShowPdfExportModal(false)}
+        userName={user ? `${user.lastName} ${user.firstName}` : ''}
+        onExport={async (showAssignmentsOnly, startDate, endDate) => {
+          if (!planning || !user) return;
+          try {
+            showToast('Préparation de l\'export PDF...', 'success');
+            const exportPlanningToPDF = await loadPdfExporter();
+            
+            // Filtrer les assignments pour la période sélectionnée
+            const filteredAssignments: Record<string, ShiftAssignment> = {};
+            const filteredDesiderata: Record<string, 'primary' | 'secondary' | null> = {};
+            
+            Object.entries(planning.assignments).forEach(([key, assignment]) => {
+              const assignmentDate = new Date(assignment.date);
+              if (assignmentDate >= startDate && assignmentDate <= endDate) {
+                filteredAssignments[key] = assignment;
+              }
+            });
+            
+            // Filtrer les desiderata pour la période sélectionnée
+            Object.entries(desiderata).forEach(([key, value]) => {
+              const [year, month] = key.split('-');
+              const keyDate = new Date(parseInt(year), parseInt(month) - 1, 1);
+              if (keyDate >= startDate && keyDate <= endDate) {
+                filteredDesiderata[key] = value;
+              }
+            });
+            
+            await exportPlanningToPDF({
+              userName: `${user.lastName} ${user.firstName}`,
+              startDate,
+              endDate,
+              assignments: filteredAssignments,
+              desiderata: showAssignmentsOnly ? {} : filteredDesiderata,
+              showAssignmentsOnly,
+              showComments: !showAssignmentsOnly
+            });
+          } catch (error) {
+            console.error('Error exporting PDF:', error);
+            showToast('Erreur lors de l\'export PDF', 'error');
+          }
+        }}
+      />
+
+      {/* Modal de choix du mode et dates d'export pour CSV/ICS */}
+      {pendingExportType && (
+        <UserExportModal
+          isOpen={showExportModal}
+          onClose={() => {
+            setShowExportModal(false);
+            setPendingExportType(null);
+          }}
+          exportType={pendingExportType}
+          onExport={(mode, startDate, endDate) => {
+            if (pendingExportType === 'csv') {
+              handleExportCSV(mode, startDate, endDate);
+            } else if (pendingExportType === 'ics') {
+              handleExportICS(mode, startDate, endDate);
+            }
+            setShowExportModal(false);
+            setPendingExportType(null);
+          }}
+        />
       )}
 
       {/* Modal d'aide à l'importation */}

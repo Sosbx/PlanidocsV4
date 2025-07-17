@@ -9,6 +9,7 @@
  */
 
 import { db } from '../config';
+import { formatParisDate } from '@/utils/timezoneUtils';
 import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import { normalizePeriod } from '../../../utils/dateUtils';
 import { COLLECTIONS } from './types';
@@ -246,8 +247,8 @@ const checkRestPeriodConflict = async (
   const shiftDate = parseISO(date);
   
   // Vérifier les gardes 24h avant et après
-  const dayBefore = format(subDays(shiftDate, 1), 'yyyy-MM-dd');
-  const dayAfter = format(addDays(shiftDate, 1), 'yyyy-MM-dd');
+  const dayBefore = formatParisDate(subDays(shiftDate, 1), 'yyyy-MM-dd');
+  const dayAfter = formatParisDate(addDays(shiftDate, 1), 'yyyy-MM-dd');
   
   // Rechercher les gardes dans ces jours
   const shiftsQuery = query(

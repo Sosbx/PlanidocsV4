@@ -5,6 +5,7 @@
 
 // Importation des fonctions depuis Firebase
 import { saveGeneratedPlanning, deletePlanning } from '../../lib/firebase/planning';
+import { createParisDate } from '@/utils/timezoneUtils';
 import { validateBagPlanning, setNextPlanningPeriod, isDateInBagPeriod } from '../../lib/firebase/planningValidation';
 import { getDesiderata, saveDesiderata, validateDesiderata } from '../../lib/firebase/desiderata';
 
@@ -76,7 +77,7 @@ export const getBagPhaseConfig = async () => {
   // Pour l'instant, elle retourne un objet vide
   return {
     phase: 'submission',
-    submissionDeadline: new Date(),
+    submissionDeadline: createParisDate(),
     isValidated: false,
     isConfigured: false
   };

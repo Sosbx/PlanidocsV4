@@ -50,24 +50,16 @@ const tutorialSteps: TutorialStep[] = [
     title: 'Interagir avec le Planning',
     content: 'Cliquez sur une garde pour la proposer à l\'échange ou la retirer. Vous pourrez également ajouter un commentaire pour préciser vos conditions d\'échange.',
     position: 'bottom',
-    highlightTargets: ['[data-tutorial="planning-grid"] table td'],
+    highlightTargets: ['[data-tutorial="planning-grid"]'],
     important: true,
     icon: <HelpCircle className="h-5 w-5 text-orange-600" />
   },
   {
-    target: '[data-tutorial="planning-grid"]',
-    title: 'Codes Couleur',
-    content: '🟡 Jaune : vos gardes proposées à l\'échange\n🟢 Vert : gardes reçues suite à un échange\n🔴 Rouge : vos desiderata primaires\n🔵 Bleu : vos desiderata secondaires\n⚪ Gris : weekends/jours fériés',
-    position: 'top',
-    highlightTargets: ['[data-tutorial="planning-grid"]'],
-    icon: <HelpCircle className="h-5 w-5 text-indigo-500" />
-  },
-  {
-    target: '[data-tutorial="planning-grid"]',
+    target: 'button[title="Exporter le planning"]',
     title: 'Exporter votre Planning',
     content: 'Cliquez sur "Exporter" pour télécharger votre planning. Vous pouvez choisir entre CSV (Google Calendar), ICS (Apple Calendar) ou PDF. L\'aide à l\'importation est disponible dans le menu déroulant.',
     position: 'bottom',
-    highlightTargets: ['[data-tutorial="planning-grid"]'],
+    highlightTargets: ['button[title="Exporter le planning"]'],
     icon: <HelpCircle className="h-5 w-5 text-orange-600" />
   }
 ];
@@ -90,12 +82,41 @@ const PlanningTutorial: React.FC<TutorialProps> = ({ isOpen, onClose }) => {
 
     // Fonction pour nettoyer les highlights
     const cleanupHighlights = () => {
-      // Sélectionner tous les éléments avec les classes de surbrillance
-      document.querySelectorAll('.ring-indigo-500, .ring-amber-500, .animate-pulse').forEach(el => {
-        // Supprimer toutes les classes possibles
-        [...HIGHLIGHT_CLASSES.standard, ...HIGHLIGHT_CLASSES.button, 'scale-110', 'transition-all', 'duration-300', 'ease-in-out'].forEach(className => {
-          el.classList.remove(className);
-        });
+      // Nettoyer tous les éléments qui pourraient avoir des classes de surbrillance
+      const allHighlightClasses = [
+        ...HIGHLIGHT_CLASSES.standard, 
+        ...HIGHLIGHT_CLASSES.button, 
+        'scale-110', 'scale-105',
+        'transition-all', 
+        'duration-300', 
+        'ease-in-out'
+      ];
+      
+      // Cibler spécifiquement les éléments susceptibles d'avoir des highlights
+      const selectorsToClean = [
+        '[data-tutorial]',
+        'button',
+        'a',
+        '.ring-4',
+        '.ring-indigo-500',
+        '.ring-amber-500',
+        '.animate-pulse',
+        '.scale-110',
+        '.scale-105',
+        '[data-tutorial="planning-grid"]',
+        '[data-tutorial="planning-grid"] > *'
+      ];
+      
+      selectorsToClean.forEach(selector => {
+        try {
+          document.querySelectorAll(selector).forEach(el => {
+            allHighlightClasses.forEach(className => {
+              el.classList.remove(className);
+            });
+          });
+        } catch (e) {
+          // Ignorer les erreurs de sélecteur
+        }
       });
     };
 
@@ -111,32 +132,48 @@ const PlanningTutorial: React.FC<TutorialProps> = ({ isOpen, onClose }) => {
       // Appliquer les nouveaux highlights avec délai pour éviter les problèmes de rendu
       setTimeout(() => {
         const currentStepData = tutorialSteps[currentStep];
-        if (currentStepData.highlightTargets) {
+        if (currentStepData.highlightTargets && currentStepData.highlightTargets.length > 0) {
           currentStepData.highlightTargets.forEach(target => {
-            // Utiliser directement les sélecteurs spécifiques pour les boutons
             const elements = document.querySelectorAll(target);
             
             if (elements.length === 0) {
               console.warn(`Aucun élément trouvé pour le sélecteur: ${target}`);
+              return;
             }
             
-            elements.forEach(el => {
-              // Toujours appliquer la classe de surbrillance des boutons pour plus de visibilité
-              HIGHLIGHT_CLASSES.button.forEach(className => {
-                el.classList.add(className);
-              });
+            // Limiter le nombre d'éléments à highlighter pour éviter les problèmes de performance
+            const maxElements = 10;
+            const elementsToHighlight = elements.length > maxElements ? 
+              Array.from(elements).slice(0, maxElements) : 
+              Array.from(elements);
+            
+            elementsToHighlight.forEach(el => {
+              // Déterminer le type de highlight à appliquer
+              const isButton = el.tagName === 'BUTTON' || el.tagName === 'A';
+              const isLargeElement = el.tagName === 'DIV' || el.tagName === 'TABLE' || el.getAttribute('data-tutorial');
               
-              // Ajouter des classes pour la transition
-              el.classList.add('transition-all', 'duration-300', 'ease-in-out');
-              
-              // Ajouter un effet de zoom pour rendre le bouton plus visible
-              if (el.tagName === 'BUTTON' || el.tagName === 'A') {
+              if (isLargeElement) {
+                // Pour les grands éléments, utiliser un highlight plus subtil sans animation
+                el.classList.add('ring-4', 'ring-indigo-500', 'ring-opacity-90', 'z-[100]', 'shadow-xl');
+              } else if (isButton) {
+                // Pour les boutons, utiliser le highlight complet avec animation
+                HIGHLIGHT_CLASSES.button.forEach(className => {
+                  el.classList.add(className);
+                });
                 el.classList.add('scale-110');
+              } else {
+                // Pour les autres éléments, highlight standard sans animation excessive
+                el.classList.add('ring-4', 'ring-amber-500', 'ring-opacity-90', 'z-[100]', 'shadow-xl');
+              }
+              
+              // Ajouter la transition seulement si nécessaire
+              if (!isLargeElement) {
+                el.classList.add('transition-all', 'duration-300', 'ease-in-out');
               }
             });
           });
         }
-      }, 100); // Délai plus long pour s'assurer que le DOM est prêt
+      }, 100); // Délai pour s'assurer que le DOM est prêt
 
       // Mesures de base
       const windowHeight = window.innerHeight;

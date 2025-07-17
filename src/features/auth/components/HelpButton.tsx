@@ -11,8 +11,19 @@ const HelpButton: React.FC<HelpButtonProps> = ({ className = '' }) => {
 
   const helpSteps = [
     {
+      icon: '🌟',
+      title: "Connexion recommandée",
+      content: [
+        { label: "Méthode préférée", value: "Connexion avec Google/H24" },
+        { label: "Avantages", value: "Plus rapide et plus sécurisée" },
+        { label: "Comment", value: "Cliquez sur le bouton 'Se connecter avec son compte Google/H24'" }
+      ],
+      alert: false,
+      recommended: true
+    },
+    {
       icon: '👤',
-      title: "Connexion rapide",
+      title: "Connexion classique",
       content: [
         { label: "Identifiant", value: "4 lettres du NOM (ex: DUPO)" },
         { label: "Mot de passe", value: "4 lettres du PRÉNOM + 33 (ex: MARC33)" },
@@ -32,7 +43,6 @@ const HelpButton: React.FC<HelpButtonProps> = ({ className = '' }) => {
       icon: '🔄',
       title: "Autres options",
       content: [
-        { label: "Google", value: "Connexion avec compte Google disponible" },
         { label: "Mot de passe oublié", value: "Lien disponible sous le formulaire" },
         { label: "Support", value: "Contactez votre administrateur" }
       ]
@@ -97,7 +107,8 @@ const HelpButton: React.FC<HelpButtonProps> = ({ className = '' }) => {
                   <div className="text-center mb-4">
                     <div className="text-4xl mb-2">{helpSteps[currentStep].icon}</div>
                     <h4 className={`text-lg font-bold ${
-                      helpSteps[currentStep].alert ? 'text-orange-600' : 'text-gray-800'
+                      helpSteps[currentStep].alert ? 'text-orange-600' : 
+                      helpSteps[currentStep].recommended ? 'text-green-600' : 'text-gray-800'
                     }`}>
                       {helpSteps[currentStep].title}
                     </h4>

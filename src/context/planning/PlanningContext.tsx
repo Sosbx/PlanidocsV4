@@ -1,24 +1,15 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
-import { doc, onSnapshot, setDoc, collection, getDocs, writeBatch, query, orderBy, where } from 'firebase/firestore';
+import { formatParisDate } from '@/utils/timezoneUtils';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from "../../lib/firebase/config";
 import { PlanningConfig, defaultConfig } from '../../types/planning';
 import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { frLocale } from '../../utils/dateLocale';
 import { useAssociation } from '../association/AssociationContext';
-import { getCollectionName } from '../../lib/firebase/desiderata';
+import { getCollectionName } from '../../utils/collectionUtils';
 import { ASSOCIATIONS } from '../../constants/associations';
-
-/**
- * Interface pour une période archivée
- */
-export interface ArchivedPeriod {
-  id: string;
-  config: PlanningConfig;
-  archivedAt: Date;
-  name: string;
-  validatedDesiderataCount: number;
-  associationId: string; // Ajouter l'associationId
-}
+import { getPlanningRepository } from '../../api/implementations/PlanningRepository';
+import { ArchivedPeriod } from '../../api/interfaces/IPlanningRepository';
 
 /**
  * Type pour le contexte de planification
@@ -34,19 +25,6 @@ interface PlanningContextType {
 
 const PlanningContext = createContext<PlanningContextType | undefined>(undefined);
 
-// Fonction pour obtenir le nom du document de configuration en fonction de l'association
-const getPlanningConfigDoc = (associationId: string) => {
-  if (associationId === ASSOCIATIONS.RIVE_DROITE) {
-    return 'planning_config'; // Garder le nom original pour RD
-  }
-  return `planning_config_${associationId}`; // Ex: planning_config_RG
-};
-
-// Fonction pour obtenir le nom de la collection des périodes archivées en fonction de l'association
-const getArchivedPeriodsCollection = (associationId: string) => {
-  return getCollectionName('archived_planning_periods', associationId);
-};
-
 /**
  * Provider pour le contexte de planification
  * Gère la configuration du planning et les opérations associées
@@ -57,8 +35,8 @@ export const PlanningProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const { currentAssociation } = useAssociation();
   // Référence pour suivre la dernière association chargée
   const lastLoadedAssociationRef = React.useRef<string | null>(null);
+  const repository = getPlanningRepository();
 
-  // Effet pour réinitialiser la configuration lors du changement d'association
   // Fonction pour vérifier si l'utilisateur a accès à une association
   const canAccessAssociation = (associationId: string) => {
     // Si l'utilisateur n'est pas connecté, on utilise l'association par défaut
@@ -72,7 +50,6 @@ export const PlanningProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (!currentAssociation) return;
     
     // Si l'association a changé, réinitialiser immédiatement la configuration
-    // pour éviter d'afficher temporairement les données de l'ancienne association
     if (lastLoadedAssociationRef.current && lastLoadedAssociationRef.current !== currentAssociation) {
       console.log(`PlanningContext: Changement d'association détecté de ${lastLoadedAssociationRef.current} à ${currentAssociation}`);
       console.log(`PlanningContext: Réinitialisation de la configuration pour éviter les conflits de cache`);
@@ -91,7 +68,6 @@ export const PlanningProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     lastLoadedAssociationRef.current = currentAssociation;
     
     console.log(`PlanningContext: Chargement de la configuration pour l'association ${currentAssociation}`);
-    const configDoc = getPlanningConfigDoc(currentAssociation);
     
     // IMPORTANT: Vérifier que l'utilisateur a accès à cette association
     if (!canAccessAssociation(currentAssociation)) {
@@ -103,28 +79,18 @@ export const PlanningProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       return;
     }
     
-    const unsubscribe = onSnapshot(doc(db, 'config', configDoc), (doc) => {
+    const unsubscribe = repository.subscribeToConfig(currentAssociation, (configData) => {
       // Vérifier à nouveau que l'utilisateur a toujours accès à cette association
       if (!canAccessAssociation(currentAssociation)) {
         console.error(`PlanningContext: L'utilisateur n'a plus accès à l'association ${currentAssociation}`);
         return;
       }
       
-      if (doc.exists()) {
-        const data = doc.data();
+      if (configData) {
         // Vérifier que l'association n'a pas changé entre-temps
         if (currentAssociation === lastLoadedAssociationRef.current) {
           console.log(`PlanningContext: Configuration chargée pour l'association ${currentAssociation}`);
-          setConfig({
-            ...data,
-            startDate: data.startDate.toDate(),
-            endDate: data.endDate.toDate(),
-            deadline: data.deadline.toDate(),
-            primaryDesiderataLimit: data.primaryDesiderataLimit || 0,
-            secondaryDesiderataLimit: data.secondaryDesiderataLimit || 0,
-            isConfigured: true,
-            associationId: currentAssociation // Ajouter l'associationId à la configuration
-          });
+          setConfig(configData);
         } else {
           console.log(`PlanningContext: Ignorer les données obsolètes pour l'association ${currentAssociation}`);
         }
@@ -134,7 +100,7 @@ export const PlanningProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           console.log(`PlanningContext: Aucune configuration trouvée pour l'association ${currentAssociation}`);
           setConfig({
             ...defaultConfig,
-            associationId: currentAssociation // Ajouter l'associationId à la configuration par défaut
+            associationId: currentAssociation
           });
         }
       }
@@ -145,7 +111,7 @@ export const PlanningProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       unsubscribe();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentAssociation]);  // Réagir aux changements d'association
+  }, [currentAssociation]);
 
   /**
    * Charge les périodes archivées depuis Firestore
@@ -155,37 +121,12 @@ export const PlanningProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     
     try {
       console.log(`PlanningContext: Chargement des périodes archivées pour l'association ${currentAssociation}`);
-      const archivedCollection = getArchivedPeriodsCollection(currentAssociation);
-      
-      const periodsQuery = query(
-        collection(db, archivedCollection),
-        orderBy('archivedAt', 'desc')
-      );
-      
-      const periodsSnapshot = await getDocs(periodsQuery);
-      const periodsData = periodsSnapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          config: {
-            ...data.config,
-            startDate: data.config.startDate.toDate(),
-            endDate: data.config.endDate.toDate(),
-            deadline: data.config.deadline.toDate(),
-            associationId: currentAssociation // Ajouter l'associationId
-          },
-          archivedAt: data.archivedAt.toDate(),
-          name: data.name,
-          validatedDesiderataCount: data.validatedDesiderataCount || 0,
-          associationId: currentAssociation // Ajouter l'associationId
-        } as ArchivedPeriod;
-      });
-      
-      setArchivedPeriods(periodsData);
+      const periods = await repository.getArchivedPeriods(currentAssociation);
+      setArchivedPeriods(periods);
     } catch (error) {
       console.error(`Error loading archived periods for association ${currentAssociation}:`, error);
     }
-  }, [currentAssociation]);  
+  }, [currentAssociation, repository]);  
 
   /**
    * Met à jour la configuration du planning
@@ -195,67 +136,20 @@ export const PlanningProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (!currentAssociation) return;
     
     console.log(`PlanningContext: Mise à jour de la configuration pour l'association ${currentAssociation}`);
-    const configDoc = getPlanningConfigDoc(currentAssociation);
-    const configRef = doc(db, 'config', configDoc);
-    
-    await setDoc(configRef, {
-      ...newConfig,
-      startDate: newConfig.startDate,
-      endDate: newConfig.endDate,
-      deadline: newConfig.deadline,
-      associationId: currentAssociation // S'assurer que l'associationId est bien enregistré
-    });
-  }, [currentAssociation]);
+    await repository.updateConfig(currentAssociation, newConfig);
+  }, [currentAssociation, repository]);
 
   /**
    * Réinitialise la configuration du planning et les données associées
    */
-  const resetConfig = async () => {
+  const resetConfig = useCallback(async () => {
     if (!currentAssociation) return;
     
     try {
       console.log(`PlanningContext: Réinitialisation de la configuration pour l'association ${currentAssociation}`);
-      const batch = writeBatch(db);
-
-      // 1. Supprimer la configuration actuelle
-      const configDoc = getPlanningConfigDoc(currentAssociation);
-      const configRef = doc(db, 'config', configDoc);
-      batch.delete(configRef);
-
-      // 2. Supprimer tous les desiderata existants pour cette association
-      const desiderataCollection = getCollectionName('desiderata', currentAssociation);
-      const desiderataSnapshot = await getDocs(collection(db, desiderataCollection));
-      desiderataSnapshot.docs.forEach(doc => {
-        batch.delete(doc.ref);
-      });
-
-      // 3. Réinitialiser le statut de validation pour tous les utilisateurs de cette association
-      const usersCollection = getCollectionName('users', currentAssociation);
-      const usersSnapshot = await getDocs(
-        query(collection(db, usersCollection), 
-              where("associationId", "==", currentAssociation))
-      );
+      await repository.resetPlanningForAssociation(currentAssociation);
       
-      // Pour Rive Droite, inclure aussi les utilisateurs sans associationId
-      if (currentAssociation === ASSOCIATIONS.RIVE_DROITE) {
-        const legacyUsersSnapshot = await getDocs(
-          query(collection(db, usersCollection), 
-                where("associationId", "==", null))
-        );
-        
-        legacyUsersSnapshot.docs.forEach(doc => {
-          batch.update(doc.ref, { hasValidatedPlanning: false });
-        });
-      }
-      
-      usersSnapshot.docs.forEach(doc => {
-        batch.update(doc.ref, { hasValidatedPlanning: false });
-      });
-
-      // 4. Exécuter toutes les opérations en une seule transaction
-      await batch.commit();
-
-      // 5. Réinitialiser l'état local
+      // Réinitialiser l'état local
       setConfig({
         ...defaultConfig,
         associationId: currentAssociation
@@ -264,14 +158,14 @@ export const PlanningProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       console.error(`Error resetting planning for association ${currentAssociation}:`, error);
       throw error;
     }
-  };
+  }, [currentAssociation, repository]);
 
   /**
    * Archive la période de planning actuelle et crée une nouvelle période
    * @param newConfig - Configuration partielle pour la nouvelle période (optionnel)
    * @returns L'ID de la période archivée
    */
-  const archivePlanningPeriod = async (newConfig?: Partial<PlanningConfig>): Promise<string> => {
+  const archivePlanningPeriod = useCallback(async (newConfig?: Partial<PlanningConfig>): Promise<string> => {
     if (!currentAssociation) throw new Error('Association non définie');
     
     try {
@@ -292,78 +186,26 @@ export const PlanningProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
       });
       
-      // 3. Créer un document dans la collection archived_planning_periods spécifique à l'association
-      const periodName = `${format(currentConfig.startDate, 'MMM yyyy', { locale: fr })} - ${format(currentConfig.endDate, 'MMM yyyy', { locale: fr })}`;
-      const archivedCollection = getArchivedPeriodsCollection(currentAssociation);
-      const archivedPeriodRef = doc(collection(db, archivedCollection));
+      // 3. Créer le nom de la période
+      const periodName = `${formatParisDate(currentConfig.startDate, 'MMM yyyy', { locale: frLocale })} - ${formatParisDate(currentConfig.endDate, 'MMM yyyy', { locale: frLocale })}`;
       
-      await setDoc(archivedPeriodRef, {
-        config: currentConfig,
-        archivedAt: new Date(),
-        name: periodName,
-        associationId: currentAssociation,
-        validatedDesiderataCount: Object.keys(validatedDesiderata).length
-      });
-      
-      // 4. Stocker les desiderata validés dans une sous-collection
-      const desiderataCollectionRef = collection(archivedPeriodRef, desiderataCollection);
-      const batch = writeBatch(db);
-      
-      Object.entries(validatedDesiderata).forEach(([userId, data]) => {
-        batch.set(doc(desiderataCollectionRef, userId), data);
-      });
-      
-      // 5. Réinitialiser l'état des réponses des utilisateurs de cette association
+      // 4. Compter le nombre total d'utilisateurs
       const usersCollection = getCollectionName('users', currentAssociation);
+      const usersSnapshot = await getDocs(
+        query(collection(db, usersCollection), 
+          where("roles.isUser", "==", true)
+        )
+      );
+      const totalUsers = usersSnapshot.size;
       
-      // Traiter les utilisateurs selon l'association
-      if (currentAssociation === ASSOCIATIONS.RIVE_DROITE) {
-        // Pour RD, inclure aussi les utilisateurs sans associationId
-        const usersWithAssocSnapshot = await getDocs(
-          query(collection(db, usersCollection), where("associationId", "==", currentAssociation))
-        );
-        
-        const usersWithoutAssocSnapshot = await getDocs(
-          query(collection(db, usersCollection), where("associationId", "==", null))
-        );
-        
-        // Traiter les utilisateurs avec associationId=RD
-        usersWithAssocSnapshot.docs.forEach(userDoc => {
-          // Réinitialiser hasValidatedPlanning à false
-          batch.update(userDoc.ref, { hasValidatedPlanning: false });
-          
-          // Supprimer les desiderata existants
-          const desiderataRef = doc(db, desiderataCollection, userDoc.id);
-          batch.delete(desiderataRef);
-        });
-        
-        // Traiter les utilisateurs sans associationId (legacy)
-        usersWithoutAssocSnapshot.docs.forEach(userDoc => {
-          // Réinitialiser hasValidatedPlanning à false
-          batch.update(userDoc.ref, { hasValidatedPlanning: false });
-          
-          // Supprimer les desiderata existants
-          const desiderataRef = doc(db, desiderataCollection, userDoc.id);
-          batch.delete(desiderataRef);
-        });
-      } else {
-        // Pour les autres associations, filtrer strictement par associationId
-        const usersSnapshot = await getDocs(
-          query(collection(db, usersCollection), where("associationId", "==", currentAssociation))
-        );
-        
-        usersSnapshot.docs.forEach(userDoc => {
-          // Réinitialiser hasValidatedPlanning à false
-          batch.update(userDoc.ref, { hasValidatedPlanning: false });
-          
-          // Supprimer les desiderata existants
-          const desiderataRef = doc(db, desiderataCollection, userDoc.id);
-          batch.delete(desiderataRef);
-        });
-      }
-      
-      // Exécuter toutes les opérations en une seule transaction
-      await batch.commit();
+      // 5. Archiver la période
+      const archivedId = await repository.archivePeriod(
+        currentAssociation,
+        currentConfig,
+        validatedDesiderata,
+        periodName,
+        totalUsers
+      );
       
       // 6. Réinitialiser ou mettre à jour la configuration pour la nouvelle période
       if (newConfig) {
@@ -382,12 +224,12 @@ export const PlanningProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       // 7. Recharger les périodes archivées
       await loadArchivedPeriods();
       
-      return archivedPeriodRef.id;
+      return archivedId;
     } catch (error) {
       console.error(`Error archiving planning period for association ${currentAssociation}:`, error);
       throw error;
     }
-  };
+  }, [currentAssociation, config, repository, updateConfig, resetConfig, loadArchivedPeriods]);
 
   // Memoïser la valeur du contexte pour éviter les re-renders inutiles
   const contextValue = useMemo(() => ({

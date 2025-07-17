@@ -1,3 +1,5 @@
+import { createParisDate } from '@/utils/timezoneUtils';
+
 export interface PlanningConfig {
   startDate: Date;
   endDate: Date;
@@ -20,7 +22,7 @@ export interface BagPhaseConfig {
 
 export const defaultBagPhaseConfig: BagPhaseConfig = {
   phase: 'submission',
-  submissionDeadline: new Date(),
+  submissionDeadline: createParisDate(),
   isConfigured: false,
   isValidated: false
 };
@@ -99,6 +101,18 @@ export interface PlanningPeriodData {
   isArchived?: boolean; // Indique si cette période contient des gardes archivées
 }
 
+export interface ArchivedDesiderata {
+  userId: string;
+  selections: Selections;
+  validatedAt: Date | string;
+  archivedAt: Date;
+  periodStart: Date;
+  periodEnd: Date;
+  associationId: string;
+  periodName: string;
+  totalUsers: number;
+}
+
 export interface GeneratedPlanning {
   periodId?: string; // ID de la période associée (ancienne structure)
   /** @deprecated Utiliser periods à la place - Maintenu pour compatibilité */
@@ -115,9 +129,9 @@ export interface PeriodSelection {
 export type Selections = Record<string, PeriodSelection>;
 
 export const defaultConfig: PlanningConfig = {
-  startDate: new Date(),
-  endDate: new Date(),
-  deadline: new Date(),
+  startDate: createParisDate(),
+  endDate: createParisDate(),
+  deadline: createParisDate(),
   primaryDesiderataLimit: 0,
   secondaryDesiderataLimit: 0,
   isConfigured: false,

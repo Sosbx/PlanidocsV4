@@ -3,6 +3,8 @@ import { AlertTriangle, UserCheck, X, ArrowLeftRight } from 'lucide-react';
 import type { BagPhaseConfig, ShiftAssignment } from '../../../../types/planning';
 import type { ShiftExchange as PlanningShiftExchange } from '../../../../types/planning';
 import type { ShiftExchange as FeatureShiftExchange } from '../../../../features/shiftExchange/types';
+import type { SuggestionScore } from '../../types/scoring';
+import SuggestionIndicator from './SuggestionIndicator';
 
 // Type union pour accepter les deux types de ShiftExchange
 type ShiftExchange = PlanningShiftExchange | FeatureShiftExchange;
@@ -22,6 +24,8 @@ interface InterestedUserCardProps {
   onRemoveUser: (exchangeId: string, userId: string) => void;
   exchanges?: ShiftExchange[];
   history?: any[];
+  suggestion?: SuggestionScore;
+  showSuggestion?: boolean;
 }
 
 const InterestedUserCard: React.FC<InterestedUserCardProps> = ({
@@ -35,7 +39,9 @@ const InterestedUserCard: React.FC<InterestedUserCardProps> = ({
   onValidateExchange,
   onRemoveUser,
   exchanges = [],
-  history = []
+  history = [],
+  suggestion,
+  showSuggestion = true
 }) => {
   const [showValidateConfirmation, setShowValidateConfirmation] = useState(false);
 
@@ -181,6 +187,12 @@ const InterestedUserCard: React.FC<InterestedUserCardProps> = ({
         </div>
       </div>
       <div className="flex items-center gap-2">
+        {suggestion && showSuggestion && (
+          <SuggestionIndicator 
+            suggestion={suggestion} 
+            mode="compact"
+          />
+        )}
         <div className="flex gap-1">
           <button
             onClick={() => onRemoveUser(exchange.id, userId)}

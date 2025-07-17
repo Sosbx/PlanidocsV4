@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useMemo, type ReactNode, FC } from 'react';
+import { withPerformanceProfiler } from '../utils/performanceProfiler';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../features/auth/hooks';
 import { useFeatureFlags } from '../context/featureFlags/FeatureFlagsContext';
@@ -18,13 +19,14 @@ import {
   Shield,
   CalendarOff,
   RefreshCw,
-  FileSpreadsheet
+  FileSpreadsheet,
+  BarChart3
 } from 'lucide-react';
 import LogoImage from '../assets/images/Logo.png';
 
 interface DashboardCardProps {
   to: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
   title: string;
   description: string;
   color: string;
@@ -32,7 +34,7 @@ interface DashboardCardProps {
   isDev?: boolean;
 }
 
-const DashboardCard: React.FC<DashboardCardProps> = ({ to, icon, title, description, color, disabled, isDev }) => {
+const DashboardCard: FC<DashboardCardProps> = React.memo(({ to, icon, title, description, color, disabled, isDev }) => {
   // Si c'est en développement, afficher la carte mais désactivée
   if (isDev) {
     return (
@@ -80,7 +82,9 @@ const DashboardCard: React.FC<DashboardCardProps> = ({ to, icon, title, descript
       <div className="absolute inset-0 bg-gradient-to-br from-transparent to-gray-50/30 opacity-0 group-hover:opacity-100 transition-all duration-300" />
     </Link>
   );
-};
+});
+
+DashboardCard.displayName = 'DashboardCard';
 
 const DashboardPage: React.FC = () => {
   const { user } = useAuth();
@@ -92,15 +96,6 @@ const DashboardPage: React.FC = () => {
   // Définition de tous les cartes utilisateur
   const allUserCards = [
     {
-      to: "/user",
-      icon: <CalendarOff className="h-6 w-6 text-sky-600" />,
-      title: "Désidérata",
-      description: "Saisir mes desiderata",
-      color: "hover:border-sky-500 hover:bg-gradient-to-br hover:from-sky-50 hover:to-blue-50/50",
-      disabled: (canAccessSuperAdmin && isSuperAdminMode) ? false : getFeatureStatus(FEATURES.DESIDERATA) === 'disabled',
-      isDev: (canAccessSuperAdmin && isSuperAdminMode) ? false : getFeatureStatus(FEATURES.DESIDERATA) === 'dev'
-    },
-    {
       to: "/planning",
       icon: <Calendar className="h-6 w-6 text-teal-600" />,
       title: "Planning",
@@ -108,6 +103,15 @@ const DashboardPage: React.FC = () => {
       color: "hover:border-teal-500 hover:bg-gradient-to-br hover:from-teal-50 hover:to-emerald-50/50",
       disabled: (canAccessSuperAdmin && isSuperAdminMode) ? false : getFeatureStatus(FEATURES.PLANNING) === 'disabled',
       isDev: (canAccessSuperAdmin && isSuperAdminMode) ? false : getFeatureStatus(FEATURES.PLANNING) === 'dev'
+    },
+    {
+      to: "/direct-exchange",
+      icon: <RefreshCw className="h-6 w-6 text-orange-600" />,
+      title: "Échanges",
+      description: "Céder, échanger ou se faire remplacer",
+      color: "hover:border-orange-500 hover:bg-gradient-to-br hover:from-orange-50 hover:to-amber-50/50",
+      disabled: (canAccessSuperAdmin && isSuperAdminMode) ? false : getFeatureStatus(FEATURES.DIRECT_EXCHANGE) === 'disabled',
+      isDev: (canAccessSuperAdmin && isSuperAdminMode) ? false : getFeatureStatus(FEATURES.DIRECT_EXCHANGE) === 'dev'
     },
     {
       to: "/shift-exchange",
@@ -119,13 +123,22 @@ const DashboardPage: React.FC = () => {
       isDev: (canAccessSuperAdmin && isSuperAdminMode) ? false : getFeatureStatus(FEATURES.SHIFT_EXCHANGE) === 'dev'
     },
     {
-      to: "/direct-exchange",
-      icon: <RefreshCw className="h-6 w-6 text-orange-600" />,
-      title: "Échanges",
-      description: "Céder, échanger ou se faire remplacer",
-      color: "hover:border-orange-500 hover:bg-gradient-to-br hover:from-orange-50 hover:to-amber-50/50",
-      disabled: (canAccessSuperAdmin && isSuperAdminMode) ? false : getFeatureStatus(FEATURES.DIRECT_EXCHANGE) === 'disabled',
-      isDev: (canAccessSuperAdmin && isSuperAdminMode) ? false : getFeatureStatus(FEATURES.DIRECT_EXCHANGE) === 'dev'
+      to: "/user",
+      icon: <CalendarOff className="h-6 w-6 text-sky-600" />,
+      title: "Désidérata",
+      description: "Saisir mes desiderata",
+      color: "hover:border-sky-500 hover:bg-gradient-to-br hover:from-sky-50 hover:to-blue-50/50",
+      disabled: (canAccessSuperAdmin && isSuperAdminMode) ? false : getFeatureStatus(FEATURES.DESIDERATA) === 'disabled',
+      isDev: (canAccessSuperAdmin && isSuperAdminMode) ? false : getFeatureStatus(FEATURES.DESIDERATA) === 'dev'
+    },
+    {
+      to: "/all-plannings",
+      icon: <Users className="h-6 w-6 text-purple-600" />,
+      title: "Tous les plannings",
+      description: "Consulter les plannings de tous les utilisateurs",
+      color: "hover:border-purple-500 hover:bg-gradient-to-br hover:from-purple-50 hover:to-violet-50/50",
+      disabled: true,
+      isDev: false
     }
   ];
   
@@ -196,6 +209,15 @@ const DashboardPage: React.FC = () => {
       color: "hover:border-purple-500 hover:bg-gradient-to-br hover:from-purple-50 hover:to-indigo-50/50",
       disabled: (canAccessSuperAdmin && isSuperAdminMode) ? false : getFeatureStatus(FEATURES.REPLACEMENTS) === 'disabled',
       isDev: (canAccessSuperAdmin && isSuperAdminMode) ? false : getFeatureStatus(FEATURES.REPLACEMENTS) === 'dev'
+    },
+    {
+      to: "/statistics",
+      icon: <BarChart3 className="h-6 w-6 text-rose-600" />,
+      title: "Statistiques",
+      description: "Analyser les données des desiderata",
+      color: "hover:border-rose-500 hover:bg-gradient-to-br hover:from-rose-50 hover:to-pink-50/50",
+      disabled: false,
+      isDev: false
     }
   ];
 
@@ -297,4 +319,4 @@ const DashboardPage: React.FC = () => {
   );
 };
 
-export default DashboardPage;
+export default withPerformanceProfiler(DashboardPage, 'DashboardPage');

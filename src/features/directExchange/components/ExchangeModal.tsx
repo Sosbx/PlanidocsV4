@@ -2,8 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { X, Repeat, Gift, Users } from 'lucide-react';
 import type { ShiftAssignment } from '../../planning/types';
 import '../../../styles/BadgeStyles.css';
-import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import {
+  formatDateAs,
+  parseDate,
+  getPeriodName
+} from '../../../utils/dates';
 
 interface ExchangeModalProps {
   isOpen: boolean;
@@ -119,8 +122,7 @@ const ExchangeModal: React.FC<ExchangeModalProps> = ({
   const formatShortDate = (dateString?: string) => {
     if (!dateString) return '';
     try {
-      const date = new Date(dateString);
-      return format(date, 'dd MMM', { locale: fr });
+      return formatDateAs(dateString, 'short');
     } catch (e) {
       return dateString;
     }

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Download, FileText, FileSpreadsheet, Calendar, Eye, EyeOff, ChevronDown } from 'lucide-react';
+import { Download, FileText, FileSpreadsheet, Eye, EyeOff, ChevronDown } from 'lucide-react';
 
 interface PlanningToolbarProps {
   onExportPDF: () => Promise<void>;
@@ -140,6 +140,7 @@ const PlanningToolbar: React.FC<PlanningToolbarProps> = ({
                       )}
                     </>
                   )}
+                  
                 </div>
               </div>
             </>

@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
+import { createParisDate, startOfDayParis, endOfDayParis } from '@/utils/timezoneUtils';
 import { addDays, format, isWithinInterval, parseISO, startOfDay, endOfDay } from 'date-fns';
 import type { ShiftExchange as ExchangeShiftExchange } from '../../../types/exchange';
 
@@ -37,23 +38,23 @@ export const useExchangeListFilters = (options?: UseExchangeListFiltersOptions) 
   
   // Calcul de la plage de dates en fonction de l'option sélectionnée
   const dateRangeInterval = useMemo(() => {
-    const today = new Date();
+    const today = createParisDate();
     
     switch (dateRange) {
       case 'current':
         return {
-          start: startOfDay(today),
-          end: endOfDay(addDays(today, 7))
+          start: startOfDayParis(today),
+          end: endOfDayParis(addDays(today, 7))
         };
       case '7days':
         return {
-          start: startOfDay(today),
-          end: endOfDay(addDays(today, 7))
+          start: startOfDayParis(today),
+          end: endOfDayParis(addDays(today, 7))
         };
       case '30days':
         return {
-          start: startOfDay(today),
-          end: endOfDay(addDays(today, 30))
+          start: startOfDayParis(today),
+          end: endOfDayParis(addDays(today, 30))
         };
       case 'all':
       default:

@@ -70,7 +70,7 @@ const Badge: React.FC<BadgeProps> = ({
       case 'combined-replacement':
         return 'bg-orange-100 text-orange-800 border-orange-200 font-bold'; // Orange pour combiné + remplaçant (CER)
       case 'interested':
-        return 'bg-green-100 text-green-700 border-green-200 font-bold'; // Vert pour intéressés
+        return 'bg-green-100/70 text-green-800 border-green-200/70 font-bold'; // Vert semi-transparent pour intéressés
       case 'pending':
         return 'bg-yellow-100 text-yellow-700 border-yellow-200 font-bold';
       case 'completed':
@@ -94,6 +94,21 @@ const Badge: React.FC<BadgeProps> = ({
         case 'md':
         default:
           return 'text-[7px] px-1 min-w-[12px] h-3.5 leading-none font-bold';
+      }
+    }
+    
+    // Pour le type 'interested', utiliser une taille plus petite
+    if (type === 'interested') {
+      switch (size) {
+        case 'xs':
+          return 'text-[7px] px-0.5 min-w-[12px] h-3';
+        case 'sm':
+          return 'text-[8px] px-0.5 min-w-[14px] h-3.5';
+        case 'lg':
+          return 'text-[10px] px-1 min-w-[18px] h-5';
+        case 'md':
+        default:
+          return 'text-[9px] px-1 min-w-[16px] h-4';
       }
     }
     

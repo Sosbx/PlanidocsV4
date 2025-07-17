@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { formatParisDate } from '@/utils/timezoneUtils';
 import { format, isToday } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { frLocale } from '../../../utils/dateLocale';
 import { isGrayedOut } from '../../../utils/dateUtils';
 import { standardizePeriod } from '../../../utils/periodUtils';
 import type { ShiftExchange } from '../../../types/exchange';
@@ -75,7 +76,7 @@ const DirectExchangeTable: React.FC<DirectExchangeTableProps> = ({
   // Générer les dates à afficher
   useEffect(() => {
     const dateArray: Date[] = [];
-    let currentDate = new Date(startDate);
+    const currentDate = new Date(startDate);
     
     while (currentDate <= endDate) {
       dateArray.push(new Date(currentDate));
@@ -115,7 +116,7 @@ const DirectExchangeTable: React.FC<DirectExchangeTableProps> = ({
   
   // Organiser les gardes de l'utilisateur par date et période
   const getUserAssignmentsByDateAndPeriod = (date: Date) => {
-    const dateStr = format(date, 'yyyy-MM-dd');
+    const dateStr = formatParisDate(date, 'yyyy-MM-dd');
     const result: Record<string, {
       assignment: ShiftAssignment | null;
       proposals: ShiftExchange[];
@@ -179,7 +180,7 @@ const DirectExchangeTable: React.FC<DirectExchangeTableProps> = ({
 
   // Organiser les gardes proposées par date et période
   const getProposedExchangesByDateAndPeriod = (date: Date) => {
-    const dateStr = format(date, 'yyyy-MM-dd');
+    const dateStr = formatParisDate(date, 'yyyy-MM-dd');
     const result: Record<string, ShiftExchange[]> = {
       'M': [],
       'AM': [],
@@ -224,7 +225,7 @@ const DirectExchangeTable: React.FC<DirectExchangeTableProps> = ({
       exchange => {
         const exchangePeriod = standardizePeriod(exchange.period);
         return exchange.userId === user?.id && 
-               exchange.date === format(date, 'yyyy-MM-dd') && 
+               exchange.date === formatParisDate(date, 'yyyy-MM-dd') && 
                exchangePeriod === assignmentPeriod;
       }
     );
@@ -340,8 +341,8 @@ const DirectExchangeTable: React.FC<DirectExchangeTableProps> = ({
           <div 
             className={`absolute -top-1 -left-1 w-4 h-4 ${badgeClass} rounded-full border border-white shadow-sm flex items-center justify-center`}
             title={
-              badgeLabel === 'ECR' ? 'Échange, Cession et Remplacement - Garde proposée avec toutes les options' :
-              badgeLabel === 'EC' ? 'Échange et Cession - Vous proposez cette garde avec ces deux options' :
+              badgeLabel === 'CER' ? 'Cession, Échange et Remplacement - Garde proposée avec toutes les options' :
+              badgeLabel === 'CE' ? 'Cession et Échange - Vous proposez cette garde avec ces deux options' :
               badgeLabel === 'ER' ? 'Échange et Remplacement - Garde proposée pour échange ou aux remplaçants' :
               badgeLabel === 'CR' ? 'Cession et Remplacement - Garde proposée en cession ou aux remplaçants' :
               badgeLabel === 'E' ? 'Échange - Vous proposez de permuter cette garde contre une autre' :
@@ -418,7 +419,7 @@ const DirectExchangeTable: React.FC<DirectExchangeTableProps> = ({
           }
           
           // Collecter tous les types d'opération de tous les échanges du groupe
-          let allOperationTypes: OperationType[] = [];
+          const allOperationTypes: OperationType[] = [];
           
           exchangeGroup.forEach(ex => {
             // Utiliser operationTypes s'il existe
@@ -676,10 +677,10 @@ const DirectExchangeTable: React.FC<DirectExchangeTableProps> = ({
                 <td className={`border px-2 py-1.5 ${isWeekendOrHoliday ? 'text-red-600' : ''} ${isCurrentDay ? 'font-medium' : ''}`}>
                   <div className="flex flex-col">
                     <span className="text-xs font-medium">
-                      {format(date, 'EEE', { locale: fr }).charAt(0).toUpperCase() + format(date, 'EEE', { locale: fr }).slice(1)}
+                      {formatParisDate(date, 'EEE', { locale: frLocale }).charAt(0).toUpperCase() + formatParisDate(date, 'EEE', { locale: frLocale }).slice(1)}
                     </span>
                     <span className={`text-[10px] ${isCurrentDay ? 'text-blue-600 font-medium' : 'text-gray-500'}`}>
-                      {format(date, 'd MMM', { locale: fr })}
+                      {formatParisDate(date, 'd MMM', { locale: frLocale })}
                     </span>
                   </div>
                 </td>

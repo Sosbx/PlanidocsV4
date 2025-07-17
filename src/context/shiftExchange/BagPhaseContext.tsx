@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { createParisDate, firebaseTimestampToParisDate } from '@/utils/timezoneUtils';
 import { doc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from "../../lib/firebase/config";
 import { BagPhaseConfig, defaultBagPhaseConfig } from '../../types/planning';
@@ -42,7 +43,7 @@ export const BagPhaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             setConfig({
               ...defaultBagPhaseConfig,
               ...data,
-              submissionDeadline: data.submissionDeadline?.toDate() || new Date(),
+              submissionDeadline: data.submissionDeadline?.toDate() || createParisDate(),
               isConfigured: true,
             });
           } else {
@@ -144,7 +145,7 @@ export const BagPhaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           bagPhase: 'completed',
           status: 'active',
           isValidated: true,
-          validatedAt: new Date()
+          validatedAt: createParisDate()
         });
         
         // Archiver l'ancienne période active

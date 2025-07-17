@@ -1,4 +1,5 @@
 import { User } from '../../../types/users';
+import { createParisDate } from '@/utils/timezoneUtils';
 import { ShiftAssignment, GeneratedPlanning, PlanningPeriod } from '../../../types/planning';
 import useImport, { ImportResult } from './useImport';
 import useExport from './useExport';
@@ -10,9 +11,9 @@ interface UseImportExportResult {
   isProcessing: boolean;
   error: string | null;
   handleFileUpload: (files: File[]) => Promise<void>;
-  handleExportPDF: (userId?: string) => Promise<void>;
+  handleExportPDF: (userId?: string, includeDesiderata?: boolean, customStartDate?: Date, customEndDate?: Date) => Promise<void>;
   handleExportCSV: (userId?: string) => Promise<void>;
-  handleExportAllPDF: () => Promise<void>;
+  handleExportAllPDF: (includeDesiderata?: boolean, customStartDate?: Date, customEndDate?: Date) => Promise<void>;
   handleExportAllCSV: () => Promise<void>;
   lastImportResult: ImportResult | null;
 }
@@ -57,8 +58,8 @@ export const useImportExport = ({
   saveGeneratedPlanning,
   loadExporters,
   plannings,
-  startDate = new Date(),
-  endDate = new Date(new Date().setMonth(new Date().getMonth() + 3)),
+  startDate = createParisDate(),
+  endDate = new Date(createParisDate().setMonth(createParisDate().getMonth() + 3)),
   onPlanningImported,
   allPeriods = [],
   createPlanningPeriod,

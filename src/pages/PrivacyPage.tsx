@@ -1,6 +1,8 @@
 import React from 'react';
+import { createParisDate } from '@/utils/timezoneUtils';
 import { ArrowLeft, Shield, Lock, Eye, Database, Bell, Share2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { formatParisDate } from '../utils/timezoneUtils';
 
 const PrivacyPage: React.FC = () => {
   const navigate = useNavigate();
@@ -132,7 +134,7 @@ const PrivacyPage: React.FC = () => {
               contactez l'administrateur système.
             </p>
             <p className="text-sm text-gray-500 mt-2">
-              Dernière mise à jour : {new Date().toLocaleDateString('fr-FR')}
+              Dernière mise à jour : {formatParisDate(createParisDate(), 'dd/MM/yyyy')}
             </p>
           </section>
         </div>

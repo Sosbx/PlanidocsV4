@@ -1,4 +1,5 @@
 import React, { memo } from 'react';
+import { formatParisDate } from '@/utils/timezoneUtils';
 import { Percent, RotateCcw } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -48,7 +49,7 @@ const DesiderataControls = memo<DesiderataControlsProps>(({
       <div className="flex flex-col gap-1">
         {startDate && endDate && (
           <div className="text-xs text-gray-600 text-left">
-            Période: {format(startDate, 'dd/MM/yyyy')} - {format(endDate, 'dd/MM/yyyy')}
+            Période: {formatParisDate(startDate, 'dd/MM/yyyy')} - {formatParisDate(endDate, 'dd/MM/yyyy')}
           </div>
         )}
         <div className="flex gap-2 mt-1">

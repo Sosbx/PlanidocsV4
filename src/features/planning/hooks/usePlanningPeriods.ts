@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { createParisDate } from '@/utils/timezoneUtils';
 import { PlanningPeriod } from '../../../types/planning';
 import { generatePeriodName } from '../utils/dateRangeDetector';
 
@@ -93,7 +94,7 @@ export const usePlanningPeriods = ({
       throw new Error(`Impossible de créer une période qui chevauche des périodes existantes: ${overlappingPeriodDetails}`);
     }
     
-    const today = new Date();
+    const today = createParisDate();
     today.setHours(0, 0, 0, 0);
     
     // Générer un nom si non fourni
@@ -161,7 +162,7 @@ export const usePlanningPeriods = ({
     }
     
     // Construire les objets période pour les périodes créées
-    let returnPeriodId = futurePeriodId || pastPeriodId || '';
+    const returnPeriodId = futurePeriodId || pastPeriodId || '';
     let returnPeriod: PlanningPeriod | null = null;
     
     // Construire l'objet période passée si créée

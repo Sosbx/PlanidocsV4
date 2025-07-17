@@ -1,5 +1,5 @@
 import React, { memo, useEffect, useState } from 'react';
-import { Save, Check, AlertCircle } from 'lucide-react';
+import { Save, AlertCircle } from 'lucide-react';
 
 interface FloatingControlBarProps {
   activeDesiderata: 'primary' | 'secondary' | null;
@@ -20,8 +20,8 @@ const FloatingControlBar = memo<FloatingControlBarProps>(({
   setActiveDesiderata,
   primaryPercentage,
   secondaryPercentage,
-  primaryLimit = 15,
-  secondaryLimit = 10,
+  primaryLimit: _primaryLimit = 15,
+  secondaryLimit: _secondaryLimit = 10,
   isDeadlineExpired = false,
   isSaving = false,
   isValidated = false,

@@ -1,18 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { X, Calendar, Clock, Repeat, Trash2 } from 'lucide-react';
 import { subscribeToShiftExchanges } from '../../lib/firebase/exchange';
-import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
 import { useAuth } from '../../features/auth';
 import { ShiftExchange } from '../../types/planning';
+import {
+  parseCellKey,
+  parseDate,
+  formatDateAs,
+  getPeriodName,
+  type Period
+} from '../../utils/dates';
 
-const PERIOD_NAMES = {
-  'M': 'Matin',
-  'AM': 'Après-midi',
-  'S': 'Soir'
-} as const;
-
-type Period = keyof typeof PERIOD_NAMES;
 
 interface CommentModalProps {
   isOpen: boolean;
@@ -45,11 +43,15 @@ const CommentModal: React.FC<CommentModalProps> = ({
   const { user } = useAuth();
 
   // Extraire la date et la période du cellKey
-  const parts = cellKey.split('-');
-  const dateStr = parts.slice(0, 3).join('-'); // Récupère YYYY-MM-DD
-  const period = parts[3] as Period; // Récupère la période (M, AM, S)
-  const date = new Date(dateStr);
-  const periodName = PERIOD_NAMES[period];
+  const cellData = parseCellKey(cellKey);
+  if (!cellData) {
+    console.error('Invalid cell key:', cellKey);
+    return null;
+  }
+  
+  const { date: dateStr, period } = cellData;
+  const date = parseDate(dateStr);
+  const periodName = getPeriodName(period);
 
   useEffect(() => {
     setComment(initialComment);
@@ -133,7 +135,7 @@ const CommentModal: React.FC<CommentModalProps> = ({
           <div className="flex items-center text-sm text-gray-600">
             <Calendar className="h-4 w-4 mr-2" />
             <span className="capitalize">
-              {format(date, 'EEEE d MMMM yyyy', { locale: fr })}
+              {formatDateAs(date, 'long')}
             </span>
           </div>
           <div className="flex items-center text-sm text-gray-600">

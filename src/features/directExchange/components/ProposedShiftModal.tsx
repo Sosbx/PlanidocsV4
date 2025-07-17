@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { X, Repeat, Gift, Calendar, Clock, User } from 'lucide-react';
 import { useAuth } from '../../auth/hooks';
 import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { frLocale } from '../../../utils/dateLocale';
+import { parseParisDate, formatParisDate } from '../../../utils/timezoneUtils';
 import { standardizePeriod } from '../../../utils/periodUtils';
 import { ShiftExchange } from '../../../types/exchange';
 import type { ShiftAssignment } from '../../../types/planning';
@@ -62,8 +63,7 @@ const ProposedShiftModal: React.FC<ProposedShiftModalProps> = ({
   // Formatage de la date au format "Jour JJ Mois"
   const formatDate = (dateString: string) => {
     try {
-      const date = new Date(dateString);
-      return format(date, 'EEEE d MMMM', { locale: fr });
+      return formatParisDate(dateString, 'EEEE d MMMM', { locale: frLocale });
     } catch (e) {
       return dateString;
     }
@@ -234,7 +234,7 @@ const ProposedShiftModal: React.FC<ProposedShiftModalProps> = ({
                           {assignment.shiftType}
                         </div>
                         <div className="text-xs text-gray-700">
-                          {format(new Date(assignment.date), 'EEE d MMM', { locale: fr })}
+                          {formatParisDate(assignment.date, 'EEE d MMM', { locale: frLocale })}
                         </div>
                       </div>
                     ))}

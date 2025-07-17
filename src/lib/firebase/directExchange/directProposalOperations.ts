@@ -1,4 +1,5 @@
 import { collection, doc, getDocs, getDoc, updateDoc, query, where, orderBy, Timestamp, runTransaction, serverTimestamp } from 'firebase/firestore';
+import { createParisDate, formatParisDate } from '@/utils/timezoneUtils';
 import { db } from '../config';
 import { OperationType, ShiftExchange, ShiftPeriod } from '../../../types/exchange';
 import { format } from 'date-fns';
@@ -109,16 +110,16 @@ export const proposeMultipleExchange = async (
               
               if (isNaN(dateObj.getTime())) {
                 console.warn('Date invalide dans proposedShifts:', shift.date);
-                formattedDate = format(new Date(), 'yyyy-MM-dd');
+                formattedDate = formatParisDate(createParisDate(), 'yyyy-MM-dd');
                 console.log('Date invalide remplacée par la date actuelle:', formattedDate);
               } else {
-                formattedDate = format(dateObj, 'yyyy-MM-dd');
+                formattedDate = formatParisDate(dateObj, 'yyyy-MM-dd');
                 console.log('Date formatée correctement:', formattedDate);
               }
             }
           } catch (error) {
             console.error('Erreur lors du formatage de la date:', error);
-            formattedDate = format(new Date(), 'yyyy-MM-dd');
+            formattedDate = formatParisDate(createParisDate(), 'yyyy-MM-dd');
             console.log('Erreur de formatage, date remplacée par la date actuelle:', formattedDate);
           }
           
@@ -284,7 +285,7 @@ export const proposeDirectTake = async (
         await sendExchangeNotification(
           targetUserId,
           NotificationType.GIVE_PROPOSED,
-          format(new Date(targetShift.date), 'yyyy-MM-dd'),
+          formatParisDate(new Date(targetShift.date), 'yyyy-MM-dd'),
           normalizedPeriod,
           targetExchangeId,
           proposingUser.lastName || 'Un utilisateur'
@@ -416,16 +417,16 @@ export const proposeDirectExchangeMultiple = async (
               
               if (isNaN(dateObj.getTime())) {
                 console.warn('Date invalide dans proposedShifts:', shift.date);
-                formattedDate = format(new Date(), 'yyyy-MM-dd');
+                formattedDate = formatParisDate(createParisDate(), 'yyyy-MM-dd');
                 console.log('Date invalide remplacée par la date actuelle:', formattedDate);
               } else {
-                formattedDate = format(dateObj, 'yyyy-MM-dd');
+                formattedDate = formatParisDate(dateObj, 'yyyy-MM-dd');
                 console.log('Date formatée correctement:', formattedDate);
               }
             }
           } catch (error) {
             console.error('Erreur lors du formatage de la date:', error);
-            formattedDate = format(new Date(), 'yyyy-MM-dd');
+            formattedDate = formatParisDate(createParisDate(), 'yyyy-MM-dd');
             console.log('Erreur de formatage, date remplacée par la date actuelle:', formattedDate);
           }
           
@@ -475,7 +476,7 @@ export const proposeDirectExchangeMultiple = async (
         await sendExchangeNotification(
           targetUserId,
           NotificationType.EXCHANGE_PROPOSED,
-          format(new Date(targetShift.date), 'yyyy-MM-dd'),
+          formatParisDate(new Date(targetShift.date), 'yyyy-MM-dd'),
           normalizedPeriod,
           targetExchangeId,
           proposingUser.lastName || 'Un utilisateur'
@@ -526,7 +527,7 @@ export const getProposalsForExchange = async (exchangeId: string): Promise<Direc
       });
       
       // Standardiser les périodes dans la proposition
-      let standardizedProposal: DirectExchangeProposal = {
+      const standardizedProposal: DirectExchangeProposal = {
         id: doc.id,
         ...data
       };
@@ -593,7 +594,7 @@ export const getUserProposals = async (userId: string): Promise<DirectExchangePr
       const data = doc.data() as DirectExchangeProposal;
       
       // Créer la proposition avec l'ID
-      let standardizedProposal: DirectExchangeProposal = {
+      const standardizedProposal: DirectExchangeProposal = {
         id: doc.id,
         ...data
       };
@@ -660,7 +661,7 @@ export const getUserProposalsForExchange = async (userId: string, exchangeId: st
       const data = doc.data() as DirectExchangeProposal;
       
       // Créer la proposition avec l'ID
-      let standardizedProposal: DirectExchangeProposal = {
+      const standardizedProposal: DirectExchangeProposal = {
         id: doc.id,
         ...data
       };
@@ -773,16 +774,16 @@ export const updateProposal = async (
             
             if (isNaN(dateObj.getTime())) {
               console.warn('Date invalide dans proposedShifts:', shift.date);
-              formattedDate = format(new Date(), 'yyyy-MM-dd');
+              formattedDate = formatParisDate(createParisDate(), 'yyyy-MM-dd');
               console.log(`Date invalide remplacée par aujourd'hui: ${formattedDate}`);
             } else {
-              formattedDate = format(dateObj, 'yyyy-MM-dd');
+              formattedDate = formatParisDate(dateObj, 'yyyy-MM-dd');
               console.log(`Date formatée: ${shift.date} -> ${formattedDate}`);
             }
           }
         } catch (error) {
           console.error('Erreur lors du formatage de la date:', error);
-          formattedDate = format(new Date(), 'yyyy-MM-dd');
+          formattedDate = formatParisDate(createParisDate(), 'yyyy-MM-dd');
           console.log(`Erreur de formatage, date remplacée par aujourd'hui: ${formattedDate}`);
         }
         
@@ -1162,7 +1163,7 @@ export const rejectProposal = async (proposalId: string): Promise<void> => {
           
           try {
             // Formatter la date pour la notification
-            dateFormatted = format(new Date(proposal.targetShift.date), 'dd/MM/yyyy');
+            dateFormatted = formatParisDate(new Date(proposal.targetShift.date), 'dd/MM/yyyy');
           } catch (e) {
             console.error("Erreur de formatage de la date:", e);
             dateFormatted = proposal.targetShift.date || 'date inconnue';

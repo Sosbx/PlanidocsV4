@@ -1,4 +1,5 @@
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+import { createParisDate, firebaseTimestampToParisDate } from '@/utils/timezoneUtils';
 import { db } from '../config';
 import { COLLECTIONS, ShiftExchange, ExchangeHistory } from './types';
 
@@ -39,12 +40,12 @@ export const subscribeToShiftExchanges = (
         
         const exchanges = querySnapshot.docs.map(doc => {
           const data = doc.data();
-          let createdAt = new Date().toISOString();
+          let createdAt = createParisDate().toISOString();
           
           if (data.createdAt && typeof data.createdAt === 'object') {
             const timestamp = data.createdAt as any;
             if (typeof timestamp.toDate === 'function') {
-              createdAt = timestamp.toDate().toISOString();
+              createdAt = firebaseTimestampToParisDate(timestamp).toISOString();
             }
           } else if (typeof data.createdAt === 'string') {
             createdAt = data.createdAt;
@@ -117,12 +118,12 @@ export const subscribeToShiftExchanges = (
           const exchanges = querySnapshot.docs
             .map(doc => {
               const data = doc.data();
-              let createdAt = new Date().toISOString();
+              let createdAt = createParisDate().toISOString();
               
               if (data.createdAt && typeof data.createdAt === 'object') {
                 const timestamp = data.createdAt as any;
                 if (typeof timestamp.toDate === 'function') {
-                  createdAt = timestamp.toDate().toISOString();
+                  createdAt = firebaseTimestampToParisDate(timestamp).toISOString();
                 }
               } else if (typeof data.createdAt === 'string') {
                 createdAt = data.createdAt;
@@ -231,7 +232,7 @@ export const subscribeToExchangeHistory = (
           const result: ExchangeHistory = {
             date: data.date || '',
             period: data.period || '',
-            exchangedAt: data.exchangedAt || new Date().toISOString(),
+            exchangedAt: data.exchangedAt || createParisDate().toISOString(),
             originalUserId: data.originalUserId || '',
             newUserId: data.newUserId || '',
             shiftType: data.shiftType || '',

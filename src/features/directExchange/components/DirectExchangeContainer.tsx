@@ -1,11 +1,12 @@
 import React, { useCallback, useMemo } from 'react';
+import { createParisDate, firebaseTimestampToParisDate, addMonthsParis } from '@/utils/timezoneUtils';
 import { useAuth } from '../../../features/auth/hooks';
-import { useUsers } from '../../../features/auth/hooks';
+import { useUsers } from '../../../features/auth/hooks/useUsers';
 import { usePlanningPeriod } from '../../../context/planning/PlanningPeriodContext';
 import { useComposableExchangeData } from '../hooks';
 import { useCalendarNavigation } from '../../shiftExchange/hooks/useCalendarNavigation';
 import { addMonths } from 'date-fns';
-import { Toast } from '../../../components';
+import Toast from '../../../components/common/Toast';
 import { DirectExchangeTable, ExchangeModal, ProposedShiftModal, ExchangeProposalsModal } from './';
 import { ExchangePageTemplate } from '../../shared/exchange/components';
 import { useDirectExchangeData } from '../hooks/useDirectExchangeData';
@@ -166,7 +167,7 @@ const DirectExchangeContainer: React.FC = () => {
     });
     
     // Récupérer les types d'opération existants
-    let existingOperationTypes: OperationType[] = [];
+    const existingOperationTypes: OperationType[] = [];
     
     console.log('Échanges existants trouvés:', existingExchanges.length, existingExchanges);
     
@@ -284,8 +285,8 @@ const DirectExchangeContainer: React.FC = () => {
               userId: exchange.userId || user?.id || '',
               date: exchange.date || normalizedAssignment.date,
               period: exchange.period || normalizedAssignment.period,
-              createdAt: exchange.createdAt || new Date().toISOString(),
-              lastModified: exchange.lastModified || new Date().toISOString()
+              createdAt: exchange.createdAt || createParisDate().toISOString(),
+              lastModified: exchange.lastModified || createParisDate().toISOString()
             } as ExchangeShiftExchange;
             
             if (existingIndex >= 0) {
@@ -361,13 +362,13 @@ const DirectExchangeContainer: React.FC = () => {
           // Convertir les DirectExchangeProposal en ExchangeProposal
           const proposals = directProposals.map(p => {
             // Gérer les dates de manière sécurisée
-            let createdAtString = new Date().toISOString();
-            let lastModifiedString = new Date().toISOString();
+            let createdAtString = createParisDate().toISOString();
+            let lastModifiedString = createParisDate().toISOString();
             
             try {
               if (p.createdAt) {
                 if (typeof p.createdAt === 'object' && 'toDate' in p.createdAt && typeof p.createdAt.toDate === 'function') {
-                  createdAtString = p.createdAt.toDate().toISOString();
+                  createdAtString = firebaseTimestampToParisDate(p.createdAt).toISOString();
                 } else if (p.createdAt instanceof Date) {
                   createdAtString = p.createdAt.toISOString();
                 } else if (typeof p.createdAt === 'string') {
@@ -377,7 +378,7 @@ const DirectExchangeContainer: React.FC = () => {
               
               if (p.lastModified) {
                 if (typeof p.lastModified === 'object' && 'toDate' in p.lastModified && typeof p.lastModified.toDate === 'function') {
-                  lastModifiedString = p.lastModified.toDate().toISOString();
+                  lastModifiedString = firebaseTimestampToParisDate(p.lastModified).toISOString();
                 } else if (p.lastModified instanceof Date) {
                   lastModifiedString = p.lastModified.toISOString();
                 } else if (typeof p.lastModified === 'string') {
@@ -692,8 +693,8 @@ const DirectExchangeContainer: React.FC = () => {
       <div className="w-full bg-white rounded-lg shadow-lg overflow-hidden mb-6">
         <div className="p-4">
           <DirectExchangeTable
-            startDate={new Date()}
-            endDate={addMonths(new Date(), 3)}
+            startDate={createParisDate()}
+            endDate={addMonthsParis(createParisDate(), 3)}
             userAssignments={userAssignments || {}}
             directExchanges={directExchanges}
             receivedProposals={receivedProposals}
@@ -727,7 +728,7 @@ const DirectExchangeContainer: React.FC = () => {
         conflictStates={conflictStates}
         conflictPeriodsMap={conflictPeriodsMap}
         interestedPeriodsMap={interestedPeriodsMap}
-        bagPhaseConfig={{ phase: 'submission', submissionDeadline: new Date(), isConfigured: true }}
+        bagPhaseConfig={{ phase: 'submission', submissionDeadline: createParisDate(), isConfigured: true }}
         isInteractionDisabled={false}
         onToggleInterest={handleToggleInterest}
         onRetry={loadDirectExchanges}

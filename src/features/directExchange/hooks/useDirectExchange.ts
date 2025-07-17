@@ -1,12 +1,7 @@
 import { useState, useCallback } from 'react';
 import type { ShiftAssignment } from '../../../types/planning';
 import { OperationType, ShiftPeriod } from '../../../types/exchange';
-import { 
-  addDirectExchange, 
-  addDirectCession, 
-  addDirectReplacement, 
-  removeDirectExchange
-} from '../../../lib/firebase/directExchange';
+import { useDirectExchanges } from '../../../context/directExchange';
 import { useAuth } from '../../auth/hooks';
 
 interface UseDirectExchangeOptions {
@@ -16,22 +11,27 @@ interface UseDirectExchangeOptions {
 
 /**
  * Hook pour gérer les échanges directs
- * Permet de proposer des gardes à l'échange direct, de les retirer, etc.
+ * Utilise maintenant le contexte DirectExchangeContext avec le repository
  */
 export const useDirectExchange = (options: UseDirectExchangeOptions = {}) => {
   const { user } = useAuth();
+  const {
+    createExchange,
+    cancelExchange,
+    myExchanges,
+    loading
+  } = useDirectExchanges();
+  
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
 
   /**
    * Propose une garde à l'échange direct (permutation)
-   * @param assignment La garde à proposer
-   * @param comment Commentaire optionnel
    */
   const proposeDirectExchange = useCallback(async (
     assignment: ShiftAssignment,
     comment: string
   ) => {
-    if (!user) return;
+    if (!user) return null;
     
     console.log('Proposition d\'échange direct - Données reçues:', assignment);
     
@@ -48,84 +48,40 @@ export const useDirectExchange = (options: UseDirectExchangeOptions = {}) => {
     try {
       setIsProcessing('propose-exchange');
       
-      // S'assurer que la période est au bon format
-      const period = assignment.period || assignment.type;
-      
-      console.log('Période utilisée pour l\'échange:', period, 'depuis', {
-        period: assignment.period,
-        type: assignment.type,
-        assignment: assignment
-      });
-      
-      // Vérifier si la période est valide
-      if (!period) {
-        console.error('Période manquante pour l\'échange:', assignment);
-        throw new Error('Période manquante pour l\'échange');
-      }
-      
-      if (!period || !['M', 'AM', 'S'].includes(period)) {
-        throw new Error(`Période invalide: ${period}`);
-      }
-      
-      // Convertir la chaîne de caractères en valeur de l'enum ShiftPeriod
-      let periodEnum: ShiftPeriod;
-      switch (period) {
-        case 'M':
-          periodEnum = ShiftPeriod.MORNING;
-          break;
-        case 'AM':
-          periodEnum = ShiftPeriod.AFTERNOON;
-          break;
-        case 'S':
-          periodEnum = ShiftPeriod.EVENING;
-          break;
-        default:
-          throw new Error(`Période invalide: ${period}`);
-      }
-      
-      const exchangeId = await addDirectExchange({
-        userId: user.id,
-        date: assignment.date,
-        period: periodEnum,
-        shiftType: assignment.shiftType,
-        timeSlot: assignment.timeSlot,
-        comment: comment || '',
-        status: 'pending',
-        lastModified: new Date().toISOString()
-      });
+      const exchange = await createExchange(
+        assignment,
+        ['exchange' as OperationType],
+        comment
+      );
       
       if (options.onSuccess) {
         options.onSuccess('Proposition d\'échange ajoutée avec succès');
       }
       
-      return exchangeId;
+      return exchange?.id || null;
     } catch (error) {
-      console.error('Error proposing direct exchange:', error);
+      console.error('Erreur lors de la proposition d\'échange:', error);
       
       if (options.onError) {
-        options.onError(`Erreur lors de l'ajout: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
+        options.onError(error instanceof Error ? error.message : 'Erreur lors de la proposition');
       }
-      
       return null;
     } finally {
       setIsProcessing(null);
     }
-  }, [user, options]);
+  }, [user, createExchange, options]);
 
   /**
-   * Propose une garde à la cession directe
-   * @param assignment La garde à proposer
-   * @param comment Commentaire optionnel
+   * Propose une garde à la cession directe (sans contrepartie)
    */
-  const proposeDirectCession = useCallback(async (
+  const proposeDirectGive = useCallback(async (
     assignment: ShiftAssignment,
     comment: string
   ) => {
-    if (!user) return;
+    if (!user) return null;
     
     console.log('Proposition de cession directe - Données reçues:', assignment);
     
-    // Vérifier que toutes les propriétés requises sont présentes
     if (!assignment.date || (!assignment.period && !assignment.type) || !assignment.shiftType || !assignment.timeSlot) {
       console.error('Données d\'assignation incomplètes pour la cession:', assignment);
       
@@ -136,86 +92,42 @@ export const useDirectExchange = (options: UseDirectExchangeOptions = {}) => {
     }
     
     try {
-      setIsProcessing('propose-cession');
+      setIsProcessing('propose-give');
       
-      // S'assurer que la période est au bon format
-      const period = assignment.period || assignment.type;
-      
-      console.log('Période utilisée pour la cession:', period, 'depuis', {
-        period: assignment.period,
-        type: assignment.type,
-        assignment: assignment
-      });
-      
-      // Vérifier si la période est valide
-      if (!period) {
-        console.error('Période manquante pour la cession:', assignment);
-        throw new Error('Période manquante pour la cession');
-      }
-      
-      if (!period || !['M', 'AM', 'S'].includes(period)) {
-        throw new Error(`Période invalide: ${period}`);
-      }
-      
-      // Convertir la chaîne de caractères en valeur de l'enum ShiftPeriod
-      let periodEnum: ShiftPeriod;
-      switch (period) {
-        case 'M':
-          periodEnum = ShiftPeriod.MORNING;
-          break;
-        case 'AM':
-          periodEnum = ShiftPeriod.AFTERNOON;
-          break;
-        case 'S':
-          periodEnum = ShiftPeriod.EVENING;
-          break;
-        default:
-          throw new Error(`Période invalide: ${period}`);
-      }
-      
-      const cessionId = await addDirectCession({
-        userId: user.id,
-        date: assignment.date,
-        period: periodEnum,
-        shiftType: assignment.shiftType,
-        timeSlot: assignment.timeSlot,
-        comment: comment || '',
-        status: 'pending',
-        lastModified: new Date().toISOString()
-      });
+      const exchange = await createExchange(
+        assignment,
+        ['give' as OperationType],
+        comment
+      );
       
       if (options.onSuccess) {
         options.onSuccess('Proposition de cession ajoutée avec succès');
       }
       
-      return cessionId;
+      return exchange?.id || null;
     } catch (error) {
-      console.error('Error proposing direct cession:', error);
+      console.error('Erreur lors de la proposition de cession:', error);
       
       if (options.onError) {
-        options.onError(`Erreur lors de l'ajout: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
+        options.onError(error instanceof Error ? error.message : 'Erreur lors de la proposition');
       }
-      
       return null;
     } finally {
       setIsProcessing(null);
     }
-  }, [user, options]);
+  }, [user, createExchange, options]);
 
   /**
-   * Propose une garde au remplacement direct
-   * @param assignment La garde à proposer
-   * @param comment Commentaire optionnel
+   * Propose une garde au remplacement
    */
   const proposeDirectReplacement = useCallback(async (
     assignment: ShiftAssignment,
     comment: string
   ) => {
-    if (!user) return;
+    if (!user) return null;
     
-    console.log('Proposition de remplacement direct - Données reçues:', assignment);
+    console.log('Proposition de remplacement - Données reçues:', assignment);
     
-    // Vérifier que toutes les propriétés requises sont présentes
     if (!assignment.date || (!assignment.period && !assignment.type) || !assignment.shiftType || !assignment.timeSlot) {
       console.error('Données d\'assignation incomplètes pour le remplacement:', assignment);
       
@@ -228,103 +140,84 @@ export const useDirectExchange = (options: UseDirectExchangeOptions = {}) => {
     try {
       setIsProcessing('propose-replacement');
       
-      // S'assurer que la période est au bon format
-      const period = assignment.period || assignment.type;
-      
-      console.log('Période utilisée pour le remplacement:', period, 'depuis', {
-        period: assignment.period,
-        type: assignment.type,
-        assignment: assignment
-      });
-      
-      // Vérifier si la période est valide
-      if (!period) {
-        console.error('Période manquante pour le remplacement:', assignment);
-        throw new Error('Période manquante pour le remplacement');
-      }
-      
-      if (!period || !['M', 'AM', 'S'].includes(period)) {
-        throw new Error(`Période invalide: ${period}`);
-      }
-      
-      // Convertir la chaîne de caractères en valeur de l'enum ShiftPeriod
-      let periodEnum: ShiftPeriod;
-      switch (period) {
-        case 'M':
-          periodEnum = ShiftPeriod.MORNING;
-          break;
-        case 'AM':
-          periodEnum = ShiftPeriod.AFTERNOON;
-          break;
-        case 'S':
-          periodEnum = ShiftPeriod.EVENING;
-          break;
-        default:
-          throw new Error(`Période invalide: ${period}`);
-      }
-      
-      const replacementId = await addDirectReplacement({
-        userId: user.id,
-        date: assignment.date,
-        period: periodEnum,
-        shiftType: assignment.shiftType,
-        timeSlot: assignment.timeSlot,
-        comment: comment || '',
-        status: 'pending',
-        lastModified: new Date().toISOString()
-      });
+      const exchange = await createExchange(
+        assignment,
+        ['replacement' as OperationType],
+        comment
+      );
       
       if (options.onSuccess) {
-        options.onSuccess('Proposition aux remplaçants ajoutée avec succès');
+        options.onSuccess('Demande de remplacement ajoutée avec succès');
       }
       
-      return replacementId;
+      return exchange?.id || null;
     } catch (error) {
-      console.error('Error proposing direct replacement:', error);
+      console.error('Erreur lors de la demande de remplacement:', error);
       
       if (options.onError) {
-        options.onError(`Erreur lors de l'ajout: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
+        options.onError(error instanceof Error ? error.message : 'Erreur lors de la demande');
       }
-      
       return null;
     } finally {
       setIsProcessing(null);
     }
-  }, [user, options]);
+  }, [user, createExchange, options]);
 
   /**
-   * Retire une proposition d'échange direct
-   * @param exchangeId ID de l'échange à retirer
-   * @param operationType Type d'opération (échange, cession, remplacement)
+   * Retire une garde de l'échange direct
    */
-  const removeExchange = useCallback(async (
-    exchangeId: string,
-    operationType?: OperationType
-  ) => {
+  const removeFromDirectExchange = useCallback(async (exchangeId: string) => {
+    if (!user || !exchangeId) return;
+    
     try {
-      setIsProcessing('remove');
+      setIsProcessing(`remove-${exchangeId}`);
       
-      await removeDirectExchange(exchangeId, operationType);
+      await cancelExchange(exchangeId);
       
       if (options.onSuccess) {
-        options.onSuccess('Proposition retirée avec succès');
+        options.onSuccess('Garde retirée avec succès');
       }
     } catch (error) {
-      console.error('Error removing direct exchange:', error);
+      console.error('Erreur lors du retrait:', error);
       
       if (options.onError) {
-        options.onError(`Erreur lors du retrait: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
+        options.onError(error instanceof Error ? error.message : 'Erreur lors du retrait');
       }
     } finally {
       setIsProcessing(null);
     }
-  }, [options]);
+  }, [user, cancelExchange, options]);
+
+  /**
+   * Vérifie si une garde est déjà dans l'échange direct
+   */
+  const isInDirectExchange = useCallback((
+    date: string,
+    period: string
+  ): { isInExchange: boolean; exchangeId?: string } => {
+    if (!user || !myExchanges) {
+      return { isInExchange: false };
+    }
+
+    const exchange = myExchanges.find(e => 
+      e.date === date && 
+      e.period === period &&
+      e.status === 'pending'
+    );
+
+    return {
+      isInExchange: !!exchange,
+      exchangeId: exchange?.id
+    };
+  }, [user, myExchanges]);
 
   return {
     proposeDirectExchange,
-    proposeDirectCession,
+    proposeDirectGive,
     proposeDirectReplacement,
-    removeExchange,
-    isProcessing
+    removeFromDirectExchange,
+    isInDirectExchange,
+    isProcessing,
+    loading
   };
 };

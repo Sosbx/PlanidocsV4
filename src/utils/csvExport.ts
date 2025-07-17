@@ -1,9 +1,16 @@
-import { format } from 'date-fns';
 import { subDays } from 'date-fns';
-import { getDaysArray, formatPeriod } from './dateUtils';
+import { createParisDate } from '@/utils/timezoneUtils';
 import JSZip from 'jszip';
-import { fr } from 'date-fns/locale';
 import { v4 as uuidv4 } from 'uuid';
+import { 
+  formatDate, 
+  formatDateForExport, 
+  getDaysArray, 
+  getPeriodName,
+  frLocale,
+  DATE_FORMATS,
+  formatDateAs
+} from './dates';
 import type { User } from '../features/users/types';
 import type { Selections, ShiftAssignment } from '../types/planning';
 
@@ -17,59 +24,125 @@ const generateEventId = (date: string, period: string, shiftType: string): strin
 
 export const exportPlanningToGoogleCalendarCSV = (
   assignments: Record<string, ShiftAssignment>,
-  userName: string
+  userName: string,
+  mode: 'grouped' | 'separated' = 'grouped'
 ): void => {
-  // En-têtes pour Google Calendar
-  const rows = ['Subject,Start Date,Start Time,End Date,End Time,Description,ID'];
+  if (mode === 'separated') {
+    return exportPlanningToGoogleCalendarCSVSeparated(assignments, userName);
+  }
+  // Grouper les assignments par date
+  const assignmentsByDate = new Map<string, Array<{type: 'M' | 'AM' | 'S', shiftType: string}>>();
 
-  // Convertir les entrées en tableau pour pouvoir les trier
-  const sortedEntries = Object.entries(assignments)
-    .filter(([_, assignment]) => assignment && assignment.timeSlot && assignment.shiftType && assignment.date)
-    .sort(([_, a], [__, b]) => {
-      // Trier d'abord par date
-      const dateComparison = a.date.localeCompare(b.date);
-      if (dateComparison !== 0) return dateComparison;
+  // Filtrer et grouper les entrées valides
+  Object.entries(assignments)
+    .filter(([_, assignment]) => assignment && assignment.shiftType && assignment.date)
+    .forEach(([_, assignment]) => {
+      const { date, type, shiftType } = assignment;
+      // Convertir la date au format YYYYMMDD pour l'ICS
+      const dateKey = date.replace(/-/g, '');
       
-      // Si même date, trier par période (M -> AM -> S)
-      const periodOrder = { M: 1, AM: 2, S: 3 };
-      const periodA = a.type;
-      const periodB = b.type;
-      return periodOrder[periodA] - periodOrder[periodB];
+      if (!assignmentsByDate.has(dateKey)) {
+        assignmentsByDate.set(dateKey, []);
+      }
+      
+      assignmentsByDate.get(dateKey)!.push({ type, shiftType });
     });
 
-  sortedEntries.forEach(([_, assignment]) => {
-    const { timeSlot, shiftType, date } = assignment;
-    const [startTime, endTime] = timeSlot.split(' - ');
+  // Trier les dates
+  const sortedDates = Array.from(assignmentsByDate.keys()).sort();
 
-    // Utiliser la date de l'assignment directement
-    const startDate = new Date(`${date}T${startTime}:00`);
-    let endDate = new Date(`${date}T${endTime}:00`);
+  // Créer le contenu ICS
+  const icsLines = ['BEGIN:VCALENDAR'];
 
-    // Si l'heure de fin est avant l'heure de début, c'est que ça passe minuit
-    if (endDate < startDate) {
-      endDate.setDate(endDate.getDate() + 1);
-    }
-
-    // Formater les dates et heures pour Google Calendar
-    const formattedStartDate = format(startDate, 'dd/MM/yyyy', { locale: fr });
-    const formattedEndDate = format(endDate, 'dd/MM/yyyy', { locale: fr });
-    const formattedStartTime = format(startDate, 'HH:mm', { locale: fr });
-    const formattedEndTime = format(endDate, 'HH:mm', { locale: fr });
+  sortedDates.forEach(dateKey => {
+    const dayAssignments = assignmentsByDate.get(dateKey)!;
     
-    // Générer un ID unique pour cet événement
-    const eventId = generateEventId(date, assignment.type, shiftType);
-
-    rows.push(
-      `${shiftType},${formattedStartDate},${formattedStartTime},${formattedEndDate},${formattedEndTime},${shiftType},${eventId}`
+    // Trier par période (M -> AM -> S)
+    const periodOrder = { M: 1, AM: 2, S: 3 };
+    dayAssignments.sort((a, b) => periodOrder[a.type] - periodOrder[b.type]);
+    
+    // Combiner tous les shiftTypes de la journée
+    const combinedShifts = dayAssignments.map(a => a.shiftType).join(' ');
+    
+    // Ajouter l'événement
+    icsLines.push(
+      'BEGIN:VEVENT',
+      `DTSTART:${dateKey}`,
+      `SUMMARY:${combinedShifts}`,
+      'BEGIN:VALARM',
+      'ACTION:DISPLAY',
+      'DESCRIPTION:This is an event reminder',
+      'TRIGGER:-P1D', // 1 jour avant
+      'END:VALARM',
+      'END:VEVENT'
     );
   });
 
-  // Créer et télécharger le fichier CSV
-  const csvContent = rows.join('\n');
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  icsLines.push('END:VCALENDAR');
+
+  // Créer et télécharger le fichier avec extension .csv mais contenu ICS
+  const icsContent = icsLines.join('\n');
+  const blob = new Blob([icsContent], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
-  link.download = `Planning_${userName}_${format(new Date(), 'dd-MM-yyyy', { locale: fr })}_GoogleCalendar.csv`;
+  link.download = `Planning_${userName}_${formatDateAs(createParisDate(), 'file')}_GoogleCalendar.csv`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+};
+
+// Export séparé avec horaires spécifiques
+const exportPlanningToGoogleCalendarCSVSeparated = (
+  assignments: Record<string, ShiftAssignment>,
+  userName: string
+): void => {
+  // Créer le contenu ICS
+  const icsLines = ['BEGIN:VCALENDAR'];
+
+  // Définir les horaires pour chaque période
+  const periodHours: Record<string, { start: string; end: string }> = {
+    M: { start: '070000', end: '125900' },   // 7h00 - 12h59
+    AM: { start: '130000', end: '175900' },  // 13h00 - 17h59
+    S: { start: '180000', end: '235900' }    // 18h00 - 23h59
+  };
+
+  // Parcourir tous les assignments
+  Object.entries(assignments)
+    .filter(([_, assignment]) => assignment && assignment.shiftType && assignment.date && assignment.type)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .forEach(([_, assignment]) => {
+      const { date, type, shiftType } = assignment;
+      const dateKey = date.replace(/-/g, '');
+      const hours = periodHours[type];
+      
+      // Vérifier que la période est valide
+      if (!hours) {
+        console.warn(`Période invalide: ${type} pour l'assignment`, assignment);
+        return;
+      }
+      
+      // Ajouter l'événement avec horaires
+      icsLines.push(
+        'BEGIN:VEVENT',
+        `DTSTART:${dateKey}T${hours.start}`,
+        `DTEND:${dateKey}T${hours.end}`,
+        `SUMMARY:${shiftType}`,
+        'BEGIN:VALARM',
+        'ACTION:DISPLAY',
+        'DESCRIPTION:This is an event reminder',
+        'TRIGGER:-P1D', // 1 jour avant
+        'END:VALARM',
+        'END:VEVENT'
+      );
+    });
+
+  icsLines.push('END:VCALENDAR');
+
+  // Créer et télécharger le fichier
+  const icsContent = icsLines.join('\n');
+  const blob = new Blob([icsContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `Planning_${userName}_${formatDateAs(createParisDate(), 'file')}_GoogleCalendar_Separated.csv`;
   link.click();
   URL.revokeObjectURL(link.href);
 };
@@ -79,7 +152,7 @@ export const exportPlanningToCSV = (options: ExportPlanningOptions): void => {
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
-  link.download = `Desiderata_${options.userName.toUpperCase()}_${format(options.startDate, 'dd-MM-yyyy', { locale: fr })}.csv`;
+  link.download = `Desiderata_${options.userName.toUpperCase()}_${formatDateAs(options.startDate, 'file')}.csv`;
   link.click();
   URL.revokeObjectURL(link.href);
 };
@@ -92,7 +165,7 @@ export const exportAllPlanningsToZip = async (
 ): Promise<void> => {
   const zip = new JSZip();
   // Créer le dossier avec le format "Desiderata_csv_dateDebut"
-  const folderName = `Desiderata_csv_${format(startDate, 'dd-MM-yyyy', { locale: fr })}`;
+  const folderName = `Desiderata_csv_${formatDateAs(startDate, 'file')}`;
   const folder = zip.folder(folderName);
   if (!folder) return;
 
@@ -141,7 +214,7 @@ export const exportAllPlanningsToZip = async (
     });
 
     folder.file(
-      `${user.lastName.toUpperCase()}_${format(startDate, 'dd-MM-yyyy', { locale: fr })}.csv`,
+      `${user.lastName.toUpperCase()}_${formatDateAs(startDate, 'file')}.csv`,
       csvContent
     );
   });
@@ -190,8 +263,8 @@ const generateCSVContent = ({
   const days = getDaysArray(startDate, endDate);
   
   days.forEach(day => {
-    const dateStr = format(day, 'dd/MM/yyyy', { locale: fr });
-    const ymdStr = format(day, 'yyyy-MM-dd');
+    const dateStr = formatDateForExport(day, 'excel');
+    const ymdStr = formatDate(day, DATE_FORMATS.ISO_DATE);
     
     standardPeriods.forEach(period => {
       const key = `${ymdStr}-${period}`;
@@ -215,8 +288,8 @@ const generateCSVContent = ({
       
       if (selectionType) {
         if (isDesiderata) {
-          // Utiliser la fonction formatPeriod pour afficher le nom lisible de la période
-          const periodName = formatPeriod(period);
+          // Utiliser la fonction getPeriodName pour afficher le nom lisible de la période
+          const periodName = getPeriodName(period);
           const type = selectionType === 'primary' ? 'Primaire' : 'Secondaire';
           
           // Extraire le commentaire (si disponible)

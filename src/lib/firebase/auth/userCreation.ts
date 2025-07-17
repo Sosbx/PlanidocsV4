@@ -3,7 +3,7 @@ import { doc, setDoc } from 'firebase/firestore';
 import { userCreationAuth, db } from '../config';
 import { getAuthErrorMessage } from './errors';
 import type { User } from '../../../types/users';
-import { getCollectionName } from '../users';
+import { getCollectionName } from '../../../utils/collectionUtils';
 import { ASSOCIATIONS } from '../../../constants/associations';
 
 export const createUser = async (userData: Omit<User, 'id' | 'hasValidatedPlanning'>, associationId: string = ASSOCIATIONS.RIVE_DROITE): Promise<User> => {

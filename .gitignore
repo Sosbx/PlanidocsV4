@@ -23,4 +23,15 @@ dist-ssr
 *.sln
 *.sw?
 
+# Firebase
+firebase-debug.log
+.firebase/
+
+# Backups
+backups/
+*.backup
+*.bak
+*.old
+
+# Claude
 **/.claude/settings.local.json

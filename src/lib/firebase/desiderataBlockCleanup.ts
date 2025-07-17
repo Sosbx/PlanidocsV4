@@ -1,8 +1,9 @@
 import { db } from './config';
+import { createParisDate } from '@/utils/timezoneUtils';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import type { PeriodSelection } from '../../types/planning';
 import { ASSOCIATIONS } from '../../constants/associations';
-import { getCollectionName } from './desiderata';
+import { getCollectionName } from '../../utils/collectionUtils';
 
 interface HolidayBlock {
   blockChristmas: boolean;
@@ -102,8 +103,8 @@ export async function removeBlockedDatesDesiderata(
         if (hasChanges) {
           const updateData: any = {
             selections: updatedSelections,
-            lastModified: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
+            lastModified: createParisDate().toISOString(),
+            updatedAt: createParisDate().toISOString()
           };
           
           // Préserver les champs existants importants

@@ -180,7 +180,7 @@ const GoogleCalendarButton: React.FC<GoogleCalendarButtonProps> = ({ assignments
 
         // Créer les dates de début et de fin
         const startDate = new Date(`${date}T${startTime}:00`);
-        let endDate = new Date(`${date}T${endTime}:00`);
+        const endDate = new Date(`${date}T${endTime}:00`);
         
         // Si l'heure de fin est avant l'heure de début, c'est que ça passe minuit
         if (endDate < startDate) {

@@ -44,7 +44,12 @@ export function getCellBackgroundClass(context: CellColorContext): string {
   const hasProposedGuard = exchange && exchange.userId === userId && !isReceivedShift;
 
   // 2. Récupérer tous les types d'opérations (exchange, give, replacement)
-  const operationTypes = getAllOperationTypes(exchange, directExchange, isProposedToReplacements);
+  // IMPORTANT: Ne récupérer les types d'opérations de l'échange que s'il appartient à l'utilisateur
+  const operationTypes = getAllOperationTypes(
+    exchange && exchange.userId === userId ? exchange : undefined, 
+    directExchange && directExchange.userId === userId ? directExchange : undefined, 
+    isProposedToReplacements
+  );
   
   // 3. Déterminer les combinaisons de types d'opérations
   const hasExchangeOp = operationTypes.includes('exchange');

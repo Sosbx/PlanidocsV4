@@ -12,9 +12,11 @@ import {
   QueryConstraint,
   getDocs
 } from 'firebase/firestore';
+import { createParisDate, formatParisDate } from '@/utils/timezoneUtils';
 import { db } from '../config';
 import { format } from 'date-fns';
 import type { ShiftExchange, ExchangeHistory } from '../types';
+import { verifyExchangeCoherence, type ExchangeCoherenceResult } from './validation';
 
 /**
  * Service optimisé pour les opérations de la bourse aux gardes
@@ -52,7 +54,7 @@ const isCacheValid = (timestamp: number): boolean => {
  * Utilise un cache et des index composites
  */
 export const getOptimizedExchanges = async (
-  fromDate: string = format(new Date(), 'yyyy-MM-dd'),
+  fromDate: string = formatParisDate(createParisDate(), 'yyyy-MM-dd'),
   maxResults: number = 100
 ): Promise<ShiftExchange[]> => {
   const constraints = [
@@ -78,8 +80,8 @@ export const getOptimizedExchanges = async (
     const exchanges = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data(),
-      createdAt: doc.data().createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
-      lastModified: doc.data().lastModified?.toDate?.()?.toISOString() || new Date().toISOString()
+      createdAt: doc.data().createdAt?.toDate?.()?.toISOString() || createParisDate().toISOString(),
+      lastModified: doc.data().lastModified?.toDate?.()?.toISOString() || createParisDate().toISOString()
     })) as ShiftExchange[];
     
     // Mettre en cache
@@ -103,8 +105,8 @@ export const getOptimizedExchanges = async (
         .map(doc => ({
           id: doc.id,
           ...doc.data(),
-          createdAt: doc.data().createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
-          lastModified: doc.data().lastModified?.toDate?.()?.toISOString() || new Date().toISOString()
+          createdAt: doc.data().createdAt?.toDate?.()?.toISOString() || createParisDate().toISOString(),
+          lastModified: doc.data().lastModified?.toDate?.()?.toISOString() || createParisDate().toISOString()
         }) as ShiftExchange)
         .sort((a, b) => a.date.localeCompare(b.date));
       
@@ -117,13 +119,28 @@ export const getOptimizedExchanges = async (
 };
 
 /**
+ * Interface pour les options du listener optimisé
+ */
+export interface OptimizedExchangesOptions {
+  fromDate?: string;
+  maxResults?: number;
+  enableCoherenceCheck?: boolean;
+  onCoherenceCheck?: (results: Map<string, ExchangeCoherenceResult>) => void;
+}
+
+/**
  * Listener optimisé pour les échanges avec gestion intelligente des mises à jour
  */
 export const subscribeToOptimizedExchanges = (
   onUpdate: (exchanges: ShiftExchange[]) => void,
-  fromDate: string = format(new Date(), 'yyyy-MM-dd'),
-  maxResults: number = 100
+  options: OptimizedExchangesOptions = {}
 ) => {
+  const {
+    fromDate = formatParisDate(createParisDate(), 'yyyy-MM-dd'),
+    maxResults = 100,
+    enableCoherenceCheck = false,
+    onCoherenceCheck
+  } = options;
   let lastUpdateTime = 0;
   const UPDATE_THROTTLE = 1000; // 1 seconde
   
@@ -167,13 +184,24 @@ export const subscribeToOptimizedExchanges = (
     }
   );
   
-  function processSnapshot(snapshot: any, needsSort: boolean = false) {
-    const exchanges = snapshot.docs.map((doc: any) => ({
-      id: doc.id,
-      ...doc.data(),
-      createdAt: doc.data().createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
-      lastModified: doc.data().lastModified?.toDate?.()?.toISOString() || new Date().toISOString()
-    })) as ShiftExchange[];
+  async function processSnapshot(snapshot: any, needsSort: boolean = false) {
+    const exchanges = snapshot.docs.map((doc: any) => {
+      const data = doc.data();
+      
+      // Debug pour AVIT
+      if (data.userId === 'naRhqjhzpWhcOMCZWCqftT8ArbH3') {
+        console.log('[DEBUG AVIT Firestore] Document ID:', doc.id);
+        console.log('[DEBUG AVIT Firestore] Date brute:', data.date);
+        console.log('[DEBUG AVIT Firestore] Données complètes:', data);
+      }
+      
+      return {
+        id: doc.id,
+        ...data,
+        createdAt: data.createdAt?.toDate?.()?.toISOString() || createParisDate().toISOString(),
+        lastModified: data.lastModified?.toDate?.()?.toISOString() || createParisDate().toISOString()
+      };
+    }) as ShiftExchange[];
     
     // Trier si nécessaire
     if (needsSort) {
@@ -184,6 +212,36 @@ export const subscribeToOptimizedExchanges = (
           if (a.status === 'unavailable' && b.status === 'pending') return 1;
           return a.date.localeCompare(b.date);
         });
+    }
+    
+    // Vérifier la cohérence si activé
+    if (enableCoherenceCheck && onCoherenceCheck) {
+      const coherenceResults = new Map<string, ExchangeCoherenceResult>();
+      
+      // Vérifier la cohérence pour chaque échange
+      const coherencePromises = exchanges.map(async (exchange) => {
+        try {
+          const coherenceResult = await verifyExchangeCoherence(exchange);
+          coherenceResults.set(exchange.id, coherenceResult);
+          
+          // Log spécial pour AVIT si incohérence détectée
+          if (!coherenceResult.isCoherent && exchange.userId === 'naRhqjhzpWhcOMCZWCqftT8ArbH3') {
+            console.warn('[COHERENCE WARNING AVIT] Incohérence détectée:', {
+              exchangeId: exchange.id,
+              exchangeDate: exchange.date,
+              discrepancies: coherenceResult.discrepancies
+            });
+          }
+        } catch (error) {
+          console.error(`Erreur lors de la vérification de cohérence pour l'échange ${exchange.id}:`, error);
+        }
+      });
+      
+      // Attendre toutes les vérifications
+      await Promise.all(coherencePromises);
+      
+      // Appeler le callback avec les résultats
+      onCoherenceCheck(coherenceResults);
     }
     
     // Invalider le cache
@@ -252,7 +310,7 @@ export const getOptimizedHistory = async (
   const history = snapshot.docs.slice(0, pageSize).map(doc => ({
     id: doc.id,
     ...doc.data(),
-    exchangedAt: doc.data().exchangedAt?.toDate?.()?.toISOString() || new Date().toISOString()
+    exchangedAt: doc.data().exchangedAt?.toDate?.()?.toISOString() || createParisDate().toISOString()
   })) as ExchangeHistory[];
   
   return {
@@ -286,7 +344,9 @@ export const batchCheckConflicts = async (
       // Vérifier les deux structures possibles
       const hasConflict = Boolean(
         planning.assignments?.[assignmentKey] ||
-        Object.values(planning.periods || {}).some((p: any) => p.assignments?.[assignmentKey])
+        Object.values(planning.periods || {})
+          .filter((p: any) => p !== null && p !== undefined)
+          .some((p: any) => p?.assignments?.[assignmentKey])
       );
       
       conflictMap.set(userId, hasConflict);

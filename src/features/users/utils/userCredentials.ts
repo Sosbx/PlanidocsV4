@@ -1,8 +1,9 @@
 import { z } from 'zod';
+import { parseParisDate } from '@/utils/timezoneUtils';
 import { isSystemAdminEmail, ADMIN_EMAILS, db } from '../../../lib/firebase/config';
 import { ASSOCIATIONS } from '../../../constants/associations';
 import { collection, getDocs } from 'firebase/firestore';
-import { getCollectionName } from '../../../lib/firebase/users';
+import { getCollectionName, COLLECTIONS } from '../../../utils/collectionUtils';
 
 const h24EmailSchema = z.string().email().refine(
   (email) => {
@@ -31,11 +32,11 @@ interface ExternalUserData {
 // Fonction pour vérifier si un login existe déjà dans l'une des associations
 async function checkLoginExists(login: string): Promise<boolean> {
   // Récupérer les utilisateurs de la rive droite
-  const rdUsersCollection = getCollectionName('users', ASSOCIATIONS.RIVE_DROITE);
+  const rdUsersCollection = getCollectionName(COLLECTIONS.USERS, ASSOCIATIONS.RIVE_DROITE);
   const rdSnapshot = await getDocs(collection(db, rdUsersCollection));
   
   // Récupérer les utilisateurs de la rive gauche
-  const rgUsersCollection = getCollectionName('users', ASSOCIATIONS.RIVE_GAUCHE);
+  const rgUsersCollection = getCollectionName(COLLECTIONS.USERS, ASSOCIATIONS.RIVE_GAUCHE);
   const rgSnapshot = await getDocs(collection(db, rgUsersCollection));
   
   // Vérifier si le login existe dans l'une des collections
@@ -110,7 +111,7 @@ export const generateCredentials = async (data: { email: string } | ExternalUser
       const { firstName, lastName, email } = data;
       
       // Valider l'email avec le schema externe
-      externalEmailSchema.parse(email);
+      externalEmailSchema.parseParisDate(email);
       
       // Générer le login de base
       const baseLogin = lastName.slice(0, 4).toUpperCase();
@@ -139,7 +140,7 @@ export const generateCredentials = async (data: { email: string } | ExternalUser
     }
 
     // Pour les utilisateurs H24
-    const validatedEmail = h24EmailSchema.parse(email);
+    const validatedEmail = h24EmailSchema.parseParisDate(email);
     const [firstName, lastName] = validatedEmail
       .split('@')[0]
       .split('.');

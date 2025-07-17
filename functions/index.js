@@ -19,6 +19,22 @@ const cors = require('cors')({
 // Région de déploiement
 const region = 'europe-west1';
 
+/**
+ * Formater une date en fuseau horaire Europe/Paris
+ * @param {Date} date - La date à formater
+ * @returns {string} - La date formatée en dd/mm/yyyy
+ */
+const formatParisDate = (date) => {
+  // Utiliser l'API Intl.DateTimeFormat pour formater en Europe/Paris
+  const formatter = new Intl.DateTimeFormat('fr-FR', {
+    timeZone: 'Europe/Paris',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  });
+  return formatter.format(date);
+};
+
 // Initialisation de Firebase Admin (une seule fois)
 admin.initializeApp();
 
@@ -126,11 +142,7 @@ const getUserData = async (userId, associationId) => {
 const formatEmail = (userData, deadline) => {
   // Formater la date limite
   const deadlineDate = new Date(deadline);
-  const formattedDeadline = deadlineDate.toLocaleDateString('fr-FR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric'
-  });
+  const formattedDeadline = formatParisDate(deadlineDate);
 
   // Calculer le nombre de jours restants
   const remainingDays = Math.ceil((deadlineDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
@@ -276,11 +288,7 @@ exports.sendReminderEmail = functions.region(region).https.onRequest(async (req,
       
       // 2. Formater la date pour l'affichage
       const deadlineDate = new Date(deadline);
-      const formattedDeadline = deadlineDate.toLocaleDateString('fr-FR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
-      });
+      const formattedDeadline = formatParisDate(deadlineDate);
       
       // 3. Créer une notification et l'envoyer en push en utilisant notre fonction utilitaire
       const notifMessage = `N'oubliez pas de valider vos désiderata avant le ${formattedDeadline}. Votre participation est essentielle pour la création du planning.`;
@@ -386,11 +394,7 @@ exports.sendBulkReminderEmails = functions.region(region).https.onRequest(async 
       
       // Formater la date limite pour les notifications
       const deadlineDate = new Date(deadline);
-      const formattedDeadline = deadlineDate.toLocaleDateString('fr-FR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
-      });
+      const formattedDeadline = formatParisDate(deadlineDate);
       
       // Traiter chaque utilisateur
       for (const userId of userIds) {

@@ -5,10 +5,10 @@ import { UserExtended } from '../types';
 import { UserStatus, UserRole } from '../../auth/types';
 import type { User } from '../types';
 import { loadCsvPlanningExporter, loadCsvAllExporter, loadPdfAllExporter } from '../../../utils/lazyExporters';
-import { getDesiderata } from '../../../lib/firebase/desiderata';
+import { getDesiderata, getAllDesiderata } from '../../../lib/firebase/desiderata';
 import { usePlanningConfig } from '../../../context/planning/PlanningContext';
 import { useAssociation } from '../../../context/association/AssociationContext';
-import Toast from '../../../components/Toast';
+import Toast from '../../../components/common/Toast';
 import { sendReminderEmail, sendBulkReminderEmails } from '../../../lib/firebase/email/sendReminder';
 
 // Fonction d'adaptateur pour convertir UserExtended en User
@@ -230,9 +230,10 @@ const UserStatusList: React.FC<UserStatusListProps> = ({
         type: 'success'
       });
       
-      console.log(`UserStatusList: Chargement des désidérata pour l'utilisateur ${user.id} de l'association ${currentAssociation}`);
-      const desiderata = await getDesiderata(user.id, currentAssociation);
-      if (!desiderata?.selections) {
+      // Utiliser getAllDesiderata avec includeArchived: true pour récupérer aussi les périodes archivées
+      const desiderata = await getAllDesiderata(user.id, true, false, currentAssociation);
+      
+      if (!desiderata?.selections || Object.keys(desiderata.selections).length === 0) {
         setToast({
           visible: true,
           message: 'Aucune donnée disponible pour ce planning',
@@ -274,8 +275,7 @@ const UserStatusList: React.FC<UserStatusListProps> = ({
       });
       
       const desiderataPromises = groupedUsers.validated.map(user => {
-        console.log(`UserStatusList (CSV All): Chargement des désidérata pour l'utilisateur ${user.id} de l'association ${currentAssociation}`);
-        return getDesiderata(user.id, currentAssociation).then(data => ({ [user.id]: data }));
+        return getAllDesiderata(user.id, true, false, currentAssociation).then(data => ({ [user.id]: data }));
       });
       
       const desiderataResults = await Promise.all(desiderataPromises);
@@ -325,8 +325,7 @@ const UserStatusList: React.FC<UserStatusListProps> = ({
       });
       
       const desiderataPromises = groupedUsers.validated.map(user => {
-        console.log(`UserStatusList (PDF All): Chargement des désidérata pour l'utilisateur ${user.id} de l'association ${currentAssociation}`);
-        return getDesiderata(user.id, currentAssociation).then(data => ({ [user.id]: data }));
+        return getAllDesiderata(user.id, true, false, currentAssociation).then(data => ({ [user.id]: data }));
       });
       
       const desiderataResults = await Promise.all(desiderataPromises);
@@ -341,13 +340,6 @@ const UserStatusList: React.FC<UserStatusListProps> = ({
             selections: data.selections,
             validatedAt: data.validatedAt
           };
-          
-          // Débogage des données
-          console.log(`PDF en masse: ${userId} a ${Object.keys(data.selections).length} sélections`);
-          if (Object.keys(data.selections).length > 0) {
-            const firstKey = Object.keys(data.selections)[0];
-            console.log(`Exemple de donnée: ${firstKey}:`, data.selections[firstKey]);
-          }
         }
       });
 
@@ -359,7 +351,9 @@ const UserStatusList: React.FC<UserStatusListProps> = ({
         adaptedUsers,
         filteredDesiderataData,
         config.startDate,
-        config.endDate
+        config.endDate,
+        config.primaryDesiderataLimit,
+        config.secondaryDesiderataLimit
       );
       
       setToast({

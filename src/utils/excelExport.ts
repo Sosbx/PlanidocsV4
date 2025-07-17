@@ -1,7 +1,9 @@
 import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { formatParisDate } from '@/utils/timezoneUtils';
+import { frLocale } from '../utils/dateLocale';
 import { Workbook, Worksheet } from 'exceljs';
 import { getDaysArray } from './dateUtils';
+import { formatParisDate } from './timezoneUtils';
 
 interface ExportPlanningOptions {
   userName: string;
@@ -22,7 +24,7 @@ export const exportPlanningToExcel = async ({
   
   // Organiser les données par mois
   const months = getDaysArray(startDate, endDate).reduce((acc, day) => {
-    const monthKey = format(day, 'yyyy-MM');
+    const monthKey = formatParisDate(day, 'yyyy-MM');
     if (!acc[monthKey]) {
       acc[monthKey] = [];
     }
@@ -36,7 +38,7 @@ export const exportPlanningToExcel = async ({
   const headerRow = worksheet.getRow(1);
   let colIndex = 1;
   monthsData.forEach(([_, days]) => {
-    const monthTitle = format(days[0], 'MMMM yyyy', { locale: fr });
+    const monthTitle = formatParisDate(days[0], 'MMMM yyyy', { locale: frLocale });
     headerRow.getCell(colIndex).value = monthTitle;
     // Fusionner les cellules pour le titre du mois (4 colonnes)
     worksheet.mergeCells(1, colIndex, 1, colIndex + 3);
@@ -94,8 +96,8 @@ export const exportPlanningToExcel = async ({
     monthsData.forEach(([_, days]) => {
       if (dayIndex < days.length) {
         const day = days[dayIndex];
-        const dateStr = format(day, 'yyyy-MM-dd');
-        const dayLabel = `${format(day, 'd', { locale: fr })} ${format(day, 'EEEEEE', { locale: fr })}`;
+        const dateStr = formatParisDate(day, 'yyyy-MM-dd');
+        const dayLabel = `${formatParisDate(day, 'd', { locale: frLocale })} ${formatParisDate(day, 'EEEEEE', { locale: frLocale })}`;
         
         // Cellule du jour
         const dayCell = row.getCell(colIndex);
@@ -169,7 +171,7 @@ export const exportPlanningToExcel = async ({
   });
 
   // Générer et télécharger le fichier
-  const fileName = `planning_${userName}_${format(startDate, 'yyyy-MM-dd')}.xlsx`;
+  const fileName = `planning_${userName}_${formatParisDate(startDate, 'yyyy-MM-dd')}.xlsx`;
   
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { 

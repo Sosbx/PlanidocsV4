@@ -1,7 +1,7 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, useMemo, useCallback } from 'react';
 import { ASSOCIATIONS, ASSOCIATION_NAMES } from '../../constants/associations';
 import { useAuth } from '../../features/auth/hooks';
-import { getCollectionName } from '../../lib/firebase/desiderata';
+import { getCollectionName } from '../../utils/collectionUtils';
 
 /**
  * Type pour le contexte d'association
@@ -31,19 +31,19 @@ export const AssociationProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [currentAssociation, setCurrentAssociation] = useState<'RD' | 'RG'>(() => {
     // Lors de l'initialisation, vérifier si une association est stockée dans localStorage
     const storedAssociation = localStorage.getItem('currentAssociation');
-    console.log('AssociationContext: Association stockée dans localStorage:', storedAssociation);
+    // console.log('AssociationContext: Association stockée dans localStorage:', storedAssociation); // Removed for performance
     // S'assurer que la valeur stockée est valide ('RD' ou 'RG')
     return (storedAssociation === 'RD' || storedAssociation === 'RG') ? storedAssociation as 'RD' | 'RG' : ASSOCIATIONS.RIVE_DROITE as 'RD';
   });
 
-  // Fonction pour mettre à jour l'association avec persistance
-  const updateAssociation = (associationId: 'RD' | 'RG') => {
-    console.log('AssociationContext: Mise à jour de l\'association vers:', associationId);
+  // Fonction pour mettre à jour l'association avec persistance (mémoïsée)
+  const updateAssociation = useCallback((associationId: 'RD' | 'RG') => {
+    // console.log('AssociationContext: Mise à jour de l\'association vers:', associationId); // Removed for performance
     // Mettre à jour l'état local
     setCurrentAssociation(associationId);
     // Persister dans localStorage
     localStorage.setItem('currentAssociation', associationId);
-  };
+  }, []);
 
   // Réinitialiser l'association lors de la déconnexion
   useEffect(() => {
@@ -89,35 +89,50 @@ export const AssociationProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }
   }, [user, currentAssociation]);
 
-  // Obtenir le nom complet de l'association courante
-  const associationName = ASSOCIATION_NAMES[currentAssociation] || ASSOCIATION_NAMES[ASSOCIATIONS.RIVE_DROITE];
+  // Mémoïser les valeurs dérivées
+  const associationName = useMemo(() => 
+    ASSOCIATION_NAMES[currentAssociation] || ASSOCIATION_NAMES[ASSOCIATIONS.RIVE_DROITE],
+    [currentAssociation]
+  );
 
-  // Fonction utilitaire pour obtenir le nom de collection en fonction de l'association courante
-  const getCollectionNameForCurrentAssociation = (baseCollection: string): string => {
+  // Fonction utilitaire pour obtenir le nom de collection (mémoïsée)
+  const getCollectionNameForCurrentAssociation = useCallback((baseCollection: string): string => {
     return getCollectionName(baseCollection, currentAssociation);
-  };
+  }, [currentAssociation]);
 
-  // Vérifier si l'association courante est Rive Droite ou Rive Gauche
-  const isRiveDroite = currentAssociation === ASSOCIATIONS.RIVE_DROITE;
-  const isRiveGauche = currentAssociation === ASSOCIATIONS.RIVE_GAUCHE;
+  // Mémoïser les vérifications booléennes
+  const isRiveDroite = useMemo(() => 
+    currentAssociation === ASSOCIATIONS.RIVE_DROITE, [currentAssociation]
+  );
+  const isRiveGauche = useMemo(() => 
+    currentAssociation === ASSOCIATIONS.RIVE_GAUCHE, [currentAssociation]
+  );
 
-  // Fonction pour définir manuellement l'association (pour le super-admin)
-  const setCurrentAssociationManual = (associationId: 'RD' | 'RG') => {
+  // Fonction pour définir manuellement l'association (mémoïsée)
+  const setCurrentAssociationManual = useCallback((associationId: 'RD' | 'RG') => {
     const isSuperAdmin = user?.email === 'arkane.hilal@h24scm.com';
     if (isSuperAdmin) {
       localStorage.setItem('manualAssociationSelection', 'true');
     }
     updateAssociation(associationId);
-  };
+  }, [user?.email, updateAssociation]);
 
-  const value = {
+  // Mémoïser la valeur du contexte pour éviter les re-renders
+  const value = useMemo(() => ({
     currentAssociation,
     setCurrentAssociation: setCurrentAssociationManual,
     associationName,
     getCollectionName: getCollectionNameForCurrentAssociation,
     isRiveDroite,
     isRiveGauche
-  };
+  }), [
+    currentAssociation,
+    setCurrentAssociationManual,
+    associationName,
+    getCollectionNameForCurrentAssociation,
+    isRiveDroite,
+    isRiveGauche
+  ]);
 
   return (
     <AssociationContext.Provider value={value}>

@@ -2,12 +2,12 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
 import { visualizer } from 'rollup-plugin-visualizer';
+import viteCompression from 'vite-plugin-compression';
 
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
     react({
-      // Force le mode classic JSX transform pour éviter les problèmes de runtime
       jsxRuntime: 'automatic'
     }),
     visualizer({
@@ -15,16 +15,43 @@ export default defineConfig({
       gzipSize: true,
       brotliSize: true,
       filename: 'dist/stats.html'
+    }),
+    // Compression désactivée temporairement car le plugin a des problèmes
+    // TODO: Configurer nginx ou un autre serveur pour la compression en dev
+    // Compression gzip et brotli pour la production
+    viteCompression({
+      verbose: true,
+      disable: false,
+      threshold: 10240, // Compresser les fichiers > 10KB
+      algorithm: 'gzip',
+      ext: '.gz'
+    }),
+    viteCompression({
+      verbose: true,
+      disable: false,
+      threshold: 10240,
+      algorithm: 'brotliCompress',
+      ext: '.br'
     })
   ],
   resolve: {
     alias: {
       '@': resolve(__dirname, './src'),
+      '@/components': resolve(__dirname, './src/components'),
+      '@/features': resolve(__dirname, './src/features'),
+      '@/hooks': resolve(__dirname, './src/hooks'),
+      '@/lib': resolve(__dirname, './src/lib'),
+      '@/utils': resolve(__dirname, './src/utils'),
+      '@/types': resolve(__dirname, './src/types'),
+      '@/context': resolve(__dirname, './src/context'),
+      '@/styles': resolve(__dirname, './src/styles'),
+      '@/pages': resolve(__dirname, './src/pages'),
+      // Optimisation date-fns : rediriger vers notre fichier centralisé
+      // 'date-fns/locale': resolve(__dirname, './src/utils/dateLocale')
     },
   },
   // Optimisation des dépendances
   optimizeDeps: {
-    // Force l'inclusion de toutes les dépendances React
     include: [
       'react',
       'react-dom',
@@ -32,71 +59,42 @@ export default defineConfig({
       'react/jsx-runtime',
       'react/jsx-dev-runtime',
       'react-router-dom',
-      '@remix-run/router',
-      'zod'
+      'firebase/app',
+      'firebase/auth',
+      'firebase/firestore',
+      'date-fns',
+      'date-fns/locale/fr'
     ],
-    // Force le pre-bundling
-    force: true
+    exclude: [
+      // Exclure les locales non utilisées de date-fns
+      'date-fns/locale/en-US',
+      'date-fns/locale/en-GB',
+      'date-fns/locale/de',
+      'date-fns/locale/es',
+      'date-fns/locale/it'
+    ]
   },
   build: {
     // Augmenter la limite pour éviter les warnings
-    chunkSizeWarningLimit: 500,
-    // Désactiver le source map en production
+    chunkSizeWarningLimit: 1000,
+    // Désactiver les source maps en production
     sourcemap: false,
-    // Optimisations supplémentaires
-    minify: 'terser',
-    terserOptions: {
-      compress: {
-        drop_console: true,
-        drop_debugger: true
-      }
-    },
     // Configuration Rollup
     rollupOptions: {
       output: {
-        // Stratégie de chunking optimisée avec fonction
-        manualChunks(id) {
-          // Skip les fichiers qui ne sont pas des node_modules
-          if (!id.includes('node_modules')) {
-            return;
-          }
-          
-          // Firebase dans un chunk séparé
-          if (id.includes('firebase/')) {
-            return 'firebase';
-          }
-          
-          // React et ses dépendances
-          if (id.includes('react') || id.includes('react-dom') || id.includes('react-router')) {
-            return 'react';
-          }
-          
-          // Bibliothèques de date
-          if (id.includes('date-fns') || id.includes('date-holidays')) {
-            return 'date-utils';
-          }
-          
-          // Bibliothèques d'export
-          if (id.includes('jspdf') || id.includes('exceljs') || id.includes('jszip')) {
-            return 'export-utils';
-          }
-          
-          // UI Libraries
-          if (id.includes('framer-motion') || id.includes('lucide-react') || id.includes('react-toastify')) {
-            return 'ui-libs';
-          }
-          
-          // Autres vendors
-          return 'vendor';
-        },
-        // Assurer que les imports sont corrects
-        entryFileNames: 'assets/[name].[hash].js',
-        chunkFileNames: 'assets/[name].[hash].js',
-        assetFileNames: 'assets/[name].[hash].[ext]'
-      }
+        // Optimisation manuelle simple pour React et Firebase
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          'firebase': ['firebase/app', 'firebase/auth', 'firebase/firestore'],
+          'date-fns': ['date-fns'],
+          'lucide': ['lucide-react']
+        }
+      },
+      // Configuration pour la résolution des modules
+      preserveSymlinks: true
     },
-    // Compatibilité navigateur
-    target: 'es2015'
+    // Compatibilité navigateur moderne
+    target: 'es2020'
   },
   // Server config pour le développement
   server: {
@@ -104,6 +102,19 @@ export default defineConfig({
     host: true,
     headers: {
       'Cross-Origin-Opener-Policy': 'unsafe-none'
-    }
+    },
+    // Activer la compression pour le serveur de développement
+    middlewareMode: false
+  },
+  // Configuration de prévisualisation
+  preview: {
+    port: 4173,
+    host: true,
+    // Activer la compression pour le serveur de preview
+    compression: true
+  },
+  // Configuration PWA et Service Worker
+  define: {
+    __SW_ENABLED__: JSON.stringify(true)
   }
 });

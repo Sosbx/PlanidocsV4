@@ -1,7 +1,7 @@
 import React from 'react';
 import { AlertTriangle, Info } from 'lucide-react';
 import LoadingSpinner from '../../../components/common/LoadingSpinner';
-import Toast from '../../../components/Toast';
+import Toast from '../../../components/common/Toast';
 
 interface LoadingStateProps {
   message?: string;

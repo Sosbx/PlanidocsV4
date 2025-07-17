@@ -2,6 +2,7 @@
 @import './styles/PlanningStyles.css';
 @import './styles/FloatingControlBar.css';
 @import './styles/GradientTheme.css';
+@import './styles/animations.css';
 
 @tailwind base;
 @tailwind components;
@@ -16,6 +17,58 @@
   
   .no-scrollbar::-webkit-scrollbar {
     display: none;             /* Chrome, Safari, Opera */
+  }
+  
+  /* Styles pour les échanges incohérents */
+  .incoherent-exchange {
+    position: relative;
+    border-left: 3px solid #f59e0b;
+    background-color: rgba(251, 191, 36, 0.05);
+  }
+  
+  .incoherent-exchange::before {
+    content: '';
+    position: absolute;
+    left: -3px;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: linear-gradient(to bottom, #f59e0b, #d97706);
+    animation: pulse-border 2s ease-in-out infinite;
+  }
+  
+  @keyframes pulse-border {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.5;
+    }
+  }
+  
+  /* Tooltip pour les incohérences */
+  .coherence-tooltip {
+    @apply absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 
+           bg-gray-900 text-white text-xs rounded-lg py-2 px-3 
+           opacity-0 invisible transition-all duration-200 
+           group-hover:opacity-100 group-hover:visible
+           shadow-lg z-50 max-w-xs;
+  }
+  
+  .coherence-tooltip::after {
+    content: '';
+    @apply absolute top-full left-1/2 transform -translate-x-1/2
+           border-4 border-transparent border-t-gray-900;
+  }
+  
+  /* Indicateur d'avertissement animé */
+  .coherence-warning {
+    @apply relative inline-flex items-center justify-center;
+  }
+  
+  .coherence-warning::before {
+    content: '';
+    @apply absolute inset-0 bg-amber-400 rounded-full animate-ping opacity-75;
   }
 }
 

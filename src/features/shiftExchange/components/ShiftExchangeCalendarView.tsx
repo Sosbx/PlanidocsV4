@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { format, isToday as isTodayFn } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { frLocale } from '../../../utils/dateLocale';
 import { isGrayedOut } from '../../../utils/dateUtils';
+import { formatParisDate, debugTimezone, toParisTime } from '../../../utils/timezoneUtils';
 import { useDesiderataState } from '../../../features/planning/hooks/useDesiderataState';
 import { UserPlus } from 'lucide-react';
 import type { ShiftExchange } from '../types';
@@ -135,6 +136,14 @@ const ShiftExchangeCalendarView: React.FC<ShiftExchangeCalendarViewProps> = ({
   // Grouper les échanges par date et période
   displayExchanges.forEach(exchange => {
     const { date, period } = exchange;
+    
+    // Debug pour AVIT
+    if (exchange.userId === 'naRhqjhzpWhcOMCZWCqftT8ArbH3') {
+      console.log('[DEBUG AVIT Calendar] Exchange date:', date);
+      debugTimezone(date, `[DEBUG AVIT Calendar] Date ${date}`);
+      console.log('[DEBUG AVIT Calendar] Exchange data:', exchange);
+    }
+    
     if (!exchangesByDate[date]) {
       exchangesByDate[date] = { M: [], AM: [], S: [] };
     }
@@ -165,20 +174,21 @@ const ShiftExchangeCalendarView: React.FC<ShiftExchangeCalendarViewProps> = ({
         {/* Jours du mois actuel - rendu exact comme l'original */}
         {days.map(day => {
           try {
-            const dateStr = format(day, 'yyyy-MM-dd');
+            const dateStr = formatParisDate(day, 'yyyy-MM-dd');
             const dayNum = day.getDate();
             
             // Vérifier si c'est un week-end ou un jour férié
             const isWeekend = isGrayedOut(day);
             
             // Vérifier si c'est aujourd'hui
-            const isCurrentDay = isTodayFn(day);
+            const isCurrentDay = isTodayFn(toParisTime(day));
             const isSelectedDay = selectedDate === dateStr;
             
             // Récupérer les gardes de l'utilisateur pour cette date
             const userShifts: Record<string, boolean> = {};
             ['M', 'AM', 'S'].forEach(period => {
               const key = `${dateStr}-${period}`;
+              // Les assignments sont directement indexés par la clé date-période
               userShifts[period] = Boolean(userAssignments[key]);
             });
             
@@ -213,7 +223,7 @@ const ShiftExchangeCalendarView: React.FC<ShiftExchangeCalendarViewProps> = ({
                         {dayNum}
                       </span>
                       <span className="text-[6px] text-gray-400">
-                        {format(day, 'EEE', { locale: fr }).substring(0, 3)}
+                        {formatParisDate(day, 'EEE', { locale: frLocale }).substring(0, 3)}
                       </span>
                     </div>
                   ) : (
@@ -222,7 +232,7 @@ const ShiftExchangeCalendarView: React.FC<ShiftExchangeCalendarViewProps> = ({
                         {dayNum}
                       </span>
                       <span className="text-[10px] text-gray-400">
-                        {format(day, 'EEE', { locale: fr })}
+                        {formatParisDate(day, 'EEE', { locale: frLocale })}
                       </span>
                     </div>
                   )}

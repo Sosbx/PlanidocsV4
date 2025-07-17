@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { AlertCircle, CheckCircle2 } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { AlertCircle, CheckCircle2, X, Info } from 'lucide-react';
 
 interface ToastProps {
   message: string;
@@ -9,14 +9,21 @@ interface ToastProps {
 }
 
 const Toast: React.FC<ToastProps> = ({ message, isVisible, type = 'error', onClose }) => {
+  const [shouldRender, setShouldRender] = useState(false);
+
   useEffect(() => {
     if (isVisible) {
-      const timer = setTimeout(onClose, 1500);
+      setShouldRender(true);
+    } else if (!isVisible && shouldRender) {
+      // Attendre la fin de l'animation avant de retirer le composant du DOM
+      const timer = setTimeout(() => {
+        setShouldRender(false);
+      }, 200); // Durée de l'animation de sortie
       return () => clearTimeout(timer);
     }
-  }, [isVisible, onClose]);
+  }, [isVisible, shouldRender]);
 
-  if (!isVisible) return null;
+  if (!shouldRender) return null;
 
   const styles = {
     success: {
@@ -35,7 +42,7 @@ const Toast: React.FC<ToastProps> = ({ message, isVisible, type = 'error', onClo
       bg: 'bg-blue-50',
       text: 'text-blue-800',
       icon: 'text-blue-600',
-      iconComponent: AlertCircle
+      iconComponent: Info
     }
   };
 
@@ -43,11 +50,20 @@ const Toast: React.FC<ToastProps> = ({ message, isVisible, type = 'error', onClo
   const safeType = type in styles ? type : 'error';
   const { bg, text, icon, iconComponent: Icon } = styles[safeType];
 
+  const animationClass = isVisible ? 'animate-toast-fade-in' : 'animate-toast-fade-out';
+
   return (
-    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 animate-fade-in">
-      <div className={`${bg} ${text} px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 min-w-[300px] justify-center`}>
-        <Icon className={`h-5 w-5 ${icon}`} />
-        <p className="text-sm font-medium">{message}</p>
+    <div className={`fixed top-20 left-1/2 -translate-x-1/2 z-[10000] ${animationClass}`}>
+      <div className={`${bg} ${text} px-4 py-3 pr-12 rounded-lg shadow-xl border border-opacity-20 flex items-center gap-2 min-w-[300px] max-w-[500px] relative backdrop-blur-sm`}>
+        <Icon className={`h-5 w-5 ${icon} flex-shrink-0`} />
+        <p className="text-sm font-medium flex-1">{message}</p>
+        <button
+          onClick={onClose}
+          className={`absolute right-2 top-1/2 -translate-y-1/2 ${text} hover:opacity-70 transition-opacity p-1 rounded-full`}
+          aria-label="Fermer la notification"
+        >
+          <X className="h-4 w-4" />
+        </button>
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from 'react-query';
+import { firebaseTimestampToParisDate } from '@/utils/timezoneUtils';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase/config';
 import type { GeneratedPlanning } from '../types/planning';
@@ -36,7 +37,7 @@ export const usePlanningCache = () => {
             typeof planning.uploadedAt === 'object' && 
             'toDate' in planning.uploadedAt && 
             typeof planning.uploadedAt.toDate === 'function') {
-          planning.uploadedAt = planning.uploadedAt.toDate();
+          planning.uploadedAt = firebaseTimestampToParisDate(planning.uploadedAt);
         } else if (!(planning.uploadedAt instanceof Date)) {
           // Si ce n'est pas un timestamp ni une Date, convertir en Date
           planning.uploadedAt = new Date(planning.uploadedAt as any);

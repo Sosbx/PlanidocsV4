@@ -1,10 +1,9 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { 
   initializeFirestore, 
   CACHE_SIZE_UNLIMITED,
-  persistentLocalCache,
-  persistentMultipleTabManager,
+  memoryLocalCache,
   collection,
   getDocs,
   setLogLevel
@@ -35,17 +34,18 @@ const firebaseConfig = {
 };
 
 // Instance principale de Firebase pour l'application
-export const app = initializeApp(firebaseConfig);
+// Vérifier si l'app existe déjà pour éviter les problèmes de hot-reload
+export const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 export const auth = getAuth(app);
 
-// Initialiser Firestore avec des paramètres optimisés et persistance locale
+// Initialiser Firestore avec cache en mémoire pour éviter les conflits entre utilisateurs
 export const db = initializeFirestore(app, {
   experimentalForceLongPolling: false,
   experimentalAutoDetectLongPolling: true,
-  // Utilisation de l'API recommandée pour la persistance
-  localCache: persistentLocalCache({
-    tabManager: persistentMultipleTabManager(),
-    cacheSizeBytes: CACHE_SIZE_UNLIMITED
+  // Utilisation du cache mémoire pour isoler les données par session
+  localCache: memoryLocalCache({
+    // Le cache sera vidé à chaque rechargement de page
+    // évitant ainsi les fuites de données entre utilisateurs RD/RG
   })
 });
 
@@ -58,7 +58,11 @@ googleProvider.setCustomParameters({
 });
 
 // Instance séparée pour la création d'utilisateurs
-export const userCreationApp = initializeApp(firebaseConfig, 'userCreation');
+// Vérifier si l'app existe déjà
+const userCreationApps = getApps().filter(app => app.name === 'userCreation');
+export const userCreationApp = userCreationApps.length === 0 
+  ? initializeApp(firebaseConfig, 'userCreation')
+  : userCreationApps[0];
 export const userCreationAuth = getAuth(userCreationApp);
 
 // Configurer le comportement de mise en cache

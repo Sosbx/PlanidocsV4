@@ -1,8 +1,10 @@
 import { formatDistance } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { createParisDate } from '@/utils/timezoneUtils';
+import { frLocale } from '../utils/dateLocale';
+import { toParisTime } from './timezoneUtils';
 
 export const getTimeRemaining = (deadline: Date) => {
-  const total = deadline.getTime() - new Date().getTime();
+  const total = toParisTime(deadline).getTime() - toParisTime(createParisDate()).getTime();
   
   if (total <= 0) {
     return {
@@ -31,7 +33,7 @@ export const getTimeRemaining = (deadline: Date) => {
 };
 
 export const getGreetingByTime = (): string => {
-  const currentHour = new Date().getHours();
+  const currentHour = toParisTime(createParisDate()).getHours();
   
   if (currentHour >= 5 && currentHour < 18) {
     return 'Bonjour';

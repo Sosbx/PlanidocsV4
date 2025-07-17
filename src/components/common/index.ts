@@ -11,3 +11,6 @@ export { default as NotificationBell } from './NotificationBell';
 export { ConnectionStatus } from './ConnectionStatus';
 export { default as LoadingSpinner } from './LoadingSpinner';
 export { default as Switch } from './Switch';
+export { default as SuspenseWrapper } from './SuspenseWrapper';
+export { default as ProgressiveLoader } from './ProgressiveLoader';
+export { default as LazyImage } from './LazyImage';

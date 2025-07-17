@@ -1,9 +1,11 @@
 import { collection, doc, addDoc, getDocs, updateDoc, query, orderBy, getDoc, onSnapshot } from 'firebase/firestore';
+import { createParisDate, firebaseTimestampToParisDate, formatParisDate } from '@/utils/timezoneUtils';
 import { db } from './config';
 import type { ShiftExchange, ExchangeHistory, ExchangeValidationError, ExchangeType, ShiftAssignment } from '../../types/planning';
 import { deleteDoc, Timestamp, where, runTransaction, serverTimestamp, Transaction, deleteField } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { createReplacement, deleteReplacement } from './replacements';
+import { checkDirectExchangeConflict, getConflictErrorMessage } from './exchange/conflictChecker';
 
 // Constantes
 const COLLECTIONS = {
@@ -254,10 +256,24 @@ export const addShiftExchange = async (exchange: Omit<ShiftExchange, 'id' | 'cre
   try {
     validateExchangeData(exchange);
     
+    // Vérifier d'abord si la garde n'est pas déjà dans les échanges directs
+    const directConflict = await checkDirectExchangeConflict(
+      exchange.userId,
+      exchange.date,
+      exchange.period
+    );
+    
+    if (directConflict.exists) {
+      throw createExchangeValidationError(
+        'GUARD_ALREADY_EXCHANGED',
+        getConflictErrorMessage('direct')
+      );
+    }
+    
     // Rechercher d'abord un échange existant pour cette garde
     const existingExchangeQuery = query(
       collection(db, COLLECTIONS.EXCHANGES),
-      where('date', '==', format(new Date(exchange.date), 'yyyy-MM-dd')),
+      where('date', '==', formatParisDate(new Date(exchange.date), 'yyyy-MM-dd')),
       where('period', '==', exchange.period),
       where('userId', '==', exchange.userId)
     );
@@ -308,9 +324,21 @@ export const addShiftExchange = async (exchange: Omit<ShiftExchange, 'id' | 'cre
       } else {
         // Créer un nouvel échange si aucun n'existe
         const exchangeRef = doc(collection(db, COLLECTIONS.EXCHANGES));
+        
+        // S'assurer que la date est correctement formatée
+        let formattedDate = exchange.date;
+        if (typeof exchange.date === 'string' && exchange.date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          // La date est déjà au bon format
+          formattedDate = exchange.date;
+        } else {
+          // Convertir et formater la date
+          const dateObj = typeof exchange.date === 'string' ? new Date(exchange.date) : exchange.date;
+          formattedDate = formatParisDate(dateObj, 'yyyy-MM-dd');
+        }
+        
         transaction.set(exchangeRef, {
           ...exchange,
-          date: format(new Date(exchange.date), 'yyyy-MM-dd'),
+          date: formattedDate,
           createdAt: Timestamp.now(),
           lastModified: Timestamp.now(),
           status: 'pending',
@@ -681,15 +709,15 @@ export const validateShiftExchange = async (
         timeSlot: originalAssignment.timeSlot,
         comment: exchange.comment || '',
         interestedUsers: exchange.interestedUsers || [],
-        exchangedAt: new Date().toISOString(),
+        exchangedAt: createParisDate().toISOString(),
         createdAt: (() => {
           if (exchange.createdAt && typeof exchange.createdAt === 'object') {
             const timestamp = exchange.createdAt as Timestamp;
             if (typeof timestamp.toDate === 'function') {
-              return timestamp.toDate().toISOString();
+              return firebaseTimestampToParisDate(timestamp).toISOString();
             }
           }
-          return typeof exchange.createdAt === 'string' ? exchange.createdAt : new Date().toISOString();
+          return typeof exchange.createdAt === 'string' ? exchange.createdAt : createParisDate().toISOString();
         })(),
         isPermutation: exchangeType === 'permutation',
         status: 'completed',
@@ -1354,7 +1382,7 @@ export const getShiftExchanges = async (): Promise<ShiftExchange[]> => {
       return exchangesCache.data;
     }
 
-    const today = format(new Date(), 'yyyy-MM-dd');
+    const today = formatParisDate(createParisDate(), 'yyyy-MM-dd');
     // Essayer d'abord avec l'index composé
     try {
       const q = query(
@@ -1366,12 +1394,12 @@ export const getShiftExchanges = async (): Promise<ShiftExchange[]> => {
       const querySnapshot = await getDocs(q);
       const exchanges = querySnapshot.docs.map(doc => {
         const data = doc.data();
-        let createdAt = new Date().toISOString();
+        let createdAt = createParisDate().toISOString();
         
         if (data.createdAt && typeof data.createdAt === 'object') {
           const timestamp = data.createdAt as any;
           if (typeof timestamp.toDate === 'function') {
-            createdAt = timestamp.toDate().toISOString();
+            createdAt = firebaseTimestampToParisDate(timestamp).toISOString();
           }
         } else if (typeof data.createdAt === 'string') {
           createdAt = data.createdAt;
@@ -1416,12 +1444,12 @@ export const getShiftExchanges = async (): Promise<ShiftExchange[]> => {
         const exchanges = querySnapshot.docs
           .map(doc => {
             const data = doc.data();
-            let createdAt = new Date().toISOString();
+            let createdAt = createParisDate().toISOString();
             
             if (data.createdAt && typeof data.createdAt === 'object') {
               const timestamp = data.createdAt as any;
               if (typeof timestamp.toDate === 'function') {
-                createdAt = timestamp.toDate().toISOString();
+                createdAt = firebaseTimestampToParisDate(timestamp).toISOString();
               }
             } else if (typeof data.createdAt === 'string') {
               createdAt = data.createdAt;
@@ -1492,7 +1520,7 @@ export const getExchangeHistory = async (): Promise<ExchangeHistory[]> => {
         const result: ExchangeHistory = {
           date: data.date || '',
           period: data.period || '',
-          exchangedAt: data.exchangedAt || new Date().toISOString(),
+          exchangedAt: data.exchangedAt || createParisDate().toISOString(),
           originalUserId: data.originalUserId || '',
           newUserId: data.newUserId || '',
           shiftType: data.shiftType || '',
@@ -1525,7 +1553,7 @@ export const getExchangeHistory = async (): Promise<ExchangeHistory[]> => {
             const result: ExchangeHistory = {
               date: data.date || '',
               period: data.period || '',
-              exchangedAt: data.exchangedAt || new Date().toISOString(),
+              exchangedAt: data.exchangedAt || createParisDate().toISOString(),
               originalUserId: data.originalUserId || '',
               newUserId: data.newUserId || '',
               shiftType: data.shiftType || '',
@@ -1630,7 +1658,7 @@ export const subscribeToExchangeHistory = (
           const result: ExchangeHistory = {
             date: data.date || '',
             period: data.period || '',
-            exchangedAt: data.exchangedAt || new Date().toISOString(),
+            exchangedAt: data.exchangedAt || createParisDate().toISOString(),
             originalUserId: data.originalUserId || '',
             newUserId: data.newUserId || '',
             shiftType: data.shiftType || '',
@@ -1705,7 +1733,7 @@ export const subscribeToShiftExchanges = (
   callback: (exchanges: ShiftExchange[]) => void
 ): (() => void) => {
   try {
-    const today = format(new Date(), 'yyyy-MM-dd');
+    const today = formatParisDate(createParisDate(), 'yyyy-MM-dd');
     
     // Ajouter des logs pour le débogage
     console.log('Setting up shift exchanges subscription, current date:', today);
@@ -1731,12 +1759,12 @@ export const subscribeToShiftExchanges = (
         
         const exchanges = querySnapshot.docs.map(doc => {
           const data = doc.data();
-          let createdAt = new Date().toISOString();
+          let createdAt = createParisDate().toISOString();
           
           if (data.createdAt && typeof data.createdAt === 'object') {
             const timestamp = data.createdAt as any;
             if (typeof timestamp.toDate === 'function') {
-              createdAt = timestamp.toDate().toISOString();
+              createdAt = firebaseTimestampToParisDate(timestamp).toISOString();
             }
           } else if (typeof data.createdAt === 'string') {
             createdAt = data.createdAt;
@@ -1814,12 +1842,12 @@ export const subscribeToShiftExchanges = (
           const exchanges = querySnapshot.docs
             .map(doc => {
               const data = doc.data();
-              let createdAt = new Date().toISOString();
+              let createdAt = createParisDate().toISOString();
               
               if (data.createdAt && typeof data.createdAt === 'object') {
                 const timestamp = data.createdAt as any;
                 if (typeof timestamp.toDate === 'function') {
-                  createdAt = timestamp.toDate().toISOString();
+                  createdAt = firebaseTimestampToParisDate(timestamp).toISOString();
                 }
               } else if (typeof data.createdAt === 'string') {
                 createdAt = data.createdAt;

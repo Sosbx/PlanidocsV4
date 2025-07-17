@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import { createParisDate, addMonthsParis, formatParisDate } from '@/utils/timezoneUtils';
 import { format, parseISO, addDays, isAfter, isBefore, isToday, isSameDay, startOfWeek, endOfWeek } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { frLocale } from '../../../utils/dateLocale';
 import { isGrayedOut } from '../../../utils/dateUtils';
 import { usePlanningView } from '../hooks';
 import type { ShiftAssignment } from '../../../types/planning';
@@ -201,7 +202,7 @@ const DailyPlanningView: React.FC<DailyPlanningViewProps> = ({
   
   // Obtenir tous les types de garde pour une journée donnée et un site donné
   const getShiftTypesForDay = useCallback((day: Date, period: 'M' | 'AM' | 'S') => {
-    const dayStr = format(day, 'yyyy-MM-dd');
+    const dayStr = formatParisDate(day, 'yyyy-MM-dd');
     const cellKey = `${dayStr}-${period}`;
     const shiftTypes = new Map<string, { doctors: string[], site: string | undefined }>();
     
@@ -260,12 +261,12 @@ const DailyPlanningView: React.FC<DailyPlanningViewProps> = ({
   
   // Aller au jour actuel
   const goToToday = useCallback(() => {
-    jumpToDate(new Date());
+    jumpToDate(createParisDate());
   }, [jumpToDate]);
   
   // Afficher la semaine actuelle
   const goToThisWeek = useCallback(() => {
-    const today = new Date();
+    const today = createParisDate();
     const weekStart = startOfWeek(today, { weekStartsOn: 1 }); // Semaine commence le lundi
     jumpToDate(weekStart);
   }, [jumpToDate]);
@@ -340,10 +341,10 @@ const DailyPlanningView: React.FC<DailyPlanningViewProps> = ({
           </button>
 
           <div className="text-gray-700 font-medium ml-2 flex items-center">
-            <span className="mr-2">{format(startDate, 'MMMM yyyy', { locale: fr })}</span>
+            <span className="mr-2">{formatParisDate(startDate, 'MMMM yyyy', { locale: frLocale })}</span>
             <div className="hidden md:flex space-x-1">
               {Array.from({ length: 6 }, (_, i) => {
-                const monthDate = addMonths(new Date(), i - 3);
+                const monthDate = addMonthsParis(createParisDate(), i - 3);
                 const isCurrentMonth = monthDate.getMonth() === startDate.getMonth() && 
                                       monthDate.getFullYear() === startDate.getFullYear();
                 return (
@@ -356,7 +357,7 @@ const DailyPlanningView: React.FC<DailyPlanningViewProps> = ({
                         : 'text-gray-600 hover:bg-gray-100'
                     }`}
                   >
-                    {format(monthDate, 'MMM', { locale: fr })}
+                    {formatParisDate(monthDate, 'MMM', { locale: frLocale })}
                   </button>
                 );
               })}
@@ -527,8 +528,8 @@ const DailyPlanningView: React.FC<DailyPlanningViewProps> = ({
                         : ''
                   }`}
                 >
-                  <div>{format(day, 'd', { locale: fr })}</div>
-                  <div>{format(day, 'EEE', { locale: fr }).toUpperCase()}</div>
+                  <div>{formatParisDate(day, 'd', { locale: frLocale })}</div>
+                  <div>{formatParisDate(day, 'EEE', { locale: frLocale }).toUpperCase()}</div>
                 </th>
               ))}
             </tr>

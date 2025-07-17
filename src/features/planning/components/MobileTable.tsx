@@ -1,6 +1,7 @@
 import React from 'react';
+import { formatParisDate } from '@/utils/timezoneUtils';
 import { format, isSameMonth } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { frLocale } from '../../../utils/dateLocale';
 import { getDaysArray, getMonthsInRange, isGrayedOut } from '../../../utils/dateUtils';
 import type { Selections } from '../types';
 import PlanningSelectionCell from './PlanningSelectionCell';
@@ -44,7 +45,7 @@ const MobileTable: React.FC<MobileTableProps> = ({
           <div key={monthIndex} className="bg-white rounded-lg shadow">
             <div className="bg-gray-50 px-4 py-2 rounded-t-lg border-b">
               <h3 className="text-lg font-medium text-gray-900">
-                {format(month, 'MMMM', { locale: fr }).charAt(0).toUpperCase() + format(month, 'MMMM', { locale: fr }).slice(1) + ' ' + format(month, 'yyyy')}
+                {formatParisDate(month, 'MMMM', { locale: frLocale }).charAt(0).toUpperCase() + formatParisDate(month, 'MMMM', { locale: frLocale }).slice(1) + ' ' + formatParisDate(month, 'yyyy')}
               </h3>
             </div>
             
@@ -60,7 +61,7 @@ const MobileTable: React.FC<MobileTableProps> = ({
                 </thead>
                 <tbody>
                   {daysInMonth.map(day => {
-                    const dateStr = format(day, 'yyyy-MM-dd');
+                    const dateStr = formatParisDate(day, 'yyyy-MM-dd');
                     const isGrayed = isGrayedOut(day);
                     return (
                       <tr key={dateStr} className={isGrayed ? 'bg-gray-50' : ''}>
@@ -71,7 +72,7 @@ const MobileTable: React.FC<MobileTableProps> = ({
                           <div className="flex justify-start items-center">
                             <span>{day.getDate()}</span>
                             <span className="text-gray-500 ml-1">
-                              {format(day, 'EEEEEE', { locale: fr }).charAt(0).toUpperCase() + format(day, 'EEEEEE', { locale: fr }).slice(1).toLowerCase()}
+                              {formatParisDate(day, 'EEEEEE', { locale: frLocale }).charAt(0).toUpperCase() + formatParisDate(day, 'EEEEEE', { locale: frLocale }).slice(1).toLowerCase()}
                             </span>
                           </div>
                         </td>

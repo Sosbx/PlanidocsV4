@@ -1,4 +1,5 @@
 import { doc, getDoc, collection, getDocs, query, where, runTransaction } from 'firebase/firestore';
+import { createParisDate } from '@/utils/timezoneUtils';
 import { db } from './config';
 import { getGeneratedPlanning, saveGeneratedPlanning } from './planning';
 
@@ -57,7 +58,7 @@ export const notifyExchangeSystem = async (
           if (matchingExchange) {
             transaction.update(doc(db, 'shift_exchanges', matchingExchange.id), {
               status: 'unavailable',
-              lastModified: new Date()
+              lastModified: createParisDate()
             });
           }
         } else if (action === 'add' || action === 'update') {
@@ -69,7 +70,7 @@ export const notifyExchangeSystem = async (
               transaction.update(doc(db, 'shift_exchanges', matchingExchange.id), {
                 shiftType: assignment.shiftType,
                 timeSlot: assignment.timeSlot,
-                lastModified: new Date()
+                lastModified: createParisDate()
               });
             }
           }
@@ -138,7 +139,7 @@ export const syncValidatedExchangeWithPlanning = async (exchangeId: string): Pro
       if (!updatedPeriods[newPeriodId]) {
         updatedPeriods[newPeriodId] = {
           assignments: {},
-          uploadedAt: new Date()
+          uploadedAt: createParisDate()
         };
       }
       

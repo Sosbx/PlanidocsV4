@@ -1,6 +1,5 @@
-import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
 import { parseCSVFile } from './csvParser';
+import { formatDateCapitalized, DATE_FORMATS, frLocale } from '../../../utils/dates';
 
 /**
  * Détecte la plage de dates à partir des fichiers CSV
@@ -84,12 +83,12 @@ export const detectDateRangeFromFiles = async (files: File[]): Promise<{
  */
 export const generatePeriodName = (startDate: Date, endDate: Date): string => {
   // Formatter les dates au format jour/mois/année
-  const formattedStartDate = format(startDate, 'dd/MM/yyyy');
-  const formattedEndDate = format(endDate, 'dd/MM/yyyy');
+  const formattedStartDate = formatDateCapitalized(startDate, DATE_FORMATS.SHORT_DATE_YEAR);
+  const formattedEndDate = formatDateCapitalized(endDate, DATE_FORMATS.SHORT_DATE_YEAR);
   
   // Utiliser le format français pour les mois
-  const startMonth = format(startDate, 'MMMM', { locale: fr });
-  const endMonth = format(endDate, 'MMMM', { locale: fr });
+  const startMonth = formatDateCapitalized(startDate, 'MMMM');
+  const endMonth = formatDateCapitalized(endDate, 'MMMM');
   const startYear = startDate.getFullYear();
   const endYear = endDate.getFullYear();
   
@@ -98,14 +97,14 @@ export const generatePeriodName = (startDate: Date, endDate: Date): string => {
   if (startYear === endYear) {
     if (startDate.getMonth() === endDate.getMonth()) {
       // Même mois, même année
-      periodName = `${startMonth.charAt(0).toUpperCase() + startMonth.slice(1)} ${startYear}`;
+      periodName = `${startMonth} ${startYear}`;
     } else {
       // Mois différents, même année
-      periodName = `${startMonth.charAt(0).toUpperCase() + startMonth.slice(1)}-${endMonth.charAt(0).toUpperCase() + endMonth.slice(1)} ${startYear}`;
+      periodName = `${startMonth}-${endMonth} ${startYear}`;
     }
   } else {
     // Années différentes
-    periodName = `${startMonth.charAt(0).toUpperCase() + startMonth.slice(1)} ${startYear} - ${endMonth.charAt(0).toUpperCase() + endMonth.slice(1)} ${endYear}`;
+    periodName = `${startMonth} ${startYear} - ${endMonth} ${endYear}`;
   }
   
   // Ajouter les dates exactes

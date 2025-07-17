@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { getDesiderata, saveDesiderata, validateDesiderata } from '../../../lib/firebase/desiderata';
 import { useAuth } from '../../../features/auth/hooks';
-import { useUsers } from '../../../features/auth/hooks';
+import { useUsers } from '../../../features/auth/hooks/useUsers';
 import { useAssociation } from '../../../context/association/AssociationContext';
 import type { PeriodSelection } from '../types';
 
@@ -28,7 +28,6 @@ export const useDesiderata = () => {
     setError(null);
     
     try {
-      console.log(`Sauvegarde des désiderata pour l'utilisateur ${user.id} de l'association ${currentAssociation}`);
       await saveDesiderata(user.id, selections, currentAssociation);
       
       if (Object.keys(selections).length === 0) {
@@ -57,7 +56,6 @@ export const useDesiderata = () => {
       setIsSaving(true);
       setError(null);
 
-      console.log(`Validation des désiderata pour l'utilisateur ${userId} de l'association ${currentAssociation}`);
       const desiderata = await getDesiderata(userId, currentAssociation);
       
       // Si aucun desiderata n'existe, on valide avec un tableau vide

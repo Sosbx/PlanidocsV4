@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { createParisDate, firebaseTimestampToParisDate } from '@/utils/timezoneUtils';
 import { useAuth } from '../../features/auth/hooks';
 import { Notification } from '../../components/common/NotificationBell';
 import { 
@@ -79,7 +80,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             message: data.message,
             type: data.type,
             read: data.read,
-            createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : new Date().toISOString(),
+            createdAt: data.createdAt?.toDate ? firebaseTimestampToParisDate(data.createdAt).toISOString() : createParisDate().toISOString(),
             relatedId: data.relatedId,
             link: data.link
           });

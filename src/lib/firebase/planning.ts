@@ -1,20 +1,39 @@
-import { doc, setDoc, getDoc, addDoc, updateDoc } from 'firebase/firestore';
-import { collection, getDocs, deleteDoc, writeBatch, deleteField, onSnapshot } from 'firebase/firestore';
+import { 
+  doc, 
+  setDoc, 
+  getDoc, 
+  addDoc, 
+  updateDoc,
+  collection, 
+  getDocs, 
+  deleteDoc, 
+  writeBatch, 
+  deleteField, 
+  onSnapshot,
+  serverTimestamp
+} from './exports/firestore';
+import { createParisDate, firebaseTimestampToParisDate, formatParisDate } from '@/utils/timezoneUtils';
 import { db } from './config';
-import { serverTimestamp } from 'firebase/firestore';
 import type { GeneratedPlanning, PlanningPeriod, ShiftAssignment } from '../../types/planning';
 import { format, isAfter, isBefore, subDays } from 'date-fns';
+import { getCollectionName, COLLECTIONS } from '../../utils/collectionUtils';
+
+// Export des fonctions d'optimisation batch
+export * from './planning/batchOperations';
+export * from './planning/exportOptimized';
 
 /**
  * Sauvegarde un planning généré pour un utilisateur et une période spécifique
  * @param userId ID de l'utilisateur
  * @param periodId ID de la période (optionnel)
  * @param planning Données du planning
+ * @param associationId ID de l'association (optionnel, défaut: 'RD')
  */
 export const saveGeneratedPlanning = async (
   userId: string, 
   planning: GeneratedPlanning,
-  periodId?: string
+  periodId?: string,
+  associationId: string = 'RD'
 ): Promise<void> => {
   try {
     // Si un periodId est fourni, l'utiliser, sinon utiliser celui du planning ou null
@@ -40,7 +59,7 @@ export const saveGeneratedPlanning = async (
     console.log(`[PLANNING_SAVE] Nombre d'assignments: ${Object.keys(updatedAssignments).length}`);
     
     // Récupérer le document existant
-    const docRef = doc(db, 'generated_plannings', userId);
+    const docRef = doc(db, getCollectionName(COLLECTIONS.GENERATED_PLANNINGS, associationId), userId);
     const docSnap = await getDoc(docRef);
     
     if (docSnap.exists()) {
@@ -89,10 +108,11 @@ export const saveGeneratedPlanning = async (
 /**
  * Supprime un planning généré pour un utilisateur
  * @param userId ID de l'utilisateur
+ * @param associationId ID de l'association (optionnel, défaut: 'RD')
  */
-export const deletePlanning = async (userId: string): Promise<void> => {
+export const deletePlanning = async (userId: string, associationId: string = 'RD'): Promise<void> => {
   try {
-    await deleteDoc(doc(db, 'generated_plannings', userId));
+    await deleteDoc(doc(db, getCollectionName(COLLECTIONS.GENERATED_PLANNINGS, associationId), userId));
   } catch (error) {
     console.error('Error deleting planning:', error);
     throw new Error('Erreur lors de la suppression du planning');
@@ -103,11 +123,12 @@ export const deletePlanning = async (userId: string): Promise<void> => {
  * Supprime un planning généré pour un utilisateur et une période spécifique
  * @param userId ID de l'utilisateur
  * @param periodId ID de la période
+ * @param associationId ID de l'association (optionnel, défaut: 'RD')
  */
-export const deletePlanningForPeriod = async (userId: string, periodId: string): Promise<void> => {
+export const deletePlanningForPeriod = async (userId: string, periodId: string, associationId: string = 'RD'): Promise<void> => {
   try {
     // Récupérer le document existant
-    const docRef = doc(db, 'generated_plannings', userId);
+    const docRef = doc(db, getCollectionName(COLLECTIONS.GENERATED_PLANNINGS, associationId), userId);
     const docSnap = await getDoc(docRef);
     
     if (docSnap.exists()) {
@@ -142,11 +163,12 @@ export const deletePlanningForPeriod = async (userId: string, periodId: string):
 /**
  * Supprime tous les plannings pour une période spécifique
  * @param periodId ID de la période
+ * @param associationId ID de l'association (optionnel, défaut: 'RD')
  */
-export const deleteAllPlanningsForPeriod = async (periodId: string): Promise<void> => {
+export const deleteAllPlanningsForPeriod = async (periodId: string, associationId: string = 'RD'): Promise<void> => {
   try {
     // Récupérer tous les documents de plannings
-    const planningsSnapshot = await getDocs(collection(db, 'generated_plannings'));
+    const planningsSnapshot = await getDocs(collection(db, getCollectionName(COLLECTIONS.GENERATED_PLANNINGS, associationId)));
     
     // Créer un batch pour les opérations groupées
     const batch = writeBatch(db);
@@ -157,7 +179,7 @@ export const deleteAllPlanningsForPeriod = async (periodId: string): Promise<voi
       
       // Si le document utilise le nouveau format avec périodes et contient la période spécifiée
       if (data.periods && data.periods[periodId]) {
-        const docRef = doc(db, 'generated_plannings', docSnapshot.id);
+        const docRef = doc(db, getCollectionName(COLLECTIONS.GENERATED_PLANNINGS, associationId), docSnapshot.id);
         batch.update(docRef, {
           [`periods.${periodId}`]: deleteField()
         });
@@ -176,11 +198,12 @@ export const deleteAllPlanningsForPeriod = async (periodId: string): Promise<voi
  * Récupère le planning généré d'un utilisateur
  * @param userId ID de l'utilisateur
  * @param periodId ID de la période (optionnel)
+ * @param associationId ID de l'association (optionnel, défaut: 'RD')
  * @returns Le planning généré ou null si non trouvé
  */
-export const getGeneratedPlanning = async (userId: string, periodId?: string): Promise<GeneratedPlanning | null> => {
+export const getGeneratedPlanning = async (userId: string, periodId?: string, associationId: string = 'RD'): Promise<GeneratedPlanning | null> => {
   try {
-    const docRef = doc(db, 'generated_plannings', userId);
+    const docRef = doc(db, getCollectionName(COLLECTIONS.GENERATED_PLANNINGS, associationId), userId);
     const docSnap = await getDoc(docRef);
     
     if (docSnap.exists()) {
@@ -238,6 +261,7 @@ export const getGeneratedPlanning = async (userId: string, periodId?: string): P
  * Par défaut, charge uniquement les 3 derniers mois + futur
  * @param userId ID de l'utilisateur
  * @param options Options de chargement (plage de dates, inclure les archives)
+ * @param associationId ID de l'association (optionnel, défaut: 'RD')
  * @returns Un objet avec les plannings par période
  */
 export const getAllPlanningsByPeriod = async (
@@ -246,11 +270,12 @@ export const getAllPlanningsByPeriod = async (
     startDate?: Date;
     endDate?: Date;
     includeArchived?: boolean;
-  }
+  },
+  associationId: string = 'RD'
 ): Promise<Record<string, GeneratedPlanning>> => {
   try {
     // Définir les dates par défaut (3 derniers mois + futur)
-    const today = new Date();
+    const today = createParisDate();
     const defaultStartDate = new Date(today);
     defaultStartDate.setMonth(today.getMonth() - 3);
     
@@ -259,7 +284,7 @@ export const getAllPlanningsByPeriod = async (
     const includeArchived = options?.includeArchived || false;
     
     // Récupérer les plannings de la collection principale
-    const docRef = doc(db, 'generated_plannings', userId);
+    const docRef = doc(db, getCollectionName(COLLECTIONS.GENERATED_PLANNINGS, associationId), userId);
     const docSnap = await getDoc(docRef);
     
     const result: Record<string, GeneratedPlanning> = {};
@@ -344,7 +369,7 @@ export const getAllPlanningsByPeriod = async (
         
         // Charger les plannings archivés pour chaque trimestre
         for (const quarter of quarters) {
-          const archivedPlannings = await getArchivedPlanningsByQuarter(userId, quarter);
+          const archivedPlannings = await getArchivedPlanningsByQuarter(userId, quarter, associationId);
           
           // Fusionner avec les résultats
           // Utiliser une boucle for...in pour éviter les erreurs TypeScript avec Object.entries
@@ -420,14 +445,19 @@ const filterAssignmentsByDate = (
  * Récupère les plannings archivés d'un utilisateur pour un trimestre spécifique
  * @param userId ID de l'utilisateur
  * @param quarter Trimestre au format 'YYYYQN' (ex: '2024Q1')
+ * @param associationId ID de l'association (optionnel, défaut: 'RD')
  * @returns Un objet avec les plannings par période
  */
 export const getArchivedPlanningsByQuarter = async (
   userId: string,
-  quarter: string
+  quarter: string,
+  associationId: string = 'RD'
 ): Promise<Record<string, GeneratedPlanning>> => {
   try {
-    const docRef = doc(db, `archived_plannings/${quarter}/users`, userId);
+    const collectionPath = associationId === 'RD' 
+      ? `archived_plannings/${quarter}/users`
+      : `archived_plannings_${associationId}/${quarter}/users`;
+    const docRef = doc(db, collectionPath, userId);
     const docSnap = await getDoc(docRef);
     
     if (docSnap.exists()) {
@@ -506,12 +536,13 @@ const getQuartersInRange = (startDate: Date, endDate: Date): string[] => {
 
 /**
  * Archive les plannings plus anciens que 3 mois
+ * @param associationId ID de l'association (optionnel, défaut: 'RD')
  * @returns Nombre de plannings archivés
  */
-export const archiveOldPlannings = async (): Promise<number> => {
+export const archiveOldPlannings = async (associationId: string = 'RD'): Promise<number> => {
   try {
     // Définir la date limite (3 mois avant aujourd'hui)
-    const today = new Date();
+    const today = createParisDate();
     const cutoffDate = new Date(today);
     cutoffDate.setMonth(today.getMonth() - 3);
     
@@ -521,7 +552,7 @@ export const archiveOldPlannings = async (): Promise<number> => {
     const quarterKey = `${targetYear}Q${targetQuarter}`;
     
     // Récupérer tous les documents de plannings
-    const planningsSnapshot = await getDocs(collection(db, 'generated_plannings'));
+    const planningsSnapshot = await getDocs(collection(db, getCollectionName(COLLECTIONS.GENERATED_PLANNINGS, associationId)));
     
     let archivedCount = 0;
     const batch = writeBatch(db);
@@ -582,7 +613,10 @@ export const archiveOldPlannings = async (): Promise<number> => {
       // Si des assignments doivent être archivés
       if (Object.keys(assignmentsToArchive).length > 0) {
         // Référence au document d'archive
-        const archiveRef = doc(db, `archived_plannings/${quarterKey}/users`, userId);
+        const archivePath = associationId === 'RD' 
+          ? `archived_plannings/${quarterKey}/users`
+          : `archived_plannings_${associationId}/${quarterKey}/users`;
+        const archiveRef = doc(db, archivePath, userId);
         
         // Préparer les données d'archive
         const archiveData: any = {
@@ -604,7 +638,7 @@ export const archiveOldPlannings = async (): Promise<number> => {
         batch.set(archiveRef, archiveData, { merge: true });
         
         // Mettre à jour le document original
-        const originalRef = doc(db, 'generated_plannings', userId);
+        const originalRef = doc(db, getCollectionName(COLLECTIONS.GENERATED_PLANNINGS, associationId), userId);
         
         // Préparer les données mises à jour
         const updatedData: any = {
@@ -642,11 +676,12 @@ export const archiveOldPlannings = async (): Promise<number> => {
 /**
  * Crée une nouvelle période de planning
  * @param period Données de la période
+ * @param associationId ID de l'association (optionnel, défaut: 'RD')
  * @returns ID de la période créée
  */
-export const createPlanningPeriod = async (period: Omit<PlanningPeriod, 'id'>): Promise<string> => {
+export const createPlanningPeriod = async (period: Omit<PlanningPeriod, 'id'>, associationId: string = 'RD'): Promise<string> => {
   try {
-    const docRef = await addDoc(collection(db, 'planning_periods'), {
+    const docRef = await addDoc(collection(db, getCollectionName(COLLECTIONS.PLANNING_PERIODS, associationId)), {
       ...period,
       startDate: period.startDate,
       endDate: period.endDate,
@@ -662,16 +697,17 @@ export const createPlanningPeriod = async (period: Omit<PlanningPeriod, 'id'>): 
 
 /**
  * Récupère toutes les périodes de planning
+ * @param associationId ID de l'association (optionnel, défaut: 'RD')
  * @returns Liste des périodes de planning
  */
-export const getPlanningPeriods = async (): Promise<PlanningPeriod[]> => {
+export const getPlanningPeriods = async (associationId: string = 'RD'): Promise<PlanningPeriod[]> => {
   try {
-    const snapshot = await getDocs(collection(db, 'planning_periods'));
+    const snapshot = await getDocs(collection(db, getCollectionName(COLLECTIONS.PLANNING_PERIODS, associationId)));
     return snapshot.docs.map(doc => ({
       id: doc.id,
       name: doc.data().name,
-      startDate: doc.data().startDate.toDate(),
-      endDate: doc.data().endDate.toDate(),
+      startDate: doc.data().firebaseTimestampToParisDate(startDate),
+      endDate: doc.data().firebaseTimestampToParisDate(endDate),
       status: doc.data().status,
       bagPhase: doc.data().bagPhase,
       isValidated: doc.data().isValidated,
@@ -687,13 +723,15 @@ export const getPlanningPeriods = async (): Promise<PlanningPeriod[]> => {
  * Met à jour une période de planning
  * @param periodId ID de la période
  * @param updates Mises à jour à appliquer
+ * @param associationId ID de l'association (optionnel, défaut: 'RD')
  */
 export const updatePlanningPeriod = async (
   periodId: string, 
-  updates: Partial<PlanningPeriod>
+  updates: Partial<PlanningPeriod>,
+  associationId: string = 'RD'
 ): Promise<void> => {
   try {
-    const periodRef = doc(db, 'planning_periods', periodId);
+    const periodRef = doc(db, getCollectionName(COLLECTIONS.PLANNING_PERIODS, associationId), periodId);
     
     // Préparer les données pour Firestore
     const updateData: any = { ...updates };
@@ -711,12 +749,13 @@ export const updatePlanningPeriod = async (
 /**
  * Supprime une période de planning et tous les plannings associés
  * @param periodId ID de la période
+ * @param associationId ID de l'association (optionnel, défaut: 'RD')
  */
-export const deletePlanningPeriod = async (periodId: string): Promise<void> => {
+export const deletePlanningPeriod = async (periodId: string, associationId: string = 'RD'): Promise<void> => {
   try {
     // Utiliser la fonction de suppression avec cascade
     const { deletePlanningPeriodWithCascade } = await import('./atomicOperations');
-    await deletePlanningPeriodWithCascade(periodId);
+    await deletePlanningPeriodWithCascade(periodId, associationId);
     console.log(`Période ${periodId} et toutes ses références supprimées avec succès`);
   } catch (error) {
     console.error('Error deleting planning period:', error);
@@ -727,11 +766,12 @@ export const deletePlanningPeriod = async (periodId: string): Promise<void> => {
 /**
  * Valide la BAG et fusionne la période future avec la période active
  * @param futurePeriodId ID de la période future à valider
+ * @param associationId ID de l'association (optionnel, défaut: 'RD')
  */
-export const validateBagAndMergePeriods = async (futurePeriodId: string): Promise<void> => {
+export const validateBagAndMergePeriods = async (futurePeriodId: string, associationId: string = 'RD'): Promise<void> => {
   try {
     // 1. Récupérer toutes les périodes
-    const periods = await getPlanningPeriods();
+    const periods = await getPlanningPeriods(associationId);
     
     // 2. Identifier la période future et la période active
     const futurePeriod = periods.find(p => p.id === futurePeriodId);
@@ -745,17 +785,17 @@ export const validateBagAndMergePeriods = async (futurePeriodId: string): Promis
     const batch = writeBatch(db);
     
     // Mettre à jour la période future
-    const futurePeriodRef = doc(db, 'planning_periods', futurePeriodId);
+    const futurePeriodRef = doc(db, getCollectionName(COLLECTIONS.PLANNING_PERIODS, associationId), futurePeriodId);
     batch.update(futurePeriodRef, {
       status: 'active',
       bagPhase: 'completed',
       isValidated: true,
-      validatedAt: new Date()
+      validatedAt: createParisDate()
     });
     
     // Si une période active existe, la marquer comme archivée
     if (activePeriod) {
-      const activePeriodRef = doc(db, 'planning_periods', activePeriod.id);
+      const activePeriodRef = doc(db, getCollectionName(COLLECTIONS.PLANNING_PERIODS, associationId), activePeriod.id);
       batch.update(activePeriodRef, {
         status: 'archived'
       });
@@ -765,7 +805,8 @@ export const validateBagAndMergePeriods = async (futurePeriodId: string): Promis
     await batch.commit();
     
     // 5. Mettre à jour la configuration des périodes de planning
-    await setDoc(doc(db, 'config', 'planning_periods'), {
+    const configPath = associationId === 'RD' ? 'config' : `config_${associationId}`;
+    await setDoc(doc(db, configPath, 'planning_periods'), {
       currentPeriod: {
         startDate: futurePeriod.startDate,
         endDate: futurePeriod.endDate
@@ -787,7 +828,7 @@ export const validateBagAndMergePeriods = async (futurePeriodId: string): Promis
 export const updateAssignmentsStatus = (
   assignments: Record<string, ShiftAssignment>
 ): Record<string, ShiftAssignment> => {
-  const yesterday = subDays(new Date(), 1);
+  const yesterday = subDays(createParisDate(), 1);
   const updatedAssignments: Record<string, ShiftAssignment> = {};
   
   // Utiliser une boucle for...in pour éviter les erreurs TypeScript avec Object.entries
@@ -811,17 +852,19 @@ export const updateAssignmentsStatus = (
  * Souscrire aux plannings d'un utilisateur en temps réel
  * @param userId ID de l'utilisateur
  * @param callback Fonction appelée à chaque mise à jour des données
+ * @param associationId ID de l'association (optionnel, défaut: 'RD')
  * @returns Fonction pour annuler la souscription
  */
 export const subscribeToUserPlanning = (
   userId: string,
-  callback: (assignments: Record<string, any>) => void
+  callback: (assignments: Record<string, any>) => void,
+  associationId: string = 'RD'
 ): (() => void) => {
   try {
     console.log('Mise en place de la souscription au planning de l\'utilisateur:', userId);
     
     // Référence au document de planning de l'utilisateur
-    const planningRef = doc(db, 'generated_plannings', userId);
+    const planningRef = doc(db, getCollectionName(COLLECTIONS.GENERATED_PLANNINGS, associationId), userId);
     
     // Souscrire aux changements
     const unsubscribe = onSnapshot(planningRef, (snapshot) => {
@@ -861,16 +904,18 @@ export const subscribeToUserPlanning = (
  * @param userId ID de l'utilisateur
  * @param startDate Date de début
  * @param endDate Date de fin
+ * @param associationId ID de l'association (optionnel, défaut: 'RD')
  * @returns Contenu CSV
  */
 export const exportUserPlanningHistoryToCsv = async (
   userId: string,
   startDate: Date,
-  endDate: Date
+  endDate: Date,
+  associationId: string = 'RD'
 ): Promise<string> => {
   try {
     // 1. Récupérer le planning de l'utilisateur
-    const planning = await getGeneratedPlanning(userId);
+    const planning = await getGeneratedPlanning(userId, undefined, associationId);
     
     if (!planning) {
       throw new Error('Planning non trouvé');
@@ -911,7 +956,7 @@ export const exportUserPlanningHistoryToCsv = async (
     const headers = ['Date', 'Période', 'Type de garde', 'Créneau horaire', 'Statut'];
     const rows = Object.entries(filteredAssignments).map(([key, assignment]) => {
       const [dateStr, period] = key.split('-');
-      const formattedDate = format(new Date(dateStr), 'dd/MM/yyyy');
+      const formattedDate = formatParisDate(new Date(dateStr), 'dd/MM/yyyy');
       const periodLabel = period === 'M' ? 'Matin' : period === 'AM' ? 'Après-midi' : 'Soir';
       
       return [
@@ -940,5 +985,129 @@ export const exportUserPlanningHistoryToCsv = async (
   } catch (error) {
     console.error('Error exporting user planning history:', error);
     throw new Error('Erreur lors de l\'export de l\'historique de planning');
+  }
+};
+
+/**
+ * Récupère tous les types de gardes uniques depuis les plannings générés
+ * Retourne un objet organisé par période (M/AM/S) avec les types de gardes et leurs métadonnées
+ * @param associationId ID de l'association (optionnel, défaut: 'RD')
+ * @returns Objet avec les types de gardes organisés par période
+ */
+export const getAllShiftTypesFromPlannings = async (
+  associationId: string = 'RD'
+): Promise<{
+  M: Record<string, { count: number; sites: string[]; timeSlots: string[] }>;
+  AM: Record<string, { count: number; sites: string[]; timeSlots: string[] }>;
+  S: Record<string, { count: number; sites: string[]; timeSlots: string[] }>;
+}> => {
+  try {
+    console.log('Récupération de tous les types de gardes depuis les plannings...');
+    
+    // Structure pour stocker les résultats
+    const shiftTypesByPeriod: {
+      M: Record<string, { count: number; sites: Set<string>; timeSlots: Set<string> }>;
+      AM: Record<string, { count: number; sites: Set<string>; timeSlots: Set<string> }>;
+      S: Record<string, { count: number; sites: Set<string>; timeSlots: Set<string> }>;
+    } = {
+      M: {},
+      AM: {},
+      S: {}
+    };
+    
+    // Récupérer tous les plannings générés
+    const planningsSnapshot = await getDocs(
+      collection(db, getCollectionName(COLLECTIONS.GENERATED_PLANNINGS, associationId))
+    );
+    
+    // Parcourir chaque planning utilisateur
+    planningsSnapshot.forEach(doc => {
+      const userData = doc.data();
+      
+      // Parcourir toutes les périodes de l'utilisateur
+      if (userData.periods) {
+        Object.values(userData.periods).forEach((periodData: any) => {
+          if (periodData && periodData.assignments) {
+            // Parcourir toutes les assignations
+            Object.entries(periodData.assignments).forEach(([key, assignment]: [string, any]) => {
+              const period = assignment.type || assignment.period; // M, AM, ou S
+              const shiftType = assignment.shiftType;
+              const site = assignment.site || '';
+              const timeSlot = assignment.timeSlot;
+              
+              // Vérifier que la période est valide
+              if (['M', 'AM', 'S'].includes(period) && shiftType) {
+                // Initialiser l'entrée si elle n'existe pas
+                if (!shiftTypesByPeriod[period as 'M' | 'AM' | 'S'][shiftType]) {
+                  shiftTypesByPeriod[period as 'M' | 'AM' | 'S'][shiftType] = {
+                    count: 0,
+                    sites: new Set(),
+                    timeSlots: new Set()
+                  };
+                }
+                
+                // Mettre à jour les statistiques
+                const entry = shiftTypesByPeriod[period as 'M' | 'AM' | 'S'][shiftType];
+                entry.count++;
+                if (site) entry.sites.add(site);
+                if (timeSlot) entry.timeSlots.add(timeSlot);
+              }
+            });
+          }
+        });
+      }
+      
+      // Support pour l'ancienne structure (assignments directement)
+      if (userData.assignments) {
+        Object.entries(userData.assignments).forEach(([key, assignment]: [string, any]) => {
+          const period = assignment.type || assignment.period;
+          const shiftType = assignment.shiftType;
+          const site = assignment.site || '';
+          const timeSlot = assignment.timeSlot;
+          
+          if (['M', 'AM', 'S'].includes(period) && shiftType) {
+            if (!shiftTypesByPeriod[period as 'M' | 'AM' | 'S'][shiftType]) {
+              shiftTypesByPeriod[period as 'M' | 'AM' | 'S'][shiftType] = {
+                count: 0,
+                sites: new Set(),
+                timeSlots: new Set()
+              };
+            }
+            
+            const entry = shiftTypesByPeriod[period as 'M' | 'AM' | 'S'][shiftType];
+            entry.count++;
+            if (site) entry.sites.add(site);
+            if (timeSlot) entry.timeSlots.add(timeSlot);
+          }
+        });
+      }
+    });
+    
+    // Convertir les Sets en Arrays pour le résultat final
+    const result = {
+      M: {} as Record<string, { count: number; sites: string[]; timeSlots: string[] }>,
+      AM: {} as Record<string, { count: number; sites: string[]; timeSlots: string[] }>,
+      S: {} as Record<string, { count: number; sites: string[]; timeSlots: string[] }>
+    };
+    
+    // Convertir et trier chaque période
+    (['M', 'AM', 'S'] as const).forEach(period => {
+      const sortedTypes = Object.entries(shiftTypesByPeriod[period])
+        .sort(([a], [b]) => a.localeCompare(b, 'fr'));
+      
+      sortedTypes.forEach(([shiftType, data]) => {
+        result[period][shiftType] = {
+          count: data.count,
+          sites: Array.from(data.sites).sort(),
+          timeSlots: Array.from(data.timeSlots).sort()
+        };
+      });
+    });
+    
+    console.log('Types de gardes récupérés:', result);
+    return result;
+  } catch (error) {
+    console.error('Erreur lors de la récupération des types de gardes:', error);
+    throw new Error('Erreur lors de la récupération des types de gardes depuis les plannings');
   }
 };

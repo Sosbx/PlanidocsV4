@@ -1,4 +1,5 @@
 import { collection, doc, addDoc, getDocs, updateDoc, query, orderBy, where, runTransaction, serverTimestamp, Timestamp, deleteDoc } from 'firebase/firestore';
+import { createParisDate, firebaseTimestampToParisDate, formatParisDate } from '@/utils/timezoneUtils';
 import { db } from '../config';
 import { format } from 'date-fns';
 import { COLLECTIONS, createExchangeValidationError, ShiftExchange } from './types';
@@ -16,7 +17,7 @@ export const addShiftExchange = async (exchange: Omit<ShiftExchange, 'id' | 'cre
     // Rechercher d'abord un échange existant pour cette garde
     const existingExchangeQuery = query(
       collection(db, COLLECTIONS.EXCHANGES),
-      where('date', '==', format(new Date(exchange.date), 'yyyy-MM-dd')),
+      where('date', '==', formatParisDate(new Date(exchange.date), 'yyyy-MM-dd')),
       where('period', '==', exchange.period),
       where('userId', '==', exchange.userId)
     );
@@ -67,9 +68,28 @@ export const addShiftExchange = async (exchange: Omit<ShiftExchange, 'id' | 'cre
       } else {
         // Créer un nouvel échange si aucun n'existe
         const exchangeRef = doc(collection(db, COLLECTIONS.EXCHANGES));
+        
+        // Debug pour AVIT
+        if (exchange.userId === 'naRhqjhzpWhcOMCZWCqftT8ArbH3') {
+          console.log('[DEBUG AVIT Create] Date originale:', exchange.date);
+          console.log('[DEBUG AVIT Create] Type de date:', typeof exchange.date);
+          console.log('[DEBUG AVIT Create] Date formatée:', formatParisDate(new Date(exchange.date), 'yyyy-MM-dd'));
+        }
+        
+        // S'assurer que la date est correctement formatée
+        let formattedDate = exchange.date;
+        if (typeof exchange.date === 'string' && exchange.date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          // La date est déjà au bon format
+          formattedDate = exchange.date;
+        } else {
+          // Convertir et formater la date
+          const dateObj = typeof exchange.date === 'string' ? new Date(exchange.date) : exchange.date;
+          formattedDate = formatParisDate(dateObj, 'yyyy-MM-dd');
+        }
+        
         transaction.set(exchangeRef, {
           ...exchange,
-          date: format(new Date(exchange.date), 'yyyy-MM-dd'),
+          date: formattedDate,
           createdAt: Timestamp.now(),
           lastModified: Timestamp.now(),
           status: 'pending',
@@ -134,7 +154,7 @@ export const removeShiftExchange = async (exchangeId: string): Promise<void> => 
  */
 export const getShiftExchanges = async (): Promise<ShiftExchange[]> => {
   try {
-    const today = format(new Date(), 'yyyy-MM-dd');
+    const today = formatParisDate(createParisDate(), 'yyyy-MM-dd');
     // Essayer d'abord avec l'index composé
     try {
       const q = query(
@@ -146,12 +166,12 @@ export const getShiftExchanges = async (): Promise<ShiftExchange[]> => {
       const querySnapshot = await getDocs(q);
       const exchanges = querySnapshot.docs.map(doc => {
         const data = doc.data();
-        let createdAt = new Date().toISOString();
+        let createdAt = createParisDate().toISOString();
         
         if (data.createdAt && typeof data.createdAt === 'object') {
           const timestamp = data.createdAt as any;
           if (typeof timestamp.toDate === 'function') {
-            createdAt = timestamp.toDate().toISOString();
+            createdAt = firebaseTimestampToParisDate(timestamp).toISOString();
           }
         } else if (typeof data.createdAt === 'string') {
           createdAt = data.createdAt;
@@ -192,12 +212,12 @@ export const getShiftExchanges = async (): Promise<ShiftExchange[]> => {
         const exchanges = querySnapshot.docs
           .map(doc => {
             const data = doc.data();
-            let createdAt = new Date().toISOString();
+            let createdAt = createParisDate().toISOString();
             
             if (data.createdAt && typeof data.createdAt === 'object') {
               const timestamp = data.createdAt as any;
               if (typeof timestamp.toDate === 'function') {
-                createdAt = timestamp.toDate().toISOString();
+                createdAt = firebaseTimestampToParisDate(timestamp).toISOString();
               }
             } else if (typeof data.createdAt === 'string') {
               createdAt = data.createdAt;

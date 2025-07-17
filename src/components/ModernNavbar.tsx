@@ -3,8 +3,6 @@ import { Link, NavLink, useLocation } from 'react-router-dom';
 import { 
   Calendar, 
   RefreshCw, 
-  Bell, 
-  Search, 
   Menu, 
   X, 
   Settings,
@@ -25,7 +23,6 @@ import { useFeatureFlags } from '../context/featureFlags/FeatureFlagsContext';
 import { FEATURES } from '../types/featureFlags';
 import Logo from './common/Logo';
 import { getUserInitials } from '../features/users/utils/userUtils';
-import { motion, AnimatePresence } from 'framer-motion';
 
 interface NavItemProps {
   to: string;
@@ -53,12 +50,7 @@ const NavItem: React.FC<NavItemProps> = ({ to, icon: Icon, label, onClick }) => 
         <Icon className={`h-5 w-5 transition-transform group-hover:scale-110`} />
         <span className="text-xs whitespace-nowrap">{label}</span>
         {isActive && (
-          <motion.div
-            layoutId="activeTab"
-            className="absolute inset-0 bg-white/10 rounded-xl -z-10"
-            initial={false}
-            transition={{ type: "spring", duration: 0.5 }}
-          />
+          <div className="absolute inset-0 bg-white/10 rounded-xl -z-10 transition-all duration-300" />
         )}
       </>
     )}
@@ -70,19 +62,19 @@ const ModernNavbar: React.FC = () => {
   const { notifications, markAsRead, markAllAsRead } = useNotifications();
   const { canAccessSuperAdmin, isSuperAdminMode } = useSuperAdmin();
   const { getFeatureStatus } = useFeatureFlags();
-  const location = useLocation();
+  const _location = useLocation();
   
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [navbarVisible, setNavbarVisible] = useState(true);
   const [lastScrollY, setLastScrollY] = useState(0);
-  const [isMobile, setIsMobile] = useState(false);
+  const [_isMobile, _setIsMobile] = useState(false);
   
   const profileRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
+      _setIsMobile(window.innerWidth < 768);
     };
     
     checkMobile();
@@ -124,7 +116,7 @@ const ModernNavbar: React.FC = () => {
 
   if (!user) return null;
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const _unreadCount = notifications.filter(n => !n.read).length;
   const isAdmin = user.roles?.isAdmin || user.roles?.isManager;
   const isOnlyAdmin = isAdmin && !user.roles?.isUser;
 
@@ -153,8 +145,9 @@ const ModernNavbar: React.FC = () => {
     // Sinon, afficher les pages utilisateur normales
     const userItems = [
       { to: '/planning', icon: Calendar, label: 'Planning', feature: FEATURES.PLANNING },
-      { to: '/shift-exchange', icon: Repeat, label: 'BaG', feature: FEATURES.SHIFT_EXCHANGE },
       { to: '/direct-exchange', icon: RefreshCw, label: 'Échanges', feature: FEATURES.DIRECT_EXCHANGE },
+      { to: '/shift-exchange', icon: Repeat, label: 'BaG', feature: FEATURES.SHIFT_EXCHANGE },
+      { to: '/user', icon: CalendarOff, label: 'Désidérata', feature: FEATURES.DESIDERATA },
     ];
     
     // Filtrer selon les feature flags sauf en mode super admin
@@ -165,14 +158,6 @@ const ModernNavbar: React.FC = () => {
       // Sinon, cacher les items désactivés ET en dev
       return status !== 'disabled' && status !== 'dev';
     });
-    
-    if (user.roles?.isUser) {
-      // Vérifier aussi le feature flag pour les désidérata
-      const desiderataStatus = getFeatureStatus(FEATURES.DESIDERATA);
-      if ((canAccessSuperAdmin && isSuperAdminMode) || (desiderataStatus !== 'disabled' && desiderataStatus !== 'dev')) {
-        mainNavItems.unshift({ to: '/user', icon: CalendarOff, label: 'Désidérata', feature: FEATURES.DESIDERATA });
-      }
-    }
   }
 
   return (
@@ -232,19 +217,14 @@ const ModernNavbar: React.FC = () => {
                   `} />
                 </button>
 
-                <AnimatePresence>
-                  {isProfileOpen && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 10 }}
-                      transition={{ duration: 0.2 }}
-                      className="
-                        absolute right-0 mt-2 w-64
-                        bg-white rounded-2xl shadow-xl
-                        border border-gray-200
-                        overflow-hidden
-                      "
+                {isProfileOpen && (
+                  <div className="
+                    absolute right-0 mt-2 w-64
+                    bg-white rounded-2xl shadow-xl
+                    border border-gray-200
+                    overflow-hidden
+                    animate-slide-down
+                  "
                     >
                       {/* User Info */}
                       <div className="p-4 border-b border-gray-100">
@@ -424,9 +404,8 @@ const ModernNavbar: React.FC = () => {
                           Se déconnecter
                         </button>
                       </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                  </div>
+                )}
               </div>
 
               {/* Mobile Menu Toggle - Same as profile button */}
@@ -455,23 +434,17 @@ const ModernNavbar: React.FC = () => {
       </nav>
 
       {/* Mobile Bottom Navigation - Only show when navbar is hidden */}
-      <AnimatePresence>
-        {!navbarVisible && window.innerWidth < 768 && (
+      {!navbarVisible && window.innerWidth < 768 && (
           <>
             {/* Spacer to prevent content from being hidden behind bottom nav */}
             <div className="h-14 md:hidden" />
             
-            <motion.nav
-              initial={{ y: 100 }}
-              animate={{ y: 0 }}
-              exit={{ y: 100 }}
-              transition={{ type: 'spring', damping: 25 }}
-              className="
-                fixed bottom-0 left-0 right-0 z-[9998]
-                bg-white/95 backdrop-blur-sm
-                border-t border-gray-200/50
-                shadow-lg md:hidden
-              "
+            <nav className="
+              fixed bottom-0 left-0 right-0 z-[9998]
+              bg-white/95 backdrop-blur-sm
+              border-t border-gray-200/50
+              shadow-lg md:hidden
+            "
             >
             <div className="flex items-center justify-around h-14 px-2">
               {mainNavItems.slice(0, 4).map(item => (
@@ -507,36 +480,26 @@ const ModernNavbar: React.FC = () => {
                 <span className="text-[10px]">Menu</span>
               </button>
             </div>
-          </motion.nav>
-          </>
-        )}
-      </AnimatePresence>
+          </nav>
+        </>
+      )}
 
       {/* Mobile Slide Menu */}
-      <AnimatePresence>
-        {isMobileMenuOpen && (
+      {isMobileMenuOpen && (
           <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+            <div
               onClick={() => setIsMobileMenuOpen(false)}
               className="
                 md:hidden fixed inset-0 z-50
-                bg-black/50 backdrop-blur-sm
+                bg-black/50 backdrop-blur-sm animate-fade-in
               "
             />
             
-            <motion.div
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'spring', damping: 30 }}
-              className="
-                md:hidden fixed right-0 top-0 bottom-0 z-50
-                w-80 bg-white shadow-2xl
-                overflow-y-auto
-              "
+            <div className="
+              md:hidden fixed right-0 top-0 bottom-0 z-50
+              w-80 bg-white shadow-2xl
+              overflow-y-auto animate-slide-in-right
+            "
             >
               <div className="sticky top-0 bg-white border-b border-gray-200 p-4">
                 <div className="flex items-center justify-between">
@@ -761,10 +724,9 @@ const ModernNavbar: React.FC = () => {
                   </button>
                 </div>
               </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+            </div>
+        </>
+      )}
 
       {/* Spacer for fixed navbar */}
       <div className="h-16" />

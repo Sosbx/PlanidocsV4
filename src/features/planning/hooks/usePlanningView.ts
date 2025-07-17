@@ -1,5 +1,13 @@
 import { useState, useCallback, useMemo } from 'react';
-import { addMonths, subMonths, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
+import { 
+  createParisDate, 
+  startOfMonthParis, 
+  endOfMonthParis, 
+  startOfYearParis, 
+  endOfYearParis,
+  addMonthsParis,
+  subMonthsParis
+} from '../../../utils/timezoneUtils';
 import { ViewType, DateRange } from '../types/viewTypes';
 
 /**
@@ -38,35 +46,35 @@ export const usePlanningView = (
       return initialDateRange;
     }
     
-    const today = new Date();
+    const today = createParisDate();
     
     // Sinon, définir la plage de dates initiale en fonction du type de vue
     switch (initialView) {
       case 'month':
         return {
-          startDate: startOfMonth(today),
-          endDate: endOfMonth(today)
+          startDate: startOfMonthParis(today),
+          endDate: endOfMonthParis(today)
         };
       case 'quadrimester':
         return {
-          startDate: startOfMonth(today),
-          endDate: endOfMonth(addMonths(today, 3))
+          startDate: startOfMonthParis(today),
+          endDate: endOfMonthParis(addMonthsParis(today, 3))
         };
       case 'semester':
         return {
-          startDate: startOfMonth(today),
-          endDate: endOfMonth(addMonths(today, 5))
+          startDate: startOfMonthParis(today),
+          endDate: endOfMonthParis(addMonthsParis(today, 5))
         };
       case 'year':
         return {
-          startDate: startOfYear(today),
-          endDate: endOfYear(today)
+          startDate: startOfYearParis(today),
+          endDate: endOfYearParis(today)
         };
       case 'custom':
       default:
         return {
-          startDate: startOfMonth(today),
-          endDate: endOfMonth(today)
+          startDate: startOfMonthParis(today),
+          endDate: endOfMonthParis(today)
         };
     }
   });
@@ -86,33 +94,33 @@ export const usePlanningView = (
   /**
    * Met à jour la plage de dates en fonction du type de vue
    */
-  const updateDateRangeForViewType = useCallback((type: ViewType, baseDate: Date = new Date()) => {
+  const updateDateRangeForViewType = useCallback((type: ViewType, baseDate: Date = createParisDate()) => {
     switch (type) {
       case 'month':
         setDateRange({
-          startDate: startOfMonth(baseDate),
-          endDate: endOfMonth(baseDate)
+          startDate: startOfMonthParis(baseDate),
+          endDate: endOfMonthParis(baseDate)
         });
         setMonthsToShow(1);
         break;
       case 'quadrimester':
         setDateRange({
-          startDate: startOfMonth(baseDate),
-          endDate: endOfMonth(addMonths(baseDate, 3))
+          startDate: startOfMonthParis(baseDate),
+          endDate: endOfMonthParis(addMonthsParis(baseDate, 3))
         });
         setMonthsToShow(4);
         break;
       case 'semester':
         setDateRange({
-          startDate: startOfMonth(baseDate),
-          endDate: endOfMonth(addMonths(baseDate, 5))
+          startDate: startOfMonthParis(baseDate),
+          endDate: endOfMonthParis(addMonthsParis(baseDate, 5))
         });
         setMonthsToShow(6);
         break;
       case 'year':
         setDateRange({
-          startDate: startOfYear(baseDate),
-          endDate: endOfYear(baseDate)
+          startDate: startOfYearParis(baseDate),
+          endDate: endOfYearParis(baseDate)
         });
         setMonthsToShow(12);
         break;
@@ -150,23 +158,23 @@ export const usePlanningView = (
     
     switch (viewType) {
       case 'month':
-        updateDateRangeForViewType('month', addMonths(startDate, 1));
+        updateDateRangeForViewType('month', addMonthsParis(startDate, 1));
         break;
       case 'quadrimester':
-        updateDateRangeForViewType('quadrimester', addMonths(startDate, 4));
+        updateDateRangeForViewType('quadrimester', addMonthsParis(startDate, 4));
         break;
       case 'semester':
-        updateDateRangeForViewType('semester', addMonths(startDate, 6));
+        updateDateRangeForViewType('semester', addMonthsParis(startDate, 6));
         break;
       case 'year':
-        updateDateRangeForViewType('year', addMonths(startDate, 12));
+        updateDateRangeForViewType('year', addMonthsParis(startDate, 12));
         break;
       case 'custom':
         // Pour la vue personnalisée, avancer du nombre de mois défini
-        const newStartDate = addMonths(startDate, monthsToShow);
+        const newStartDate = addMonthsParis(startDate, monthsToShow);
         setDateRange({
           startDate: newStartDate,
-          endDate: endOfMonth(addMonths(newStartDate, monthsToShow - 1))
+          endDate: endOfMonthParis(addMonthsParis(newStartDate, monthsToShow - 1))
         });
         break;
     }
@@ -180,23 +188,23 @@ export const usePlanningView = (
     
     switch (viewType) {
       case 'month':
-        updateDateRangeForViewType('month', subMonths(startDate, 1));
+        updateDateRangeForViewType('month', subMonthsParis(startDate, 1));
         break;
       case 'quadrimester':
-        updateDateRangeForViewType('quadrimester', subMonths(startDate, 4));
+        updateDateRangeForViewType('quadrimester', subMonthsParis(startDate, 4));
         break;
       case 'semester':
-        updateDateRangeForViewType('semester', subMonths(startDate, 6));
+        updateDateRangeForViewType('semester', subMonthsParis(startDate, 6));
         break;
       case 'year':
-        updateDateRangeForViewType('year', subMonths(startDate, 12));
+        updateDateRangeForViewType('year', subMonthsParis(startDate, 12));
         break;
       case 'custom':
         // Pour la vue personnalisée, reculer du nombre de mois défini
-        const newStartDate = subMonths(startDate, monthsToShow);
+        const newStartDate = subMonthsParis(startDate, monthsToShow);
         setDateRange({
           startDate: newStartDate,
-          endDate: endOfMonth(addMonths(newStartDate, monthsToShow - 1))
+          endDate: endOfMonthParis(addMonthsParis(newStartDate, monthsToShow - 1))
         });
         break;
     }
@@ -206,7 +214,7 @@ export const usePlanningView = (
    * Réinitialise la vue à la date actuelle
    */
   const resetToToday = useCallback(() => {
-    updateDateRangeForViewType(viewType, new Date());
+    updateDateRangeForViewType(viewType, createParisDate());
   }, [viewType, updateDateRangeForViewType]);
   
   /**
@@ -226,7 +234,7 @@ export const usePlanningView = (
     if (viewType === 'custom') {
       setDateRange((prev: DateRange) => ({
         startDate: prev.startDate,
-        endDate: endOfMonth(addMonths(prev.startDate, months - 1))
+        endDate: endOfMonthParis(addMonthsParis(prev.startDate, months - 1))
       }));
     }
   }, [viewType]);

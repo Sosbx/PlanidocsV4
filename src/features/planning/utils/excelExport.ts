@@ -1,5 +1,6 @@
 import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { formatParisDate } from '@/utils/timezoneUtils';
+import { frLocale } from '../../../utils/dateLocale';
 
 /**
  * Exporte le planning au format Excel
@@ -43,7 +44,7 @@ export const exportPlanningToExcel = (options: {
   // Log des informations pour le développement
   console.log('Données pour l\'exportation Excel:', {
     userName,
-    période: `${format(startDate, 'dd/MM/yyyy', { locale: fr })} - ${format(endDate, 'dd/MM/yyyy', { locale: fr })}`,
+    période: `${formatParisDate(startDate, 'dd/MM/yyyy', { locale: frLocale })} - ${formatParisDate(endDate, 'dd/MM/yyyy', { locale: frLocale })}`,
     nombreSélections: Object.keys(selections).length
   });
 };

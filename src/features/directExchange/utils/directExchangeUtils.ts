@@ -1,4 +1,5 @@
 import { ShiftPeriod } from '../../../types/exchange';
+import { createParisDate, formatParisDate } from '@/utils/timezoneUtils';
 import { standardizePeriod } from '../../../utils/dateUtils';
 import { format } from 'date-fns';
 
@@ -49,7 +50,7 @@ export const normalizeDate = (date: string | Date, fallbackDate?: string): strin
   try {
     // Si c'est déjà une Date, la formater
     if (date instanceof Date) {
-      return format(date, 'yyyy-MM-dd');
+      return formatParisDate(date, 'yyyy-MM-dd');
     }
     
     // Si c'est une chaîne, vérifier si c'est déjà au format YYYY-MM-DD
@@ -69,15 +70,15 @@ export const normalizeDate = (date: string | Date, fallbackDate?: string): strin
       // Dernier recours: parser avec Date()
       const dateObj = new Date(date);
       if (!isNaN(dateObj.getTime())) {
-        return format(dateObj, 'yyyy-MM-dd');
+        return formatParisDate(dateObj, 'yyyy-MM-dd');
       }
     }
     
     // Si on arrive ici, la normalisation a échoué
-    return fallbackDate || format(new Date(), 'yyyy-MM-dd');
+    return fallbackDate || formatParisDate(createParisDate(), 'yyyy-MM-dd');
   } catch (error) {
     console.error(`Erreur lors de la normalisation de la date ${date}:`, error);
-    return fallbackDate || format(new Date(), 'yyyy-MM-dd');
+    return fallbackDate || formatParisDate(createParisDate(), 'yyyy-MM-dd');
   }
 };
 
@@ -103,7 +104,7 @@ export const extractDateAndPeriodFromKey = (key: string): { date: string; period
 export const formatDateForDisplay = (date: string | Date, displayFormat = 'dd/MM/yyyy'): string => {
   try {
     const dateObj = typeof date === 'string' ? new Date(date) : date;
-    return format(dateObj, displayFormat);
+    return formatParisDate(dateObj, displayFormat);
   } catch (error) {
     console.error(`Erreur lors du formatage de la date ${date}:`, error);
     return String(date);
@@ -116,7 +117,7 @@ export const formatDateForDisplay = (date: string | Date, displayFormat = 'dd/MM
  * @returns Période formatée
  */
 export const formatPeriodForDisplay = (period: string | ShiftPeriod): string => {
-  let periodStr = typeof period === 'string' ? period : String(period);
+  const periodStr = typeof period === 'string' ? period : String(period);
   
   switch (standardizePeriod(periodStr)) {
     case 'M':

@@ -1,7 +1,8 @@
 import React from 'react';
+import { formatParisDate } from '@/utils/timezoneUtils';
 import { X } from 'lucide-react';
 import { format, addDays, subDays, isSameDay } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { frLocale } from '../../utils/dateLocale';
 import { isGrayedOut } from '../../utils/dateUtils';
 import '../../styles/BadgeStyles.css';
 import type { ShiftAssignment } from '../../types/planning';
@@ -74,7 +75,7 @@ const PlanningPreviewModal: React.FC<PlanningPreviewModalProps> = ({
         <div className="p-2">
           <div className="flex justify-between items-center mb-1">
             <div className="text-xs font-medium text-gray-700">
-              {format(selectedDate, 'EEEE d MMM', { locale: fr })}
+              {formatParisDate(selectedDate, 'EEEE d MMM', { locale: frLocale })}
             </div>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-500 p-0.5">
               <X className="h-3 w-3" />
@@ -94,7 +95,7 @@ const PlanningPreviewModal: React.FC<PlanningPreviewModalProps> = ({
             </thead>
             <tbody>
               {dates.map(date => {
-                const dateStr = format(date, 'yyyy-MM-dd');
+                const dateStr = formatParisDate(date, 'yyyy-MM-dd');
                 const isSelected = isSameDay(selectedDate, date);
                 const isWeekend = isGrayedOut(date);
 
@@ -106,8 +107,8 @@ const PlanningPreviewModal: React.FC<PlanningPreviewModalProps> = ({
                   `}>
                     <td className="py-1 px-1">
                       <div className="flex items-baseline gap-1">
-                        <span className={`${isSelected ? 'text-indigo-700' : ''}`}>{format(date, 'd')}</span>
-                        <span className="text-[10px] text-gray-500">{format(date, 'E', { locale: fr })}</span>
+                        <span className={`${isSelected ? 'text-indigo-700' : ''}`}>{formatParisDate(date, 'd')}</span>
+                        <span className="text-[10px] text-gray-500">{formatParisDate(date, 'E', { locale: frLocale })}</span>
                       </div>
                     </td>
                     {['M', 'AM', 'S'].map(period => {

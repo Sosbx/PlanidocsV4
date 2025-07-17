@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { PieChart, BarChart, ArrowDownUp, Filter } from 'lucide-react';
+import { PieChart, BarChart, ArrowDownUp, Filter, ChevronUp, ChevronDown } from 'lucide-react';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from "../../../lib/firebase/config";
 import type { ExchangeHistory } from '../types';
@@ -10,7 +10,7 @@ import type { ShiftExchange as PlanningShiftExchange } from '../../../types/plan
 type ShiftExchange = FeatureShiftExchange | PlanningShiftExchange;
 import type { User } from '../../../types/users';
 import { isGrayedOut } from '../../../utils/dateUtils';
-import Toast from '../../../components/Toast';
+import Toast from '../../../components/common/Toast';
 import '../../../styles/BadgeStyles.css';
 
 // Forcer un rendu initial du tableau
@@ -42,6 +42,9 @@ type StatsFilter = {
   userId: string; // ID de l'utilisateur ou 'all'
 };
 
+type SortColumn = 'name' | 'proposedTotal' | 'positionedTotal' | 'receivedTotal' | 'balance' | 'weekendOrHoliday';
+type SortDirection = 'asc' | 'desc';
+
 /**
  * Composant de visualisation des statistiques de la bourse aux gardes
  * Affiche des tableaux et graphiques sur l'activité des utilisateurs
@@ -52,6 +55,15 @@ type StatsFilter = {
  * @param className - Classes CSS additionnelles
  */
 const BagStatsViz: React.FC<BagStatsVizProps> = ({ users, exchanges, history, className = '' }) => {
+  console.log('BagStatsViz - Props reçues:', {
+    usersLength: users?.length || 0,
+    exchangesLength: exchanges?.length || 0,
+    historyLength: history?.length || 0,
+    users,
+    exchanges,
+    history
+  });
+  
   const [filter, setFilter] = useState<StatsFilter>({
     period: 'all',
     dayType: 'all',
@@ -60,6 +72,9 @@ const BagStatsViz: React.FC<BagStatsVizProps> = ({ users, exchanges, history, cl
   const [toast, setToast] = useState({ visible: false, message: '', type: 'info' as 'success' | 'error' | 'info' });
   // Par défaut on commence en mode tableau, mais on le forcera à se recharger
   const [viewMode, setViewMode] = useState<'table' | 'chart'>('table');
+  // État pour le tri
+  const [sortColumn, setSortColumn] = useState<SortColumn>('name');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   
   // Effet pour forcer un rechargement du tableau au premier affichage
   useEffect(() => {
@@ -79,6 +94,13 @@ const BagStatsViz: React.FC<BagStatsVizProps> = ({ users, exchanges, history, cl
 
   // Préparation des données pour le tableau
   const statsData = useMemo(() => {
+    console.log('BagStatsViz - Calcul des stats:', {
+      usersCount: users?.length || 0,
+      exchangesCount: exchanges?.length || 0,
+      historyCount: history?.length || 0,
+      hasData: !!(users && exchanges && history)
+    });
+    
     if (!users || !exchanges || !history) return [];
 
     // Créer un tableau d'objets pour chaque utilisateur
@@ -147,6 +169,11 @@ const BagStatsViz: React.FC<BagStatsVizProps> = ({ users, exchanges, history, cl
       // Tri par nom
       .sort((a, b) => a.name.localeCompare(b.name));
 
+    console.log('BagStatsViz - Stats calculées:', {
+      userStatsCount: userStats.length,
+      firstUser: userStats[0]
+    });
+
     return userStats;
   }, [users, exchanges, history]);
 
@@ -194,11 +221,23 @@ const BagStatsViz: React.FC<BagStatsVizProps> = ({ users, exchanges, history, cl
     };
   }, [statsData]);
 
-  // Filtrage des données
+  // Fonction de tri
+  const handleSort = (column: SortColumn) => {
+    if (sortColumn === column) {
+      // Si on clique sur la même colonne, inverser la direction
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // Si on clique sur une nouvelle colonne, la trier par ordre croissant
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  // Filtrage et tri des données
   const filteredData = useMemo(() => {
     if (!statsData?.length) return [];
 
-    return statsData.filter(user => {
+    let filtered = statsData.filter(user => {
       // Filtrer par utilisateur
       if (filter.userId !== 'all' && user.id !== filter.userId) {
         return false;
@@ -207,7 +246,57 @@ const BagStatsViz: React.FC<BagStatsVizProps> = ({ users, exchanges, history, cl
       // Les autres filtres seraient appliqués ici de manière similaire
       return true;
     });
-  }, [statsData, filter]);
+
+    // Appliquer le tri
+    filtered.sort((a, b) => {
+      let aValue: any;
+      let bValue: any;
+
+      switch (sortColumn) {
+        case 'name':
+          aValue = a.name;
+          bValue = b.name;
+          break;
+        case 'proposedTotal':
+          aValue = a.proposedTotal;
+          bValue = b.proposedTotal;
+          break;
+        case 'positionedTotal':
+          aValue = a.positionedTotal;
+          bValue = b.positionedTotal;
+          break;
+        case 'receivedTotal':
+          aValue = a.receivedTotal;
+          bValue = b.receivedTotal;
+          break;
+        case 'balance':
+          aValue = a.balance;
+          bValue = b.balance;
+          break;
+        case 'weekendOrHoliday':
+          aValue = a.weekendOrHoliday;
+          bValue = b.weekendOrHoliday;
+          break;
+        default:
+          aValue = a.name;
+          bValue = b.name;
+      }
+
+      if (sortColumn === 'name') {
+        // Pour les noms, tri alphabétique
+        return sortDirection === 'asc' 
+          ? aValue.localeCompare(bValue)
+          : bValue.localeCompare(aValue);
+      } else {
+        // Pour les nombres, tri numérique
+        return sortDirection === 'asc' 
+          ? aValue - bValue
+          : bValue - aValue;
+      }
+    });
+
+    return filtered;
+  }, [statsData, filter, sortColumn, sortDirection]);
 
   return (
     <div className={`bg-white rounded-lg shadow-md overflow-hidden ${className}`}>
@@ -269,23 +358,77 @@ const BagStatsViz: React.FC<BagStatsVizProps> = ({ users, exchanges, history, cl
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Utilisateur
+                <th 
+                  scope="col" 
+                  className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('name')}
+                >
+                  <div className="flex items-center">
+                    Utilisateur
+                    {sortColumn === 'name' && (
+                      sortDirection === 'asc' ? <ChevronUp className="ml-1 h-3 w-3" /> : <ChevronDown className="ml-1 h-3 w-3" />
+                    )}
+                  </div>
                 </th>
-                <th scope="col" className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Gardes proposées
+                <th 
+                  scope="col" 
+                  className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('proposedTotal')}
+                >
+                  <div className="flex items-center justify-center">
+                    Gardes proposées
+                    {sortColumn === 'proposedTotal' && (
+                      sortDirection === 'asc' ? <ChevronUp className="ml-1 h-3 w-3" /> : <ChevronDown className="ml-1 h-3 w-3" />
+                    )}
+                  </div>
                 </th>
-                <th scope="col" className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  S'est positionné
+                <th 
+                  scope="col" 
+                  className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('positionedTotal')}
+                >
+                  <div className="flex items-center justify-center">
+                    S'est positionné
+                    {sortColumn === 'positionedTotal' && (
+                      sortDirection === 'asc' ? <ChevronUp className="ml-1 h-3 w-3" /> : <ChevronDown className="ml-1 h-3 w-3" />
+                    )}
+                  </div>
                 </th>
-                <th scope="col" className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Gardes reçues
+                <th 
+                  scope="col" 
+                  className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('receivedTotal')}
+                >
+                  <div className="flex items-center justify-center">
+                    Gardes reçues
+                    {sortColumn === 'receivedTotal' && (
+                      sortDirection === 'asc' ? <ChevronUp className="ml-1 h-3 w-3" /> : <ChevronDown className="ml-1 h-3 w-3" />
+                    )}
+                  </div>
                 </th>
-                <th scope="col" className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Équilibre
+                <th 
+                  scope="col" 
+                  className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('balance')}
+                >
+                  <div className="flex items-center justify-center">
+                    Équilibre
+                    {sortColumn === 'balance' && (
+                      sortDirection === 'asc' ? <ChevronUp className="ml-1 h-3 w-3" /> : <ChevronDown className="ml-1 h-3 w-3" />
+                    )}
+                  </div>
                 </th>
-                <th scope="col" className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Week-end/Fériés
+                <th 
+                  scope="col" 
+                  className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('weekendOrHoliday')}
+                >
+                  <div className="flex items-center justify-center">
+                    Week-end/Fériés
+                    {sortColumn === 'weekendOrHoliday' && (
+                      sortDirection === 'asc' ? <ChevronUp className="ml-1 h-3 w-3" /> : <ChevronDown className="ml-1 h-3 w-3" />
+                    )}
+                  </div>
                 </th>
               </tr>
             </thead>

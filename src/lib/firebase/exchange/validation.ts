@@ -1,4 +1,4 @@
-import { collection, getDocs, query, where, Transaction } from 'firebase/firestore';
+import { collection, getDocs, query, where, Transaction, getDoc } from 'firebase/firestore';
 import { db } from '../config';
 import { COLLECTIONS, createExchangeValidationError, PlanningVerificationResult } from './types';
 import type { ShiftExchange, ShiftAssignment } from './types';
@@ -256,3 +256,221 @@ export const verifyExchangeStatus = async (
   
   return { ...exchange, id: exchangeDoc.id };
 };
+
+/**
+ * Interface pour le résultat de vérification de cohérence
+ */
+export interface ExchangeCoherenceResult {
+  isCoherent: boolean;
+  exchange: ShiftExchange;
+  discrepancies?: {
+    dateDiscrepancy?: {
+      exchangeDate: string;
+      planningDate: string;
+    };
+    periodDiscrepancy?: {
+      exchangePeriod: string;
+      planningPeriod: string;
+    };
+    shiftTypeDiscrepancy?: {
+      exchangeShiftType: string;
+      planningShiftType: string;
+    };
+    timeSlotDiscrepancy?: {
+      exchangeTimeSlot: string;
+      planningTimeSlot: string;
+    };
+    notInPlanning?: boolean;
+  };
+  planningAssignment?: ShiftAssignment;
+}
+
+/**
+ * Vérifie la cohérence entre un échange et le planning de l'utilisateur
+ * @param exchange L'échange à vérifier
+ * @param userId ID de l'utilisateur (optionnel, utilise exchange.userId par défaut)
+ * @returns Résultat de la vérification de cohérence
+ */
+export const verifyExchangeCoherence = async (
+  exchange: ShiftExchange,
+  userId?: string
+): Promise<ExchangeCoherenceResult> => {
+  const targetUserId = userId || exchange.userId;
+  
+  try {
+    // Récupérer le planning de l'utilisateur
+    const planningRef = doc(db, COLLECTIONS.PLANNINGS, targetUserId);
+    const planningDoc = await getDoc(planningRef);
+    
+    if (!planningDoc.exists()) {
+      return {
+        isCoherent: false,
+        exchange,
+        discrepancies: { notInPlanning: true }
+      };
+    }
+    
+    const planning = planningDoc.data();
+    const assignmentKey = `${exchange.date}-${exchange.period}`;
+    
+    // Debug pour AVIT
+    if (targetUserId === 'naRhqjhzpWhcOMCZWCqftT8ArbH3') {
+      console.log('[COHERENCE CHECK AVIT] Vérification de cohérence pour:', {
+        exchangeId: exchange.id,
+        exchangeDate: exchange.date,
+        exchangePeriod: exchange.period,
+        assignmentKey
+      });
+    }
+    
+    // Rechercher l'assignment dans toutes les structures possibles
+    let assignment: ShiftAssignment | null = null;
+    let foundInPeriod: string | null = null;
+    
+    // Vérifier l'ancienne structure (assignments directement dans le document)
+    if (planning?.assignments && planning.assignments[assignmentKey]) {
+      assignment = planning.assignments[assignmentKey];
+      foundInPeriod = 'root';
+    }
+    
+    // Vérifier la nouvelle structure (par périodes)
+    if (!assignment && planning?.periods) {
+      for (const periodId in planning.periods) {
+        const periodData = planning.periods[periodId];
+        if (periodData?.assignments && periodData.assignments[assignmentKey]) {
+          assignment = periodData.assignments[assignmentKey];
+          foundInPeriod = periodId;
+          break;
+        }
+      }
+    }
+    
+    // Si pas d'assignment trouvé
+    if (!assignment) {
+      // Vérifier si c'est un problème de décalage de date (cas AVIT)
+      const possibleKeys = [
+        assignmentKey, // Date exacte
+        `${adjustDate(exchange.date, -1)}-${exchange.period}`, // Date -1 jour
+        `${adjustDate(exchange.date, 1)}-${exchange.period}`, // Date +1 jour
+      ];
+      
+      if (targetUserId === 'naRhqjhzpWhcOMCZWCqftT8ArbH3') {
+        console.log('[COHERENCE CHECK AVIT] Recherche avec clés alternatives:', possibleKeys);
+      }
+      
+      // Rechercher avec les dates alternatives
+      for (const altKey of possibleKeys) {
+        if (altKey === assignmentKey) continue; // Déjà vérifié
+        
+        // Vérifier l'ancienne structure
+        if (planning?.assignments && planning.assignments[altKey]) {
+          const altDate = altKey.split('-').slice(0, 3).join('-');
+          return {
+            isCoherent: false,
+            exchange,
+            discrepancies: {
+              dateDiscrepancy: {
+                exchangeDate: exchange.date,
+                planningDate: altDate
+              }
+            },
+            planningAssignment: planning.assignments[altKey]
+          };
+        }
+        
+        // Vérifier la nouvelle structure
+        if (planning?.periods) {
+          for (const periodId in planning.periods) {
+            const periodData = planning.periods[periodId];
+            if (periodData?.assignments && periodData.assignments[altKey]) {
+              const altDate = altKey.split('-').slice(0, 3).join('-');
+              return {
+                isCoherent: false,
+                exchange,
+                discrepancies: {
+                  dateDiscrepancy: {
+                    exchangeDate: exchange.date,
+                    planningDate: altDate
+                  }
+                },
+                planningAssignment: periodData.assignments[altKey]
+              };
+            }
+          }
+        }
+      }
+      
+      // Aucune garde trouvée même avec les dates alternatives
+      return {
+        isCoherent: false,
+        exchange,
+        discrepancies: { notInPlanning: true }
+      };
+    }
+    
+    // Vérifier la cohérence des données
+    const discrepancies: ExchangeCoherenceResult['discrepancies'] = {};
+    let hasDiscrepancies = false;
+    
+    // Vérifier le type de garde
+    if (assignment.shiftType !== exchange.shiftType) {
+      discrepancies.shiftTypeDiscrepancy = {
+        exchangeShiftType: exchange.shiftType,
+        planningShiftType: assignment.shiftType
+      };
+      hasDiscrepancies = true;
+    }
+    
+    // Vérifier le créneau horaire (comparaison flexible)
+    const assignmentStartTime = assignment.timeSlot.split(' - ')[0];
+    const exchangeStartTime = exchange.timeSlot.split(' - ')[0];
+    
+    if (assignmentStartTime !== exchangeStartTime) {
+      discrepancies.timeSlotDiscrepancy = {
+        exchangeTimeSlot: exchange.timeSlot,
+        planningTimeSlot: assignment.timeSlot
+      };
+      hasDiscrepancies = true;
+    }
+    
+    // Log pour AVIT
+    if (targetUserId === 'naRhqjhzpWhcOMCZWCqftT8ArbH3') {
+      console.log('[COHERENCE CHECK AVIT] Résultat:', {
+        isCoherent: !hasDiscrepancies,
+        foundInPeriod,
+        assignment,
+        discrepancies: hasDiscrepancies ? discrepancies : null
+      });
+    }
+    
+    return {
+      isCoherent: !hasDiscrepancies,
+      exchange,
+      discrepancies: hasDiscrepancies ? discrepancies : undefined,
+      planningAssignment: assignment
+    };
+    
+  } catch (error) {
+    console.error('Erreur lors de la vérification de cohérence:', error);
+    return {
+      isCoherent: false,
+      exchange,
+      discrepancies: { notInPlanning: true }
+    };
+  }
+};
+
+/**
+ * Fonction utilitaire pour ajuster une date
+ * @param dateStr Date au format YYYY-MM-DD
+ * @param days Nombre de jours à ajouter (négatif pour soustraire)
+ * @returns Date ajustée au format YYYY-MM-DD
+ */
+function adjustDate(dateStr: string, days: number): string {
+  const date = new Date(dateStr);
+  date.setDate(date.getDate() + days);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}

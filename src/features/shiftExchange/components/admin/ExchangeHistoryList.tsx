@@ -1,6 +1,7 @@
 import React from 'react';
+import { formatParisDate } from '@/utils/timezoneUtils';
 import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { frLocale } from '../../../../utils/dateLocale';
 import { RotateCcw, Send } from 'lucide-react';
 import '../../../../styles/BadgeStyles.css';
 import type { ExchangeHistory as ExchangeHistoryType, BagPhaseConfig } from '../../../../types/planning';
@@ -92,7 +93,7 @@ const ExchangeHistoryList: React.FC<ExchangeHistoryListProps> = ({
                   <td className="px-4 py-4">
                     <div className="flex items-center gap-2 mb-2">
                       <div className="text-sm font-medium text-gray-900">
-                        {format(exchangeDate, 'EEEE d MMMM', { locale: fr })}
+                        {formatParisDate(exchangeDate, 'EEEE d MMMM', { locale: frLocale })}
                       </div>
                       <span className="text-xs font-medium px-2 py-1 rounded-full bg-gray-100 text-gray-700">
                         ({getPeriodName(exchange.period)})
@@ -180,7 +181,7 @@ const ExchangeHistoryList: React.FC<ExchangeHistoryListProps> = ({
               <div>
                 <div className="flex items-center gap-2 mb-3">
                   <div className="text-sm font-medium text-gray-900">
-                    {format(exchangeDate, 'EEEE d MMMM', { locale: fr })}
+                    {formatParisDate(exchangeDate, 'EEEE d MMMM', { locale: frLocale })}
                   </div>
                   <span className="text-xs font-medium px-2 py-1 rounded-full bg-gray-100 text-gray-700">
                     {getPeriodName(exchange.period)}

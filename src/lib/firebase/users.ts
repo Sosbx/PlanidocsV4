@@ -13,21 +13,9 @@ import { getDesiderata } from './desiderata';
 import { ensureUserRoles } from '../../features/users/utils/userUtils';
 import type { User } from '../../features/users/types';
 import { ASSOCIATIONS } from '../../constants/associations';
+import { getCollectionName, COLLECTIONS } from '../../utils/collectionUtils';
 
-const USERS_COLLECTION = 'users';
-
-/**
- * Fonction utilitaire pour obtenir le nom de collection approprié selon l'association
- * @param baseCollection Nom de base de la collection
- * @param associationId Identifiant de l'association (RD ou RG)
- * @returns Nom de la collection adapté à l'association
- */
-export const getCollectionName = (baseCollection: string, associationId: string = ASSOCIATIONS.RIVE_DROITE): string => {
-  if (associationId === ASSOCIATIONS.RIVE_DROITE) {
-    return baseCollection; // Pas de modification pour préserver l'existant
-  }
-  return `${baseCollection}_${associationId}`; // Ex: "users_RG"
-};
+const USERS_COLLECTION = COLLECTIONS.USERS;
 
 export const getUserByEmail = async (email: string, associationId: string = ASSOCIATIONS.RIVE_DROITE): Promise<User | null> => {
   try {
@@ -185,7 +173,7 @@ export const deleteUser = async (id: string, associationId: string = ASSOCIATION
 
     // 4. Supprimer les desiderata de l'utilisateur
     try {
-      const desiderataCollection = getCollectionName('desiderata', associationId);
+      const desiderataCollection = getCollectionName(COLLECTIONS.DESIDERATA, associationId);
       const desiderata = await getDesiderata(id, associationId);
       if (desiderata) {
         await deleteDoc(doc(db, desiderataCollection, id));

@@ -15,7 +15,11 @@ export const loadCsvAllExporter = () => import('./csvExport').then(module => mod
 // Exportation Generated Planning
 export const loadGeneratedPlanningExporters = () => import('./generatedPlanningExport').then(module => ({
   toCsv: module.exportGeneratedPlanningToCSV,
-  toPdf: module.exportGeneratedPlanningToPDF,
+  toPdf: (assignments: any, userName: string, startDate: Date, endDate: Date, desiderata?: any, showAssignmentsOnly?: boolean) => {
+    // La fonction exportGeneratedPlanningToPDF gère maintenant elle-même le téléchargement
+    module.exportGeneratedPlanningToPDF(assignments, userName, startDate, endDate, desiderata, showAssignmentsOnly);
+    return Promise.resolve();
+  },
   allToPdf: module.exportAllGeneratedPlanningsToPDFZip,
   allToCsv: module.exportAllGeneratedPlanningsToCSVZip
 }));

@@ -1,4 +1,5 @@
 import { collection, doc, runTransaction, Timestamp } from 'firebase/firestore';
+import { formatParisDate } from '@/utils/timezoneUtils';
 import { db } from '../config';
 import { format } from 'date-fns';
 import { normalizePeriod } from '../../../utils/dateUtils';
@@ -65,7 +66,7 @@ export const addDirectReplacement = async (
     // Formater la date au format YYYY-MM-DD
     let formattedDate = replacement.date;
     try {
-      formattedDate = format(new Date(replacement.date), 'yyyy-MM-dd');
+      formattedDate = formatParisDate(new Date(replacement.date), 'yyyy-MM-dd');
     } catch (error) {
       console.error('Erreur lors du formatage de la date:', error);
       // Continuer avec la date originale si le formatage échoue

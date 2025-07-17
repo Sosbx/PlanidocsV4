@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { createParisDate, formatParisDate } from '@/utils/timezoneUtils';
 import { Calendar, User, MessageSquare, CheckCircle, XCircle, HistoryIcon } from 'lucide-react';
 import { useReplacementService } from '../hooks/useReplacementService';
 import { format, isAfter, isBefore, parseISO } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { frLocale } from '../../../utils/dateLocale';
 import { standardizePeriod } from '../../../utils/periodUtils';
 
 /**
@@ -62,7 +63,7 @@ export const ReplacementHistoryList: React.FC = () => {
   const formatDate = (dateString: string) => {
     try {
       const date = parseISO(dateString);
-      return format(date, 'EEE d MMM yyyy', { locale: fr });
+      return formatParisDate(date, 'EEE d MMM yyyy', { locale: frLocale });
     } catch (e) {
       return dateString;
     }
@@ -74,14 +75,14 @@ export const ReplacementHistoryList: React.FC = () => {
     
     try {
       const date = parseISO(item.date);
-      const today = new Date();
+      const today = createParisDate();
       
       if (filter === 'upcoming') {
         return isAfter(date, today) || 
-               (format(date, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd'));
+               (formatParisDate(date, 'yyyy-MM-dd') === formatParisDate(today, 'yyyy-MM-dd'));
       } else {
         return isBefore(date, today) && 
-               (format(date, 'yyyy-MM-dd') !== format(today, 'yyyy-MM-dd'));
+               (formatParisDate(date, 'yyyy-MM-dd') !== formatParisDate(today, 'yyyy-MM-dd'));
       }
     } catch (e) {
       return true;

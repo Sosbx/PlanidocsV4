@@ -6,7 +6,7 @@ import { ProtectedRoute, FeatureProtectedRoute } from './features/auth';
 import { FEATURES } from './types/featureFlags';
 import { PlanningProvider } from './context/planning';
 import { UserProvider } from './context/auth';
-import { BagPhaseProvider } from './context/shiftExchange';
+import { BagPhaseProvider, ShiftExchangeProvider } from './context/shiftExchange';
 import { PlanningPeriodProvider } from './context/planning';
 import { NotificationProvider } from './context/notifications';
 import { ExchangeProvider } from './context/exchange';
@@ -15,6 +15,9 @@ import { AssociationProvider } from './context/association/AssociationContext';
 import { FeatureFlagsProvider } from './context/featureFlags/FeatureFlagsContext';
 import { SuperAdminProvider } from './context/superAdmin/SuperAdminContext';
 import NotificationPermissionManager from './components/notifications/NotificationPermissionManager';
+import { ToastProvider } from './context/toast';
+import { GoogleCalendarProvider } from './context/googleCalendar/GoogleCalendarContext';
+import { DirectExchangeProvider } from './context/directExchange/DirectExchangeContext';
 
 // Import des pages critiques directement (utiles dès le début)
 import LoginPage from './features/auth/pages/LoginPage';
@@ -37,19 +40,24 @@ const DirectExchangePage = lazy(() => import('./features/directExchange/pages/Di
 const ShiftExchangePage = lazy(() => import('./features/shiftExchange/pages/ShiftExchangePage'));
 const AdminShiftExchangePage = lazy(() => import('./features/shiftExchange/pages/AdminShiftExchangePage'));
 const SuperAdminPage = lazy(() => import('./pages/SuperAdminPage'));
+// const AllPlanningsPage = lazy(() => import('./pages/AllPlanningsPage')); // Désactivé temporairement
 
 const App: React.FC = () => {
   return (
     <Router>
-      <AssociationProvider>
-        <UserProvider>
-          <SuperAdminProvider>
-            <FeatureFlagsProvider>
-              <PlanningProvider>
-                <BagPhaseProvider>
-                  <PlanningPeriodProvider>
-                    <NotificationProvider>
-                      <ExchangeProvider>
+      <ToastProvider>
+        <AssociationProvider>
+          <GoogleCalendarProvider>
+            <UserProvider>
+              <SuperAdminProvider>
+                <FeatureFlagsProvider>
+                  <PlanningProvider>
+                    <BagPhaseProvider>
+                      <PlanningPeriodProvider>
+                        <NotificationProvider>
+                          <ExchangeProvider>
+                            <DirectExchangeProvider>
+                              <ShiftExchangeProvider>
                   <Routes>
                     {/* Routes publiques accessibles sans authentification */}
                     <Route path="/login" element={<LoginPage />} />
@@ -224,6 +232,16 @@ const App: React.FC = () => {
                                   </Suspense>
                                 } 
                               />
+                              {/* Route désactivée temporairement
+                              <Route 
+                                path="/all-plannings" 
+                                element={
+                                  <Suspense fallback={<div className="flex justify-center items-center h-screen"><LoadingSpinner /></div>}>
+                                    <AllPlanningsPage />
+                                  </Suspense>
+                                } 
+                              />
+                              */}
                               <Route path="/" element={<Navigate to="/dashboard" replace />} />
                             </Routes>
                             <ConnectionStatus />
@@ -234,15 +252,19 @@ const App: React.FC = () => {
                       }
                     />
                   </Routes>
-                      </ExchangeProvider>
-                    </NotificationProvider>
-                  </PlanningPeriodProvider>
-                </BagPhaseProvider>
-              </PlanningProvider>
-            </FeatureFlagsProvider>
-          </SuperAdminProvider>
-        </UserProvider>
-      </AssociationProvider>
+                              </ShiftExchangeProvider>
+                            </DirectExchangeProvider>
+                          </ExchangeProvider>
+                        </NotificationProvider>
+                      </PlanningPeriodProvider>
+                    </BagPhaseProvider>
+                  </PlanningProvider>
+                </FeatureFlagsProvider>
+              </SuperAdminProvider>
+            </UserProvider>
+          </GoogleCalendarProvider>
+        </AssociationProvider>
+      </ToastProvider>
     </Router>
   );
 };

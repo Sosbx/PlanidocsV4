@@ -22,5 +22,8 @@ export * from './admin';
 // Composant optimisé pour la liste
 export { default as OptimizedExchangeList } from './OptimizedExchangeList';
 
+// Composant de tutoriel
+export { default as ShiftExchangeTutorial } from './ShiftExchangeTutorial';
+
 // Composants à migrer
 // export { default as BagStats } from './BagStats';

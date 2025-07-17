@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
+import { formatParisDate } from '@/utils/timezoneUtils';
 import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { frLocale } from '../../../utils/dateLocale';
 import { calculatePercentages } from '../../../utils/planningUtils';
 import DesktopTable from './DesktopTable';
-import CommentModal from './CommentModal';
-import Portal from './Portal';
+import { CommentModal } from '../../../components/modals';
+import { Portal } from '../../../components';
 import MobileTable from './MobileTable';
 import type { Selections } from '../types';
 
@@ -81,7 +82,7 @@ const PlanningPreview: React.FC<PlanningPreviewProps> = ({
         </h1>
         <div className="flex items-center gap-8">
           <p className="text-sm text-gray-500">
-            Validé le {format(new Date(validatedAt), 'dd MMMM yyyy à HH:mm', { locale: fr })}
+            Validé le {formatParisDate(new Date(validatedAt), 'dd MMMM yyyy à HH:mm', { locale: frLocale })}
           </p>
           {primaryLimit !== undefined && secondaryLimit !== undefined && (
             <div className="flex gap-4 text-sm">

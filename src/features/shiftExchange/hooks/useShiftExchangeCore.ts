@@ -219,12 +219,20 @@ export const useShiftExchangeCore = (
         setError(null);
         
         // 1. Query optimisée pour les échanges
-        const exchangesQuery = query(
-          collection(db, 'shift_exchanges'),
+        const queryConstraints = [
           where('date', '>=', today),
           where('status', 'in', ['pending', 'unavailable']),
-          orderBy('date', 'asc'),
-          limit(limitResults)
+          orderBy('date', 'asc')
+        ];
+        
+        // Ajouter la limite seulement si elle est définie et > 0
+        if (limitResults && limitResults > 0) {
+          queryConstraints.push(limit(limitResults));
+        }
+        
+        const exchangesQuery = query(
+          collection(db, 'shift_exchanges'),
+          ...queryConstraints
         );
         
         // 2. Listener principal pour les échanges

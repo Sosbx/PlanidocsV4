@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
+import { formatParisDate } from '@/utils/timezoneUtils';
 import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { frLocale } from '../../../../utils/dateLocale';
 import { ViewType, DateRange } from '../../types/viewTypes';
 
 interface PeriodSelectorProps {
@@ -27,10 +28,10 @@ const PeriodSelector: React.FC<PeriodSelectorProps> = ({
   const [customMonths, setCustomMonths] = useState<number>(currentMonthsToShow);
   // État local pour les dates personnalisées
   const [customStartDate, setCustomStartDate] = useState<string>(
-    format(currentRange.startDate, 'yyyy-MM-dd')
+    formatParisDate(currentRange.startDate, 'yyyy-MM-dd')
   );
   const [customEndDate, setCustomEndDate] = useState<string>(
-    format(currentRange.endDate, 'yyyy-MM-dd')
+    formatParisDate(currentRange.endDate, 'yyyy-MM-dd')
   );
 
   /**
@@ -205,7 +206,7 @@ const PeriodSelector: React.FC<PeriodSelectorProps> = ({
       <div className="mt-3 flex items-center justify-between">
         <div className="text-xs text-gray-600">
           <span className="font-medium">Période actuelle :</span>{' '}
-          {format(currentRange.startDate, 'dd MMMM yyyy', { locale: fr })} - {format(currentRange.endDate, 'dd MMMM yyyy', { locale: fr })}
+          {formatParisDate(currentRange.startDate, 'dd MMMM yyyy', { locale: frLocale })} - {formatParisDate(currentRange.endDate, 'dd MMMM yyyy', { locale: frLocale })}
         </div>
         
         <div className="text-xs text-gray-600">

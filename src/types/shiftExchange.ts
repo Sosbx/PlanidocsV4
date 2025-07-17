@@ -4,6 +4,7 @@
  */
 
 import { Timestamp } from 'firebase/firestore';
+import { createParisDate, firebaseTimestampToParisDate } from '@/utils/timezoneUtils';
 
 /**
  * Périodes de garde
@@ -110,7 +111,7 @@ export interface BagPhaseConfig {
  */
 export const defaultBagPhaseConfig: BagPhaseConfig = {
   phase: 'submission',
-  submissionDeadline: new Date(),
+  submissionDeadline: createParisDate(),
   isConfigured: false,
   isValidated: false
 };
@@ -181,7 +182,7 @@ export const isExchangeHistory = (obj: any): obj is ExchangeHistory => {
  */
 export const timestampToString = (timestamp: Timestamp | string): string => {
   if (typeof timestamp === 'string') return timestamp;
-  return timestamp.toDate().toISOString();
+  return firebaseTimestampToParisDate(timestamp).toISOString();
 };
 
 export const stringToTimestamp = (str: string): Timestamp => {

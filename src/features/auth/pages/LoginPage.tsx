@@ -9,19 +9,30 @@ const LoginPage: React.FC = () => {
   const { login, loginWithGoogle } = useAuth();
   const [error, setError] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState('Vérification en cours...');
 
   const handleLogin = async (email: string, password: string) => {
     setError('');
     setIsLoading(true);
+    setLoadingMessage('Vérification en cours...');
+    
+    // Simuler un changement de message après un court délai
+    const messageTimeout = setTimeout(() => {
+      setLoadingMessage('Finalisation de la connexion...');
+    }, 800);
     
     try {
       await login(email, password);
+      clearTimeout(messageTimeout);
+      setLoadingMessage('Connexion réussie !');
       const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/dashboard';
       navigate(from, { replace: true });
     } catch (err) {
+      clearTimeout(messageTimeout);
       setError(err instanceof Error ? err.message : 'Une erreur est survenue lors de la connexion');
     } finally {
       setIsLoading(false);
+      setLoadingMessage('Vérification en cours...');
     }
   };
 
@@ -40,7 +51,13 @@ const LoginPage: React.FC = () => {
     }
   };
 
-  return <LoginForm onSubmit={handleLogin} onGoogleSignIn={handleGoogleSignIn} error={error} isLoading={isLoading} />;
+  return <LoginForm 
+    onSubmit={handleLogin} 
+    onGoogleSignIn={handleGoogleSignIn} 
+    error={error} 
+    isLoading={isLoading}
+    loadingMessage={loadingMessage}
+  />;
 };
 
 export default LoginPage;

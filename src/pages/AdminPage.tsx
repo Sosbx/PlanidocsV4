@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Calendar, Percent, Save, RotateCcw, Users, CheckSquare, Settings, ChevronDown, ChevronLeft, ChevronRight, Archive, Search, X } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { usePlanningConfig } from '../context/planning/PlanningContext';
+import { formatParisDate, createParisDate, toParisTime, addMonthsParis } from '../utils/timezoneUtils';
 import ConfigurationDisplay from '../components/ConfigurationDisplay';
 import ConfirmationModal from '../components/ConfirmationModal';
 import UserStatusList from '../features/users/components/UserStatusList';
@@ -12,7 +13,7 @@ import { ShiftAssignment } from '../types/planning';
 import { loadPdfExporter } from '../utils/lazyExporters';
 import { getDesiderata, getAllDesiderata } from '../lib/firebase/desiderata';
 import { removeBlockedDatesDesiderata } from '../lib/firebase/desiderataBlockCleanup';
-import Toast from '../components/Toast';
+import Toast from '../components/common/Toast';
 import PlanningPreview from '../features/planning/components/PlanningPreview';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import ArchivedPeriodDetails from '../features/planning/components/ArchivedPeriodDetails';
@@ -86,7 +87,7 @@ const AdminPage: React.FC = () => {
     if (config.isConfigured) {
       const startDate = config.startDate.toISOString().split('T')[0];
       const endDate = config.endDate.toISOString().split('T')[0];
-      const deadline = new Date(config.deadline).toISOString().slice(0, 16);
+      const deadline = toParisTime(config.deadline).toISOString().slice(0, 16);
       
       setFormData({
         startDate,
@@ -98,13 +99,12 @@ const AdminPage: React.FC = () => {
       
       // Initialiser les données pour la nouvelle période avec des valeurs par défaut
       // Par exemple, commencer la nouvelle période le lendemain de la fin de la période actuelle
-      const nextStartDate = new Date(config.endDate);
+      const nextStartDate = toParisTime(config.endDate);
       nextStartDate.setDate(nextStartDate.getDate() + 1);
       
-      const nextEndDate = new Date(nextStartDate);
-      nextEndDate.setMonth(nextEndDate.getMonth() + 4); // Par défaut, période de 4 mois
+      const nextEndDate = addMonthsParis(nextStartDate, 4); // Par défaut, période de 4 mois
       
-      const nextDeadline = new Date(nextStartDate);
+      const nextDeadline = createParisDate(nextStartDate);
       nextDeadline.setDate(nextStartDate.getDate() - 14); // Par défaut, deadline 2 semaines avant le début
       
       setNewPeriodData({
@@ -367,9 +367,9 @@ const AdminPage: React.FC = () => {
       console.log(`Mise à jour de la configuration pour l'association ${currentAssociation}`);
       
       await updateConfig({
-        startDate: new Date(formData.startDate),
-        endDate: new Date(formData.endDate),
-        deadline: new Date(formData.deadline),
+        startDate: createParisDate(formData.startDate),
+        endDate: createParisDate(formData.endDate),
+        deadline: createParisDate(formData.deadline),
         primaryDesiderataLimit: formData.primaryDesiderataLimit,
         secondaryDesiderataLimit: formData.secondaryDesiderataLimit,
         isConfigured: true,
@@ -528,9 +528,9 @@ const AdminPage: React.FC = () => {
       
       // Créer la nouvelle configuration
       const newConfig = {
-        startDate: new Date(newPeriodData.startDate),
-        endDate: new Date(newPeriodData.endDate),
-        deadline: new Date(newPeriodData.deadline),
+        startDate: createParisDate(newPeriodData.startDate),
+        endDate: createParisDate(newPeriodData.endDate),
+        deadline: createParisDate(newPeriodData.deadline),
         primaryDesiderataLimit: formData.primaryDesiderataLimit,
         secondaryDesiderataLimit: formData.secondaryDesiderataLimit,
         associationId: currentAssociation // Ajouter l'association courante
@@ -1032,7 +1032,7 @@ const AdminPage: React.FC = () => {
                 >
                   <div className="font-medium">{period.name}</div>
                   <div className="text-sm text-gray-500">
-                    {new Date(period.archivedAt).toLocaleDateString('fr-FR')} • 
+                    {formatParisDate(period.archivedAt, 'dd/MM/yyyy')} • 
                     {period.validatedDesiderataCount} réponses
                   </div>
                 </button>

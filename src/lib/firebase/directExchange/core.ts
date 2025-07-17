@@ -12,10 +12,13 @@ import {
   Timestamp,
   serverTimestamp
 } from 'firebase/firestore';
+import { createParisDate } from '@/utils/timezoneUtils';
 import { db } from '../config';
 import { normalizePeriod } from '../../../utils/dateUtils';
 import { COLLECTIONS, ExchangeData } from './types';
 import { ShiftPeriod } from '../../../types/exchange';
+import { getCollectionName, COLLECTIONS as COLLECTION_NAMES } from '../../../utils/collectionUtils';
+import { checkShiftExchangeConflict } from '../exchange/conflictChecker';
 
 // Validation des données communes
 export const validateExchangeData = (data: SimpleExchangeData): void => {
@@ -82,11 +85,13 @@ export const checkExistingExchange = async (
   userId: string,
   date: string,
   period: string,
-  operationTypes: string[] | string
+  operationTypes: string[] | string,
+  associationId: string = 'RD'
 ): Promise<boolean> => {
   try {
     // Déterminer la collection en fonction des types d'opération
-    const collectionName = getCollectionByOperationType(operationTypes);
+    const baseCollectionName = getCollectionByOperationType(operationTypes);
+    const collectionName = getCollectionName(baseCollectionName, associationId);
     
     // Créer la requête
     const q = query(
@@ -108,56 +113,14 @@ export const checkExistingExchange = async (
   }
 };
 
-// Vérifier si une garde est déjà proposée dans la bourse aux gardes
-export const checkExistingShiftExchange = async (
-  userId: string,
-  date: string,
-  period: string
-): Promise<{exists: boolean, exchangeIds: string[]}> => {
-  try {
-    console.log('Vérification si la garde est déjà dans la bourse aux gardes:', {
-      userId,
-      date,
-      period
-    });
-    
-    // Créer la requête pour la collection shift_exchanges (bourse aux gardes)
-    const q = query(
-      collection(db, 'shift_exchanges'),
-      where('userId', '==', userId),
-      where('date', '==', date),
-      where('period', '==', period),
-      where('status', 'in', ['pending', 'unavailable'])
-    );
-    
-    // Exécuter la requête
-    const querySnapshot = await getDocs(q);
-    
-    const exists = !querySnapshot.empty;
-    const exchangeIds = querySnapshot.docs.map(doc => doc.id);
-    
-    if (exists) {
-      console.warn('Cette garde est déjà proposée dans la bourse aux gardes:', {
-        userId,
-        date,
-        period,
-        count: querySnapshot.size,
-        exchangeIds
-      });
-    }
-    
-    // Retourner true si des documents existent, ainsi que les IDs des échanges
-    return { exists, exchangeIds };
-  } catch (error) {
-    console.error('Erreur lors de la vérification dans la bourse aux gardes:', error);
-    return { exists: false, exchangeIds: [] };
-  }
-};
+// Re-export de la fonction depuis le module centralisé pour maintenir la compatibilité
+export const checkExistingShiftExchange = checkShiftExchangeConflict;
 
 // Supprimer une garde de la bourse aux gardes dans une transaction
 export const removeFromShiftExchange = async (
   transaction: Transaction,
-  exchangeIds: string[]
+  exchangeIds: string[],
+  associationId: string = 'RD'
 ): Promise<void> => {
   try {
     if (!exchangeIds || exchangeIds.length === 0) {
@@ -169,12 +132,12 @@ export const removeFromShiftExchange = async (
     
     // Supprimer chaque échange de la bourse aux gardes
     for (const exchangeId of exchangeIds) {
-      const exchangeRef = doc(db, 'shift_exchanges', exchangeId);
+      const exchangeRef = doc(db, getCollectionName(COLLECTION_NAMES.SHIFT_EXCHANGES, associationId), exchangeId);
       
       // Marquer l'échange comme annulé
       transaction.update(exchangeRef, {
         status: 'cancelled',
-        lastModified: new Date().toISOString(),
+        lastModified: createParisDate().toISOString(),
         removedByDirectExchange: true
       });
       
@@ -190,7 +153,8 @@ export const removeFromShiftExchange = async (
 export const checkDesiderata = async (
   userId: string,
   date: string,
-  period: string
+  period: string,
+  associationId: string = 'RD'
 ): Promise<{ isDesiderata: boolean; type?: 'primary' | 'secondary' }> => {
   try {
     console.log('Vérification si la garde est un désiderata:', {
@@ -200,7 +164,7 @@ export const checkDesiderata = async (
     });
     
     // Créer la requête pour la collection desiderata
-    const desiderataRef = doc(db, 'desiderata', userId);
+    const desiderataRef = doc(db, getCollectionName(COLLECTION_NAMES.DESIDERATA, associationId), userId);
     const desiderataDoc = await getDoc(desiderataRef);
     
     if (!desiderataDoc.exists()) {
@@ -257,10 +221,12 @@ export const getCollectionByOperationType = (operationTypes: string[] | string):
 /**
  * Souscrire aux échanges directs en temps réel
  * @param callback Fonction appelée à chaque mise à jour des données
+ * @param associationId ID de l'association (optionnel, défaut: 'RD')
  * @returns Fonction pour annuler la souscription
  */
 export const subscribeToDirectExchanges = (
-  callback: (exchanges: any[]) => void
+  callback: (exchanges: any[]) => void,
+  associationId: string = 'RD'
 ): (() => void) => {
   try {
     console.log('Mise en place de la souscription aux échanges directs');
@@ -268,14 +234,14 @@ export const subscribeToDirectExchanges = (
     // Créer une requête pour les échanges directs uniquement
     // Tous les types d'échanges/cessions sont maintenant dans DIRECT_EXCHANGES
     const exchangesQuery = query(
-      collection(db, COLLECTIONS.DIRECT_EXCHANGES),
+      collection(db, getCollectionName(COLLECTIONS.DIRECT_EXCHANGES, associationId)),
       where('status', '==', 'pending'),
       orderBy('createdAt', 'desc')
     );
     
     // Créer une requête pour les remplacements directs
     const replacementsQuery = query(
-      collection(db, COLLECTIONS.DIRECT_REPLACEMENTS),
+      collection(db, getCollectionName(COLLECTIONS.DIRECT_REPLACEMENTS, associationId)),
       where('status', '==', 'pending'),
       orderBy('createdAt', 'desc')
     );
@@ -384,18 +350,20 @@ export const subscribeToDirectExchanges = (
  * Souscrire aux propositions d'un utilisateur en temps réel
  * @param userId ID de l'utilisateur
  * @param callback Fonction appelée à chaque mise à jour des données
+ * @param associationId ID de l'association (optionnel, défaut: 'RD')
  * @returns Fonction pour annuler la souscription
  */
 export const subscribeToUserProposals = (
   userId: string,
-  callback: (proposals: any[]) => void
+  callback: (proposals: any[]) => void,
+  associationId: string = 'RD'
 ): (() => void) => {
   try {
     console.log('Mise en place de la souscription aux propositions de l\'utilisateur:', userId);
     
     // Créer une requête pour les propositions de l'utilisateur avec statut "pending" uniquement
     const proposalsQuery = query(
-      collection(db, COLLECTIONS.DIRECT_PROPOSALS),
+      collection(db, getCollectionName(COLLECTIONS.DIRECT_PROPOSALS, associationId)),
       where('proposingUserId', '==', userId),
       where('status', '==', 'pending'), // Ajouter un filtre sur le statut "pending"
       orderBy('createdAt', 'desc')
@@ -435,11 +403,13 @@ export type SimpleExchangeData = {
  * Créer un échange combiné avec plusieurs types d'opérations
  * @param exchange Données de l'échange simplifiées
  * @param operationTypes Types d'opérations sélectionnés
+ * @param associationId ID de l'association (optionnel, défaut: 'RD')
  * @returns ID de l'échange créé et ID du remplacement si applicable
  */
 export const createCombinedExchange = async (
   exchange: SimpleExchangeData,
-  operationTypes: string[]
+  operationTypes: string[],
+  associationId: string = 'RD'
 ): Promise<{ exchangeId?: string; replacementId?: string }> => {
   try {
     console.log('Création d\'un échange combiné:', {
@@ -482,10 +452,11 @@ export const createCombinedExchange = async (
     }
     
     // Vérifier si la garde est déjà dans la bourse aux gardes
-    const { exists: existingInShiftExchange, exchangeIds } = await checkExistingShiftExchange(
+    const { exists: existingInShiftExchange, exchangeIds } = await checkShiftExchangeConflict(
       exchange.userId,
       exchange.date,
-      normalizedPeriod
+      normalizedPeriod,
+      associationId
     );
     
     // Résultat à retourner
@@ -495,14 +466,14 @@ export const createCombinedExchange = async (
     await runTransaction(db, async (transaction) => {
       // Si la garde existe déjà dans la bourse aux gardes, la supprimer
       if (existingInShiftExchange && exchangeIds.length > 0) {
-        await removeFromShiftExchange(transaction, exchangeIds);
+        await removeFromShiftExchange(transaction, exchangeIds, associationId);
       }
       
       // Créer d'abord le remplacement s'il est sélectionné (avant l'échange principal)
       // pour s'assurer qu'il soit disponible immédiatement après la transaction
       if (includesReplacement) {
         // Créer une référence pour le document de remplacement
-        const replacementRef = doc(collection(db, COLLECTIONS.DIRECT_REPLACEMENTS));
+        const replacementRef = doc(collection(db, getCollectionName(COLLECTIONS.DIRECT_REPLACEMENTS, associationId)));
         
         // Créer le document de remplacement
         transaction.set(replacementRef, {
@@ -513,8 +484,8 @@ export const createCombinedExchange = async (
           timeSlot: exchange.timeSlot,
           originalUserId: exchange.userId,
           comment: exchange.comment || '',
-          createdAt: new Date().toISOString(),
-          lastModified: new Date().toISOString(),
+          createdAt: createParisDate().toISOString(),
+          lastModified: createParisDate().toISOString(),
           status: 'pending',
           notifiedUsers: []
         });
@@ -528,10 +499,10 @@ export const createCombinedExchange = async (
       // Si l'échange ou la cession est sélectionné, créer un document dans direct_exchanges
       if (includesExchangeOrGive) {
         // Déterminer le type d'opération principal
-        let primaryOperationType: 'exchange' | 'give' = operationTypes.includes('exchange') ? 'exchange' : 'give';
+        const primaryOperationType: 'exchange' | 'give' = operationTypes.includes('exchange') ? 'exchange' : 'give';
         
         // Créer une référence pour le document d'échange
-        const exchangeRef = doc(collection(db, COLLECTIONS.DIRECT_EXCHANGES));
+        const exchangeRef = doc(collection(db, getCollectionName(COLLECTIONS.DIRECT_EXCHANGES, associationId)));
         
         // Déterminer si c'est un échange combiné (échange + cession)
         const isCombined = operationTypes.includes('exchange') && operationTypes.includes('give');
@@ -575,7 +546,7 @@ export const createCombinedExchange = async (
         
         // Si un remplacement a été créé, mettre à jour sa référence à l'échange
         if (result.replacementId) {
-          const replacementRef = doc(db, COLLECTIONS.DIRECT_REPLACEMENTS, result.replacementId);
+          const replacementRef = doc(db, getCollectionName(COLLECTIONS.DIRECT_REPLACEMENTS, associationId), result.replacementId);
           transaction.update(replacementRef, {
             exchangeId: exchangeRef.id
           });

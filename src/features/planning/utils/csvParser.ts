@@ -1,4 +1,5 @@
 import { ShiftAssignment } from '../../../types/planning';
+import { formatParisDate } from '@/utils/timezoneUtils';
 import { format } from 'date-fns';
 
 /**
@@ -188,7 +189,7 @@ export const parseCSVFile = async (file: File): Promise<Record<string, ShiftAssi
             }
 
             // Créer la clé unique pour cette affectation
-            const formattedDate = format(date, 'yyyy-MM-dd');
+            const formattedDate = formatParisDate(date, 'yyyy-MM-dd');
             const key = `${formattedDate}-${period}`;
             
             assignments[key] = {

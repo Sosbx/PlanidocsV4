@@ -1,12 +1,16 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Settings, History, BarChart as ChartBar, BarChart3 } from 'lucide-react';
+import { Settings, History, BarChart as ChartBar, BarChart3, Filter, Sun, Sunset, Moon, ArrowLeftRight, Users, User as UserIcon, Sliders, Eye, EyeOff } from 'lucide-react';
 import ConfirmationModal from '../../../components/ConfirmationModal';
-import Toast from '../../../components/Toast';
-import { useShiftExchangeCore } from '../hooks';
+import Toast from '../../../components/common/Toast';
+import { useShiftExchangeCore, useScoringConfig } from '../hooks';
 import { revertToExchange } from '../../../lib/firebase/exchange';
-import type { ExchangeHistory } from '../types';
-import { ValidatePlanningButton } from '../../../features/planning/components/admin';
+import { getAllShiftTypesFromPlannings } from '../../../lib/firebase/planning';
+import { EquityCalculator } from '../services/equityCalculator';
+import type { ExchangeHistory, SuggestionScore } from '../types';
+import { ShiftPeriod } from '../types';
+import { ValidatePlanningButton, UserSelector } from '../../../features/planning/components/admin';
 import { useUserAssignments } from '../../../features/users/hooks';
+import { useAuth } from '../../../features/auth/hooks';
 import '../../../styles/BadgeStyles.css';
 
 // Import des composants migrés
@@ -20,7 +24,8 @@ import {
 import {
   ExchangeList,
   ExchangeHistoryList,
-  ParticipationPanel
+  ParticipationPanel,
+  ScoreConfigPanel
 } from '../components/admin';
 
 /**
@@ -46,15 +51,18 @@ const AdminShiftExchangePage: React.FC = () => {
   } = useShiftExchangeCore({
     enableHistory: true,
     enableConflictCheck: true,
-    limitResults: 200 // Plus de résultats pour l'admin
+    limitResults: 0 // Pas de limite pour l'admin - afficher toutes les gardes disponibles
   });
 
   // États locaux pour l'interface admin
-  const [showHistory, setShowHistory] = useState(false);
+  const [activeTab, setActiveTab] = useState<'exchanges' | 'history' | 'statistics' | 'scoring'>('exchanges');
   const [showPhaseConfig, setShowPhaseConfig] = useState(false);
-  const [showStats, setShowStats] = useState(false);
   const [showParticipationPanel, setShowParticipationPanel] = useState(false);
   const [selectedForReplacements, setSelectedForReplacements] = useState<Set<string>>(new Set());
+  const [filterPeriod, setFilterPeriod] = useState<'all' | ShiftPeriod>('all');
+  const [showOnlyWithInterested, setShowOnlyWithInterested] = useState(false);
+  const [filterUserId, setFilterUserId] = useState<string>('');
+  const [showSuggestions, setShowSuggestions] = useState(true);
   const [toast, setToast] = useState({ 
     visible: false, 
     message: '', 
@@ -70,6 +78,77 @@ const AdminShiftExchangePage: React.FC = () => {
   
   // Hook pour les assignations utilisateur
   const { userAssignments } = useUserAssignments(exchanges);
+  
+  // Hook pour la configuration du scoring
+  const { user: currentUser } = useAuth();
+  const { config: scoringConfig, saveConfig: saveScoringConfig, loading: configLoading } = useScoringConfig(
+    currentUser?.associationId || 'RD'
+  );
+  
+  // État pour stocker tous les types de gardes
+  const [allShiftTypes, setAllShiftTypes] = useState<{
+    M: Record<string, { count: number; sites: string[]; timeSlots: string[] }>;
+    AM: Record<string, { count: number; sites: string[]; timeSlots: string[] }>;
+    S: Record<string, { count: number; sites: string[]; timeSlots: string[] }>;
+  } | null>(null);
+  
+  // Charger tous les types de gardes au montage
+  useEffect(() => {
+    const loadAllShiftTypes = async () => {
+      try {
+        const types = await getAllShiftTypesFromPlannings(currentUser?.associationId || 'RD');
+        setAllShiftTypes(types);
+      } catch (error) {
+        console.error('Erreur lors du chargement des types de gardes:', error);
+      }
+    };
+    
+    if (activeTab === 'scoring') {
+      loadAllShiftTypes();
+    }
+  }, [activeTab, currentUser?.associationId]);
+  
+  // Utilisateurs triés par ordre alphabétique (excluant les admin-only)
+  const sortedUsers = useMemo(() => {
+    return [...users]
+      // Filtrer pour exclure les utilisateurs qui sont SEULEMENT admin
+      .filter(user => {
+        // Inclure si l'utilisateur a au moins un autre rôle que admin
+        return user.roles.isUser || user.roles.isManager || user.roles.isValidator || !user.roles.isAdmin;
+      })
+      .sort((a, b) => {
+        const nameA = `${a.lastName} ${a.firstName}`.toLowerCase();
+        const nameB = `${b.lastName} ${b.firstName}`.toLowerCase();
+        return nameA.localeCompare(nameB, 'fr');
+      });
+  }, [users]);
+
+  // Calculer les suggestions pour chaque échange
+  const suggestions = useMemo(() => {
+    if (!scoringConfig || !exchanges.length || !sortedUsers.length) return {};
+    
+    try {
+      const calculator = new EquityCalculator(
+        scoringConfig,
+        sortedUsers,
+        exchanges,
+        history
+      );
+      
+      // Calculer les suggestions pour chaque échange
+      const suggestionMap: Record<string, SuggestionScore[]> = {};
+      exchanges.forEach(exchange => {
+        if (exchange.interestedUsers && exchange.interestedUsers.length > 0) {
+          suggestionMap[exchange.id] = calculator.calculateAllSuggestions(exchange);
+        }
+      });
+      
+      return suggestionMap;
+    } catch (error) {
+      console.error('Erreur lors du calcul des suggestions:', error);
+      return {};
+    }
+  }, [scoringConfig, exchanges, sortedUsers, history]);
 
   // Vérification optimisée des conflits pour chaque utilisateur intéressé
   useEffect(() => {
@@ -237,8 +316,8 @@ const AdminShiftExchangePage: React.FC = () => {
     }
 
     try {
-      const originalUser = users.find(u => u.id === exchange.originalUserId);
-      const newUser = users.find(u => u.id === exchange.newUserId);
+      const originalUser = sortedUsers.find(u => u.id === exchange.originalUserId);
+      const newUser = sortedUsers.find(u => u.id === exchange.newUserId);
       const isPermutation = exchange.isPermutation;
       
       await revertToExchange(exchangeToRevert);
@@ -269,21 +348,21 @@ const AdminShiftExchangePage: React.FC = () => {
       setShowRevertConfirmation(false);
       setExchangeToRevert(null);
     }
-  }, [exchangeToRevert, history, users, refreshData]);
+  }, [exchangeToRevert, history, sortedUsers, refreshData]);
 
   // Rendu optimisé des statistiques
   const renderStats = useMemo(() => {
-    if (!showStats) return null;
+    if (activeTab !== 'statistics') return null;
     
     return (
       <BagStatsViz
-        users={users}
+        users={sortedUsers}
         exchanges={exchanges as any}
         history={history as any}
         className="mb-6"
       />
     );
-  }, [showStats, users, exchanges, history]);
+  }, [activeTab, sortedUsers, exchanges, history]);
 
   // Vérification des droits admin
   if (!user?.roles.isAdmin) {
@@ -366,37 +445,83 @@ const AdminShiftExchangePage: React.FC = () => {
               }
             </span>
           </button>
-          <button
-            onClick={() => setShowStats(!showStats)}
-            className={`flex items-center px-2 sm:px-4 py-2 border ${
-              showStats
-                ? 'border-blue-500 bg-blue-50 text-blue-700'
-                : 'border-gray-300 text-gray-700 bg-white hover:bg-gray-50'
-            } text-sm font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500`}
-            title="Statistiques"
-          >
-            <ChartBar className="h-4 w-4" />
-            <span className="hidden sm:inline ml-2">Statistiques</span>
-          </button>
-          <button
-            onClick={() => setShowHistory(!showHistory)}
-            className={`flex items-center px-2 sm:px-4 py-2 border rounded-md text-sm font-medium transition-colors ${
-              showHistory
-                ? 'bg-indigo-100 text-indigo-700 border-indigo-300 hover:bg-indigo-200'
-                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-            }`}
-            title={showHistory ? "Voir les échanges en cours" : "Voir l'historique"}
-          >
-            <History className="h-4 w-4" />
-            <span className="hidden sm:inline ml-2">
-              {showHistory ? 'Échanges en cours' : 'Historique'}
-            </span>
-          </button>
         </div>
       </div>
 
       <BagPhaseIndicator />
+
+      {/* Système d'onglets */}
+      <div className="bg-white rounded-lg shadow-md mt-6">
+        <div className="border-b border-gray-200">
+          <nav className="-mb-px flex" aria-label="Tabs">
+            <button
+              onClick={() => setActiveTab('exchanges')}
+              className={`py-2 px-4 border-b-2 font-medium text-sm ${
+                activeTab === 'exchanges'
+                  ? 'border-indigo-500 text-indigo-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <ArrowLeftRight className="h-4 w-4" />
+                Échanges en cours
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab('history')}
+              className={`py-2 px-4 border-b-2 font-medium text-sm ${
+                activeTab === 'history'
+                  ? 'border-indigo-500 text-indigo-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <History className="h-4 w-4" />
+                Historique
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab('statistics')}
+              className={`py-2 px-4 border-b-2 font-medium text-sm ${
+                activeTab === 'statistics'
+                  ? 'border-indigo-500 text-indigo-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <ChartBar className="h-4 w-4" />
+                Statistiques
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab('scoring')}
+              className={`py-2 px-4 border-b-2 font-medium text-sm ${
+                activeTab === 'scoring'
+                  ? 'border-indigo-500 text-indigo-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <Sliders className="h-4 w-4" />
+                Configuration
+              </div>
+            </button>
+          </nav>
+        </div>
+      </div>
+
       {renderStats}
+      
+      {/* Panneau de configuration du scoring */}
+      {activeTab === 'scoring' && scoringConfig && (
+        <ScoreConfigPanel
+          config={scoringConfig}
+          shiftTypes={Array.from(new Set(exchanges.map(e => e.shiftType)))}
+          allShiftTypes={allShiftTypes || undefined}
+          onSave={saveScoringConfig}
+          loading={configLoading}
+        />
+      )}
 
       <BagPhaseConfigModal
         isOpen={showPhaseConfig}
@@ -415,45 +540,189 @@ const AdminShiftExchangePage: React.FC = () => {
         }}
       />
 
-      <div className="bg-white rounded-lg shadow-md overflow-hidden mt-6">
-        <div className="overflow-x-auto">
-          {showHistory ? (
-            <ExchangeHistoryList
-              history={history}
-              users={users}
-              bagPhaseConfig={bagPhaseConfig}
-              onRevertExchange={handleRevertExchange}
-              onNotify={(historyId: string) => {
-                setToast({
-                  visible: true,
-                  message: 'Notification envoyée avec succès',
-                  type: 'success'
-                });
-              }}
-            />
-          ) : (
-            <ExchangeList
-              exchanges={exchanges as any}
-              users={users}
-              history={history as any}
-              bagPhaseConfig={bagPhaseConfig}
-              conflictStates={adminConflictStates}
-              conflictShiftTypes={conflictShiftTypes}
-              userAssignments={userAssignments}
-              onValidateExchange={handleValidateExchangeClick}
-              onRejectExchange={handleRejectExchangeClick}
-              onRemoveUser={handleRemoveUserClick}
-              selectedForReplacements={selectedForReplacements}
-              onSelectedForReplacementsChange={setSelectedForReplacements}
-            />
-          )}
+      {/* Filtres de période - visible uniquement pour l'onglet échanges */}
+      {activeTab === 'exchanges' && (
+        <div className="bg-white rounded-lg shadow-md mt-6 mb-4">
+          <div className="px-3 py-2 border-b border-gray-200 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1 text-gray-700">
+                <Filter className="h-3.5 w-3.5" />
+                <span className="text-xs font-medium">Filtrer par période</span>
+              </div>
+              
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setFilterPeriod('all')}
+                  className={`px-1.5 py-0.5 rounded text-[10px] transition-colors ${
+                    filterPeriod === 'all'
+                      ? 'bg-gray-100 text-gray-800 font-medium'
+                      : 'text-gray-500 hover:bg-gray-50'
+                  }`}
+                >
+                  Tous
+                </button>
+                <button
+                  onClick={() => setFilterPeriod(ShiftPeriod.MORNING)}
+                  className={`flex items-center px-1.5 py-0.5 rounded text-[10px] transition-colors ${
+                    filterPeriod === ShiftPeriod.MORNING
+                      ? 'bg-amber-50 text-amber-700 font-medium'
+                      : 'text-gray-500 hover:bg-gray-50'
+                  }`}
+                >
+                  <Sun className="h-2.5 w-2.5 mr-0.5" />
+                  M
+                </button>
+                <button
+                  onClick={() => setFilterPeriod(ShiftPeriod.AFTERNOON)}
+                  className={`flex items-center px-1.5 py-0.5 rounded text-[10px] transition-colors ${
+                    filterPeriod === ShiftPeriod.AFTERNOON
+                      ? 'bg-blue-50 text-blue-700 font-medium'
+                      : 'text-gray-500 hover:bg-gray-50'
+                  }`}
+                >
+                  <Sunset className="h-2.5 w-2.5 mr-0.5" />
+                  AM
+                </button>
+                <button
+                  onClick={() => setFilterPeriod(ShiftPeriod.EVENING)}
+                  className={`flex items-center px-1.5 py-0.5 rounded text-[10px] transition-colors ${
+                    filterPeriod === ShiftPeriod.EVENING
+                      ? 'bg-purple-50 text-purple-700 font-medium'
+                      : 'text-gray-500 hover:bg-gray-50'
+                  }`}
+                >
+                  <Moon className="h-2.5 w-2.5 mr-0.5" />
+                  S
+                </button>
+              </div>
+            </div>
+            
+            {/* Bouton pour filtrer les gardes avec intéressés */}
+            <button
+              onClick={() => setShowOnlyWithInterested(!showOnlyWithInterested)}
+              className={`flex items-center px-2 py-1 border text-xs font-medium rounded-md transition-colors ${
+                showOnlyWithInterested
+                  ? 'border-green-500 bg-green-50 text-green-700'
+                  : 'border-gray-300 text-gray-600 bg-white hover:bg-gray-50'
+              }`}
+              title="Afficher uniquement les gardes avec des intéressés"
+            >
+              <Users className="h-3.5 w-3.5 mr-1" />
+              <span className="hidden sm:inline">
+                {showOnlyWithInterested ? 'Avec intéressés' : 'Toutes les gardes'}
+              </span>
+              <span className="sm:hidden">
+                {showOnlyWithInterested ? 'Avec int.' : 'Toutes'}
+              </span>
+            </button>
+          </div>
+          
+          {/* Filtre par utilisateur */}
+          <div className="px-3 py-2 border-t border-gray-100 bg-gray-50">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 text-gray-700">
+                <UserIcon className="h-3.5 w-3.5" />
+                <span className="text-xs font-medium">Filtrer par utilisateur</span>
+              </div>
+              <div className="flex-1 max-w-xs">
+                <UserSelector
+                  users={sortedUsers}
+                  selectedUserId={filterUserId}
+                  onUserChange={setFilterUserId}
+                  onPrevious={() => {
+                    const currentIndex = sortedUsers.findIndex(u => u.id === filterUserId);
+                    if (currentIndex > 0) {
+                      setFilterUserId(sortedUsers[currentIndex - 1].id);
+                    } else if (filterUserId && sortedUsers.length > 0) {
+                      setFilterUserId('');
+                    }
+                  }}
+                  onNext={() => {
+                    const currentIndex = filterUserId ? sortedUsers.findIndex(u => u.id === filterUserId) : -1;
+                    if (currentIndex < sortedUsers.length - 1) {
+                      setFilterUserId(sortedUsers[currentIndex + 1].id);
+                    }
+                  }}
+                  showSearch={true}
+                />
+              </div>
+              {filterUserId && (
+                <button
+                  onClick={() => setFilterUserId('')}
+                  className="px-2 py-1 text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-200 rounded transition-colors"
+                  title="Effacer le filtre"
+                >
+                  Effacer
+                </button>
+              )}
+              
+              {/* Bouton pour afficher/masquer les scores */}
+              <button
+                onClick={() => setShowSuggestions(!showSuggestions)}
+                className={`flex items-center px-2 py-1 border text-xs font-medium rounded-md transition-colors ${
+                  showSuggestions
+                    ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                    : 'border-gray-300 text-gray-600 bg-white hover:bg-gray-50'
+                }`}
+                title={showSuggestions ? "Masquer les scores d'équité" : "Afficher les scores d'équité"}
+              >
+                {showSuggestions ? <Eye className="h-3.5 w-3.5 mr-1" /> : <EyeOff className="h-3.5 w-3.5 mr-1" />}
+                <span className="hidden sm:inline">
+                  {showSuggestions ? 'Scores' : 'Scores'}
+                </span>
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Contenu principal selon l'onglet actif */}
+      {activeTab !== 'statistics' && activeTab !== 'scoring' && (
+        <div className="bg-white rounded-lg shadow-md mt-6">
+          <div className="overflow-x-auto">
+            {activeTab === 'history' ? (
+              <ExchangeHistoryList
+                history={history}
+                users={sortedUsers}
+                bagPhaseConfig={bagPhaseConfig}
+                onRevertExchange={handleRevertExchange}
+                onNotify={(historyId: string) => {
+                  setToast({
+                    visible: true,
+                    message: 'Notification envoyée avec succès',
+                    type: 'success'
+                  });
+                }}
+              />
+            ) : (
+              <ExchangeList
+                exchanges={exchanges as any}
+                users={sortedUsers}
+                history={history as any}
+                bagPhaseConfig={bagPhaseConfig}
+                conflictStates={adminConflictStates}
+                conflictShiftTypes={conflictShiftTypes}
+                userAssignments={userAssignments}
+                suggestions={suggestions}
+                showSuggestions={showSuggestions}
+                onValidateExchange={handleValidateExchangeClick}
+                onRejectExchange={handleRejectExchangeClick}
+                onRemoveUser={handleRemoveUserClick}
+                selectedForReplacements={selectedForReplacements}
+                onSelectedForReplacementsChange={setSelectedForReplacements}
+                filterPeriod={filterPeriod}
+                showOnlyWithInterested={showOnlyWithInterested}
+                filterUserId={filterUserId}
+              />
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Panneau flottant de participation */}
       <ParticipationPanel
         exchanges={exchanges as any}
-        users={users}
+        users={sortedUsers}
         history={history as any}
         isOpen={showParticipationPanel}
         onToggle={() => setShowParticipationPanel(!showParticipationPanel)}

@@ -11,6 +11,7 @@
  */
 
 import { db } from '../config';
+import { createParisDate } from '@/utils/timezoneUtils';
 import { 
   collection, 
   doc, 
@@ -1274,7 +1275,7 @@ export const formatExchangeHistoryEntry = (history: any) => {
     
     return {
       id: history.id,
-      date: history.completedAt?.toDate?.() || new Date(),
+      date: history.completedAt?.toDate?.() || createParisDate(),
       operation: operationText,
       shift: shiftText,
       withUser: isSource ? history.targetUserId : history.sourceUserId,
@@ -1284,7 +1285,7 @@ export const formatExchangeHistoryEntry = (history: any) => {
     console.error("Erreur lors du formatage de l'historique:", error);
     return {
       id: history.id,
-      date: new Date(),
+      date: createParisDate(),
       operation: 'Échange',
       shift: 'Détails non disponibles',
       withUser: 'Inconnu'

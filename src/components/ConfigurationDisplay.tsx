@@ -1,6 +1,7 @@
 import React from 'react';
+import { formatParisDate } from '@/utils/timezoneUtils';
 import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { frLocale } from '../utils/dateLocale';
 import { Calendar, Percent, Clock } from 'lucide-react';
 import { PlanningConfig } from '../types/planning';
 
@@ -28,8 +29,8 @@ const ConfigurationDisplay: React.FC<ConfigurationDisplayProps> = ({ config, cla
           <div>
             <p className="text-sm text-gray-600">Période</p>
             <p className="text-sm font-medium">
-              Du {format(config.startDate, 'd MMMM yyyy', { locale: fr })} au{' '}
-              {format(config.endDate, 'd MMMM yyyy', { locale: fr })}
+              Du {formatParisDate(config.startDate, 'd MMMM yyyy', { locale: frLocale })} au{' '}
+              {formatParisDate(config.endDate, 'd MMMM yyyy', { locale: frLocale })}
             </p>
           </div>
         </div>
@@ -39,7 +40,7 @@ const ConfigurationDisplay: React.FC<ConfigurationDisplayProps> = ({ config, cla
           <div>
             <p className="text-sm text-gray-600">Date limite de réponse</p>
             <p className="text-sm font-medium">
-              {format(config.deadline, 'd MMMM yyyy à HH:mm', { locale: fr })}
+              {formatParisDate(config.deadline, 'd MMMM yyyy à HH:mm', { locale: frLocale })}
             </p>
           </div>
         </div>

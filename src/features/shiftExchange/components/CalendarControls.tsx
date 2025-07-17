@@ -1,4 +1,5 @@
 import React from 'react';
+import { createParisDate } from '@/utils/timezoneUtils';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { formatWithCapitalizedMonth } from '../../../utils/dateUtils';
 
@@ -46,7 +47,7 @@ const CalendarControls: React.FC<CalendarControlsProps> = ({
           
           {/* Bouton pour aller à aujourd'hui */}
           <button 
-            onClick={() => setCurrentMonth(new Date())}
+            onClick={() => setCurrentMonth(createParisDate())}
             className="mt-1 text-xs text-indigo-600 hover:text-indigo-800 px-2 py-0.5 rounded-full hover:bg-indigo-50 active:bg-indigo-100"
           >
             aujourd'hui

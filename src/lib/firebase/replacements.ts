@@ -1,4 +1,5 @@
 import { collection, getDocs, query, where, addDoc, deleteDoc, doc, getDoc } from 'firebase/firestore';
+import { createParisDate } from '@/utils/timezoneUtils';
 import { db } from './config';
 import type { ShiftReplacement, ShiftExchange } from '../../types/planning';
 import { Timestamp } from 'firebase/firestore';
@@ -56,7 +57,7 @@ export const createReplacement = async (exchange: ShiftExchange): Promise<string
       shiftType: exchange.shiftType,
       timeSlot: exchange.timeSlot,
       originalUserId: exchange.userId,
-      createdAt: new Date().toISOString(),
+      createdAt: createParisDate().toISOString(),
       status: 'pending',
       notifiedUsers: []
     };

@@ -1,7 +1,9 @@
 import React, { useMemo } from 'react';
+import { formatParisDate } from '@/utils/timezoneUtils';
 import { format, getDaysInMonth } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { isGrayedOut } from '../utils/dateUtils';
+import { createParisDate, toParisTime } from '../utils/timezoneUtils';
 import PlanningGridCell from './PlanningGridCell';
 import type { ShiftAssignment } from '../types/planning';
 import type { ShiftExchange } from '../types/exchange';
@@ -70,18 +72,18 @@ const MonthTable: React.FC<MonthTableProps> = React.memo(({
     // Créer un tableau de tous les jours du mois
     const days = Array.from(
       { length: getDaysInMonth(month) },
-      (_, i) => new Date(month.getFullYear(), month.getMonth(), i + 1)
+      (_, i) => createParisDate(month.getFullYear(), month.getMonth(), i + 1)
     );
 
     // Filtrer les jours pour n'inclure que ceux dans la plage de dates
     return days.filter(date => {
-      const startOfDay = new Date(date);
+      const startOfDay = toParisTime(date);
       startOfDay.setHours(0, 0, 0, 0);
       
-      const compareStart = new Date(startDate);
+      const compareStart = toParisTime(startDate);
       compareStart.setHours(0, 0, 0, 0);
       
-      const compareEnd = new Date(endDate);
+      const compareEnd = toParisTime(endDate);
       compareEnd.setHours(23, 59, 59, 999);
       
       return startOfDay >= compareStart && startOfDay <= compareEnd;
@@ -122,7 +124,7 @@ const MonthTable: React.FC<MonthTableProps> = React.memo(({
                 </button>
               )}
               
-              {format(month, 'MMMM', { locale: fr }).charAt(0).toUpperCase() + format(month, 'MMMM', { locale: fr }).slice(1) + ' ' + format(month, 'yyyy')}
+              {formatParisDate(month, 'MMMM', { locale: fr }).charAt(0).toUpperCase() + formatParisDate(month, 'MMMM', { locale: fr }).slice(1) + ' ' + formatParisDate(month, 'yyyy')}
               
               {showNextButton && (
                 <button 
@@ -152,14 +154,14 @@ const MonthTable: React.FC<MonthTableProps> = React.memo(({
         </thead>
         <tbody>
           {filteredDays.map(day => {
-            const dateStr = format(day, 'yyyy-MM-dd');
+            const dateStr = formatParisDate(day, 'yyyy-MM-dd');
             const grayedOut = isGrayedOut(day);
             
             // Déterminer si ce jour est hier pour appliquer un style spécial à la bordure
-            const today = new Date();
+            const today = createParisDate();
             today.setHours(0, 0, 0, 0);
             
-            const yesterday = new Date(today);
+            const yesterday = createParisDate(today);
             yesterday.setDate(yesterday.getDate() - 1);
             
             const isYesterday = yesterday.toDateString() === day.toDateString();
@@ -204,9 +206,9 @@ const MonthTable: React.FC<MonthTableProps> = React.memo(({
                         BàG
                       </div>
                     )}
-                    <span className="ml-2">{format(day, 'd', { locale: fr })}</span>
+                    <span className="ml-2">{formatParisDate(day, 'd', { locale: fr })}</span>
                     <span className="text-gray-400 text-[10px] ml-1">
-                      {format(day, 'EEEEEE', { locale: fr }).charAt(0).toUpperCase() + format(day, 'EEEEEE', { locale: fr }).slice(1).toLowerCase()}
+                      {formatParisDate(day, 'EEEEEE', { locale: fr }).charAt(0).toUpperCase() + formatParisDate(day, 'EEEEEE', { locale: fr }).slice(1).toLowerCase()}
                     </span>
                   </div>
                 </td>

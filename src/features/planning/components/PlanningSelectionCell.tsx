@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { MessageSquare } from 'lucide-react';
-import CommentModal from './CommentModal';
-import Portal from './Portal';
+import { CommentModal } from '../../../components/modals';
+import { Portal } from '../../../components';
 import type { PeriodSelection } from '../types';
 
 interface PlanningSelectionCellProps {
@@ -49,7 +49,7 @@ const PlanningSelectionCell: React.FC<PlanningSelectionCellProps> = ({
     if (!readOnly && !isBlocked && selection?.type !== null) {
       e.stopPropagation();
       const touch = e.touches[0];
-      let timer = setTimeout(() => {
+      const timer = setTimeout(() => {
         onOpenModal(cellKey, { x: touch.clientX, y: touch.clientY });
       }, 500);
 

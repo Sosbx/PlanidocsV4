@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
+import { formatParisDate } from '@/utils/timezoneUtils';
 import { OperationType } from '../../../features/directExchange/types';
 import { ShiftAssignment } from '../types';
 import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { frLocale } from '../../../utils/dateLocale';
 import { formatPeriod } from '../../../utils/dateUtils';
 
 interface ExchangeModalProps {
@@ -83,7 +84,7 @@ const ExchangeModal: React.FC<ExchangeModalProps> = ({
   const formattedDate = (() => {
     if (!assignment.date) return '';
     try {
-      return format(new Date(assignment.date), 'EEEE d MMMM yyyy', { locale: fr })
+      return formatParisDate(new Date(assignment.date), 'EEEE d MMMM yyyy', { locale: frLocale })
         .replace(/^\w/, c => c.toUpperCase());
     } catch (error) {
       console.error('Erreur lors du formatage de la date:', error);

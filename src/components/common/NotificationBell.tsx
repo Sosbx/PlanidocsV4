@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createParisDate } from '@/utils/timezoneUtils';
 import { Bell } from 'lucide-react';
 import Badge from './Badge';
 
@@ -66,7 +67,7 @@ const NotificationBell: React.FC<NotificationBellProps> = ({
   // Formater la date relative (il y a X minutes/heures/jours)
   const formatRelativeTime = (dateString: string) => {
     const date = new Date(dateString);
-    const now = new Date();
+    const now = createParisDate();
     const diffMs = now.getTime() - date.getTime();
     const diffSec = Math.round(diffMs / 1000);
     const diffMin = Math.round(diffSec / 60);

@@ -1,4 +1,5 @@
 import { signInWithEmailAndPassword, signOut, sendPasswordResetEmail, signInWithPopup, linkWithPopup } from 'firebase/auth';
+import { createParisDate } from '@/utils/timezoneUtils';
 import { auth, googleProvider } from '../../../lib/firebase/config';
 import { getAuthErrorMessage } from './errors';
 import { getUserByLogin, getUserByEmail } from '../../../lib/firebase/users';
@@ -14,35 +15,107 @@ import { deleteUnauthorizedUser } from './deleteUnauthorizedUser';
  * @param password - Le mot de passe de l'utilisateur
  * @returns Les données de l'utilisateur connecté
  */
+// Fonction helper pour tenter une connexion silencieusement
+const trySignInSilently = async (email: string, password: string): Promise<any> => {
+  // Sauvegarder temporairement console.error
+  const originalConsoleError = console.error;
+  
+  // Remplacer console.error pour filtrer les erreurs 400
+  console.error = (...args: any[]) => {
+    // Vérifier si c'est une erreur 400 de Firebase
+    const errorString = args.join(' ');
+    if (errorString.includes('400') && errorString.includes('signInWithPassword')) {
+      // Ne pas afficher cette erreur
+      return;
+    }
+    // Pour toutes les autres erreurs, les afficher normalement
+    originalConsoleError.apply(console, args);
+  };
+  
+  try {
+    const result = await signInWithEmailAndPassword(auth, email, password);
+    // Restaurer console.error
+    console.error = originalConsoleError;
+    return result;
+  } catch (error) {
+    // Restaurer console.error
+    console.error = originalConsoleError;
+    throw error;
+  }
+};
+
 export const signInUser = async (login: string, password: string): Promise<User> => {
   try {
+    console.log('[Auth] Tentative de connexion avec login:', login);
+    
     // Essayer d'abord avec l'association Rive Droite
     let userData = await getUserByLogin(login.toUpperCase(), ASSOCIATIONS.RIVE_DROITE);
     
     // Si l'utilisateur n'est pas trouvé dans Rive Droite, essayer avec Rive Gauche
     if (!userData) {
+      console.log('[Auth] Utilisateur non trouvé dans Rive Droite, essai avec Rive Gauche');
       userData = await getUserByLogin(login.toUpperCase(), ASSOCIATIONS.RIVE_GAUCHE);
     }
     
     if (!userData) {
+      console.error('[Auth] Aucun utilisateur trouvé avec le login:', login);
       throw new Error('Identifiants invalides');
     }
     
+    console.log('[Auth] Utilisateur trouvé:', {
+      login: userData.login,
+      email: userData.email,
+      association: userData.associationId
+    });
+    
+    // Vérifier si on a déjà stocké le format du mot de passe pour cet utilisateur
+    const storedPasswordFormat = localStorage.getItem(`pwdFormat_${userData.id}`);
+    
     // Se connecter avec l'email et le mot de passe
-    try {
-      // Essayer d'abord avec le mot de passe tel quel (pour les mots de passe réinitialisés)
-      await signInWithEmailAndPassword(auth, userData.email, password);
-    } catch {
-      // Si ça échoue, essayer avec le mot de passe en majuscules (pour la compatibilité)
-      try {
-        await signInWithEmailAndPassword(auth, userData.email, password.toUpperCase());
-      } catch (innerError) {
-        throw new Error('Identifiants invalides');
+    // Optimisation : déterminer l'ordre des tentatives selon le format stocké ou le format du mot de passe
+    let passwordVariants: string[] = [];
+    
+    if (storedPasswordFormat === 'uppercase') {
+      passwordVariants = [password.toUpperCase()];
+    } else if (storedPasswordFormat === 'original') {
+      passwordVariants = [password];
+    } else {
+      // Pas d'info stockée, essayer les deux
+      passwordVariants = [password];
+      if (password !== password.toUpperCase()) {
+        passwordVariants.push(password.toUpperCase());
       }
     }
-    // Assurer que l'utilisateur a la propriété roles correctement définie
-    return ensureUserRoles(userData);
+    
+    let lastError: any = null;
+    
+    for (let i = 0; i < passwordVariants.length; i++) {
+      try {
+        // Utiliser la fonction silencieuse pour la première tentative
+        const result = i === 0 && passwordVariants.length > 1 
+          ? await trySignInSilently(userData.email, passwordVariants[i])
+          : await signInWithEmailAndPassword(auth, userData.email, passwordVariants[i]);
+          
+        // Connexion réussie, sauvegarder le format pour les prochaines fois
+        if (i === 0 && passwordVariants[i] === password) {
+          localStorage.setItem(`pwdFormat_${userData.id}`, 'original');
+          console.log('[Auth] Connexion réussie avec le mot de passe tel quel');
+        } else if (passwordVariants[i] === password.toUpperCase()) {
+          localStorage.setItem(`pwdFormat_${userData.id}`, 'uppercase');
+          console.log('[Auth] Connexion réussie avec le mot de passe en majuscules (compatibilité)');
+        }
+        
+        return ensureUserRoles(userData); // Succès, on retourne directement
+      } catch (error: any) {
+        lastError = error;
+      }
+    }
+    
+    // Si on arrive ici, toutes les tentatives ont échoué
+    console.error('[Auth] Échec de connexion après toutes les tentatives');
+    throw new Error('Identifiants invalides');
   } catch (error) {
+    console.error('[Auth] Erreur globale de connexion:', error);
     throw new Error(getAuthErrorMessage(error));
   }
 };
@@ -128,7 +201,7 @@ export const signInWithGoogle = async (): Promise<User> => {
       console.warn('Tentative de connexion Google non autorisée:', {
         email: googleUser.email,
         displayName: googleUser.displayName,
-        timestamp: new Date().toISOString()
+        timestamp: createParisDate().toISOString()
       });
       
       throw new Error('Compte non autorisé. Veuillez contacter l\'administrateur pour obtenir l\'accès.');

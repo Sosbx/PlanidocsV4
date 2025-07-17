@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { frLocale } from '../../../utils/dateLocale';
+import { parseParisDate, formatParisDate } from '../../../utils/timezoneUtils';
 import { ShiftExchange, OperationType } from '../../../types/exchange';
 import { User } from '../../../types/users';
 import { formatPeriod } from '../../../utils/dateUtils';
@@ -98,7 +99,7 @@ const ExchangeProposalsModal: React.FC<ExchangeProposalsModalProps> = ({
   
   // Formater la date à la française
   const formattedDate = exchange?.date ? 
-    format(new Date(exchange.date), 'EEEE d MMMM yyyy', { locale: fr })
+    formatParisDate(exchange.date, 'EEEE d MMMM yyyy', { locale: frLocale })
       .replace(/^\w/, c => c.toUpperCase()) : '';
   
   // Fonction pour gérer l'acceptation d'une proposition
@@ -423,8 +424,7 @@ const ExchangeProposalsModal: React.FC<ExchangeProposalsModalProps> = ({
                                 return null;
                               }
                               
-                              const shiftDate = new Date(shift.date);
-                              const formattedDate = format(shiftDate, 'dd/MM', { locale: fr });
+                              const formattedDate = formatParisDate(shift.date, 'dd/MM', { locale: frLocale });
                               const periodText = formatPeriod(shift.period);
                               
                               // Définir la couleur du badge en fonction de la période
@@ -577,7 +577,7 @@ const ExchangeProposalsModal: React.FC<ExchangeProposalsModalProps> = ({
                   <div>
                     <p className="text-sm font-medium text-gray-700">Votre garde cédée :</p>
                     <p className="text-xs text-gray-600">
-                      {format(new Date(exchangeDetails.sourceShift.date), 'EEEE d MMMM yyyy', { locale: fr })}
+                      {formatParisDate(exchangeDetails.sourceShift.date, 'EEEE d MMMM yyyy', { locale: frLocale })}
                       {' - '}
                       {exchangeDetails.sourceShift.shiftType}
                       {' ('}
@@ -591,7 +591,7 @@ const ExchangeProposalsModal: React.FC<ExchangeProposalsModalProps> = ({
                   <div>
                     <p className="text-sm font-medium text-gray-700">Garde reçue :</p>
                     <p className="text-xs text-gray-600">
-                      {format(new Date(exchangeDetails.targetShift.date), 'EEEE d MMMM yyyy', { locale: fr })}
+                      {formatParisDate(exchangeDetails.targetShift.date, 'EEEE d MMMM yyyy', { locale: frLocale })}
                       {' - '}
                       {exchangeDetails.targetShift.shiftType}
                       {' ('}
