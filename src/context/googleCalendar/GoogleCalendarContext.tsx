@@ -4,7 +4,7 @@ import { useGoogleLogin } from '@react-oauth/google';
 import { googleCalendarService } from '../../lib/google/googleCalendarService';
 import { GOOGLE_CALENDAR_SCOPE } from '../../lib/google/googleCalendarConfig';
 import type { ShiftAssignment } from '../../types/planning';
-import type { GoogleCalendarSyncStatus, GoogleCalendarSyncResult } from '../../types/googleCalendar';
+import type { GoogleCalendarSyncStatus, GoogleCalendarSyncResult, SyncProgress } from '../../types/googleCalendar';
 import { useToastContext } from '../toast';
 import { useAuth } from '../../features/auth/hooks';
 import { useAssociation } from '../association/AssociationContext';
@@ -13,13 +13,14 @@ interface GoogleCalendarContextType {
   // État
   isAuthenticated: boolean;
   isSyncing: boolean;
+  syncProgress: SyncProgress | null;
   lastSync: Date | null;
   lastSyncResult: GoogleCalendarSyncResult | null;
   
   // Actions
   login: () => void;
   logout: () => void;
-  smartSync: (assignments: Record<string, ShiftAssignment>, eventMode?: 'grouped' | 'separated') => Promise<GoogleCalendarSyncResult | void>;
+  smartSync: (assignments: Record<string, ShiftAssignment>, eventMode?: 'grouped' | 'separated', colorId?: string) => Promise<GoogleCalendarSyncResult | void>;
 }
 
 const GoogleCalendarContext = createContext<GoogleCalendarContextType | undefined>(undefined);
@@ -35,6 +36,7 @@ export const GoogleCalendarProvider: React.FC<GoogleCalendarProviderProps> = ({ 
   const [syncStatus, setSyncStatus] = useState<GoogleCalendarSyncStatus>({
     isAuthenticated: false,
     isSyncing: false,
+    syncProgress: null,
     lastSync: null,
     lastSyncResult: null,
   });
@@ -73,9 +75,11 @@ export const GoogleCalendarProvider: React.FC<GoogleCalendarProviderProps> = ({ 
   const logout = useCallback(() => {
     localStorage.removeItem('google_calendar_token');
     localStorage.removeItem('google_calendar_token_expiry');
+    localStorage.removeItem('planidocs_calendar_id'); // Supprimer l'ID du calendrier
     setSyncStatus({
       isAuthenticated: false,
       isSyncing: false,
+      syncProgress: null,
       lastSync: null,
       lastSyncResult: null,
     });
@@ -110,15 +114,21 @@ export const GoogleCalendarProvider: React.FC<GoogleCalendarProviderProps> = ({ 
   // Synchronisation intelligente avec détection de doublons
   const smartSync = useCallback(async (
     assignments: Record<string, ShiftAssignment>,
-    eventMode: 'grouped' | 'separated' = 'grouped'
+    eventMode: 'grouped' | 'separated' = 'grouped',
+    colorId: string = '9'
   ) => {
     if (!syncStatus.isAuthenticated || !user) {
       showToast('Veuillez vous connecter à Google Calendar', 'error');
       return;
     }
 
-    setSyncStatus(prev => ({ ...prev, isSyncing: true }));
+    setSyncStatus(prev => ({ ...prev, isSyncing: true, syncProgress: null }));
     showToast('Analyse et synchronisation...', 'info');
+
+    // Callback pour mettre à jour la progression
+    const updateProgress = (progress: SyncProgress) => {
+      setSyncStatus(prev => ({ ...prev, syncProgress: progress }));
+    };
 
     try {
       // Toujours utiliser la détection de doublons
@@ -127,13 +137,16 @@ export const GoogleCalendarProvider: React.FC<GoogleCalendarProviderProps> = ({ 
         assignments,
         currentAssociation,
         true,
-        eventMode
+        eventMode,
+        colorId,
+        updateProgress
       );
       
       console.log('Sync result in context:', result);
       setSyncStatus(prev => ({
         ...prev,
         isSyncing: false,
+        syncProgress: null,
         lastSync: createParisDate(),
         lastSyncResult: result,
       }));
@@ -145,6 +158,7 @@ export const GoogleCalendarProvider: React.FC<GoogleCalendarProviderProps> = ({ 
         if (result.updated > 0) actions.push(`${result.updated} mise(s) à jour`);
         if (result.deleted > 0) actions.push(`${result.deleted} supprimée(s)`);
         if (result.converted > 0) actions.push(`${result.converted} convertie(s)`);
+        if (result.migrated > 0) actions.push(`${result.migrated} migrée(s) depuis le calendrier principal`);
         if ('duplicatesFound' in result && result.duplicatesFound > 0) {
           actions.push(`${result.duplicatesFound} doublon(s) adopté(s)`);
         }
@@ -167,7 +181,7 @@ export const GoogleCalendarProvider: React.FC<GoogleCalendarProviderProps> = ({ 
       return result;
     } catch (error: any) {
       console.error('Smart sync error:', error);
-      setSyncStatus(prev => ({ ...prev, isSyncing: false }));
+      setSyncStatus(prev => ({ ...prev, isSyncing: false, syncProgress: null }));
       
       // Gérer l'expiration du token
       if (error.message === 'Not authenticated' || error.code === 401) {
@@ -182,6 +196,7 @@ export const GoogleCalendarProvider: React.FC<GoogleCalendarProviderProps> = ({ 
   const value: GoogleCalendarContextType = {
     isAuthenticated: syncStatus.isAuthenticated,
     isSyncing: syncStatus.isSyncing,
+    syncProgress: syncStatus.syncProgress,
     lastSync: syncStatus.lastSync,
     lastSyncResult: syncStatus.lastSyncResult,
     login,

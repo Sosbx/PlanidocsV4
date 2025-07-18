@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { X, Calendar, Info, LogOut, ChevronDown } from 'lucide-react';
 import Portal from '../Portal';
+import { GoogleCalendarColorPicker } from '../GoogleCalendarColorPicker';
 
 interface SyncModeModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (mode: 'grouped' | 'separated') => void;
+  onConfirm: (mode: 'grouped' | 'separated', colorId: string) => void;
   onLogout: () => void;
   currentMode: 'grouped' | 'separated';
 }
@@ -18,12 +19,16 @@ export const SyncModeModal: React.FC<SyncModeModalProps> = ({
   currentMode 
 }) => {
   const [selectedMode, setSelectedMode] = useState<'grouped' | 'separated'>(currentMode);
+  const [selectedColorId, setSelectedColorId] = useState<string>(() => {
+    return localStorage.getItem('planidocs_event_color') || '9';
+  });
   const [showExplanations, setShowExplanations] = useState(false);
 
   if (!isOpen) return null;
 
   const handleConfirm = () => {
-    onConfirm(selectedMode);
+    localStorage.setItem('planidocs_event_color', selectedColorId);
+    onConfirm(selectedMode, selectedColorId);
     onClose();
   };
 
@@ -122,6 +127,14 @@ export const SyncModeModal: React.FC<SyncModeModalProps> = ({
                 </div>
               </div>
             )}
+
+            {/* Sélecteur de couleur */}
+            <div className="mt-4 pt-4 border-t">
+              <GoogleCalendarColorPicker
+                selectedColorId={selectedColorId}
+                onColorChange={setSelectedColorId}
+              />
+            </div>
           </div>
 
           <div className="flex justify-between items-center px-6 py-4 border-t bg-gray-50">

@@ -3,6 +3,7 @@ import { Calendar, Loader2, CheckCircle2 } from 'lucide-react';
 import { useGoogleCalendar } from '../hooks/useGoogleCalendar';
 import type { ShiftAssignment } from '../types/planning';
 import { SyncModeModal } from './modals/SyncModeModal';
+import { SyncProgressBar } from './SyncProgressBar';
 
 interface GoogleCalendarSyncCompactProps {
   assignments: Record<string, ShiftAssignment>;
@@ -18,6 +19,7 @@ export const GoogleCalendarSyncCompact: React.FC<GoogleCalendarSyncCompactProps>
   const {
     isAuthenticated,
     isSyncing,
+    syncProgress,
     login,
     logout,
     smartSync,
@@ -38,17 +40,17 @@ export const GoogleCalendarSyncCompact: React.FC<GoogleCalendarSyncCompactProps>
     }
   };
 
-  const handleSyncConfirm = async (mode: 'grouped' | 'separated') => {
+  const handleSyncConfirm = async (mode: 'grouped' | 'separated', colorId: string) => {
     setEventMode(mode);
     localStorage.setItem('planidocs_event_mode', mode);
-    await smartSync(assignments, mode);
+    await smartSync(assignments, mode, colorId);
     onSyncComplete?.();
   };
 
   const shiftCount = Object.values(assignments).filter(a => a && a.shiftType).length;
 
   return (
-    <>
+    <div className="relative inline-block">
       <button
         onClick={handleButtonClick}
         disabled={disabled || isSyncing || shiftCount === 0}
@@ -69,11 +71,18 @@ export const GoogleCalendarSyncCompact: React.FC<GoogleCalendarSyncCompactProps>
         ) : (
           <Calendar className="w-4 h-4" />
         )}
-        <span>Sync GoogleCal</span>
+        <span>{isAuthenticated ? 'Sync GoogleCal' : 'Connecter GoogleCal'}</span>
         {isAuthenticated && (
           <CheckCircle2 className="w-3 h-3 text-green-300" />
         )}
       </button>
+
+      {/* Barre de progression */}
+      {isSyncing && syncProgress && (
+        <div className="absolute top-full left-0 right-0 mt-2 min-w-[200px] bg-white p-2 rounded shadow-lg border border-gray-200">
+          <SyncProgressBar progress={syncProgress} />
+        </div>
+      )}
 
       {/* Modal de sélection du mode */}
       <SyncModeModal
@@ -86,6 +95,6 @@ export const GoogleCalendarSyncCompact: React.FC<GoogleCalendarSyncCompactProps>
         }}
         currentMode={eventMode}
       />
-    </>
+    </div>
   );
 };

@@ -1,9 +1,11 @@
 import { 
   DISCOVERY_DOC, 
   PLANIDOCS_EVENT_PROPERTIES,
-  PLANIDOCS_EVENT_COLOR_ID 
+  PLANIDOCS_EVENT_COLOR_ID,
+  PLANIDOCS_CALENDAR_NAME,
+  PLANIDOCS_CALENDAR_DESCRIPTION,
+  PLANIDOCS_CALENDAR_COLOR
 } from './googleCalendarConfig';
-import { createParisDate } from '@/utils/timezoneUtils';
 import type { ShiftAssignment } from '../../types/planning';
 import type { GoogleCalendarEvent, GoogleCalendarSyncResult, CalendarSyncRecord, ConvertedEventDetail } from '../../types/googleCalendar';
 import { 
@@ -16,6 +18,7 @@ import { parseParisDate, createParisDate, formatParisDate } from '../../utils/ti
 class GoogleCalendarService {
   private isInitialized = false;
   private accessToken: string | null = null;
+  private planiDocsCalendarId: string | null = null;
 
   // Initialiser l'API Google
   async init(): Promise<void> {
@@ -61,6 +64,14 @@ class GoogleCalendarService {
     }
   }
   
+  // Réinitialiser le calendrier PlaniDocs (utile en cas de problème)
+  async resetPlaniDocsCalendar(): Promise<void> {
+    console.log('Réinitialisation du calendrier PlaniDocs...');
+    this.planiDocsCalendarId = null;
+    localStorage.removeItem('planidocs_calendar_id');
+    console.log('Cache du calendrier effacé');
+  }
+  
   // Vérifier et configurer l'authentification
   private async ensureAuthenticated(): Promise<void> {
     if (!this.accessToken) {
@@ -83,13 +94,165 @@ class GoogleCalendarService {
     }
   }
 
+  // Obtenir ou créer le calendrier PlaniDocs
+  private async getOrCreatePlaniDocsCalendar(): Promise<string> {
+    // Vérifier si on a déjà l'ID en cache mémoire
+    if (this.planiDocsCalendarId) {
+      return this.planiDocsCalendarId;
+    }
+
+    console.log('Recherche du calendrier PlaniDocs...');
+
+    // ÉTAPE 1: Rechercher d'abord dans la liste des calendriers de l'utilisateur (calendarList)
+    let foundInList = false;
+    let calendarIdFromList: string | null = null;
+    
+    try {
+      const listResponse = await window.gapi.client.calendar.calendarList.list({
+        minAccessRole: 'writer',
+        showHidden: true
+      });
+
+      const calendars = listResponse.result.items || [];
+      const planiDocsCalendar = calendars.find(
+        cal => cal.summary === PLANIDOCS_CALENDAR_NAME
+      );
+
+      if (planiDocsCalendar && planiDocsCalendar.id) {
+        console.log('Calendrier trouvé dans la liste:', planiDocsCalendar.id);
+        foundInList = true;
+        calendarIdFromList = planiDocsCalendar.id;
+        // Sauvegarder et retourner
+        this.planiDocsCalendarId = planiDocsCalendar.id;
+        localStorage.setItem('planidocs_calendar_id', planiDocsCalendar.id);
+        return planiDocsCalendar.id;
+      }
+    } catch (error) {
+      console.error('Erreur lors de la recherche dans calendarList:', error);
+    }
+
+    // ÉTAPE 2: Vérifier le cache localStorage
+    const cachedCalendarId = localStorage.getItem('planidocs_calendar_id');
+    if (cachedCalendarId && !foundInList) {
+      console.log('ID trouvé en cache mais pas dans la liste. Tentative de ré-inscription...');
+      
+      // Vérifier d'abord que le calendrier existe toujours
+      let calendarExists = false;
+      try {
+        await window.gapi.client.calendar.calendars.get({
+          calendarId: cachedCalendarId
+        });
+        calendarExists = true;
+        console.log('Le calendrier existe toujours, tentative de ré-abonnement...');
+      } catch (error: any) {
+        if (error?.status === 404) {
+          console.log('Le calendrier n\'existe plus, il faut le recréer');
+        } else {
+          console.error('Erreur lors de la vérification du calendrier:', error);
+        }
+      }
+
+      // Si le calendrier existe, essayer de se ré-abonner
+      if (calendarExists) {
+        try {
+          // Ré-ajouter le calendrier à la liste
+          await window.gapi.client.calendar.calendarList.insert({
+            resource: {
+              id: cachedCalendarId
+            }
+          });
+          console.log('Ré-abonnement réussi');
+
+          // Mettre à jour les paramètres d'affichage
+          try {
+            await window.gapi.client.calendar.calendarList.update({
+              calendarId: cachedCalendarId,
+              colorRgbFormat: true,
+              resource: {
+                backgroundColor: PLANIDOCS_CALENDAR_COLOR,
+                foregroundColor: '#ffffff',
+                selected: true
+              }
+            });
+          } catch (colorError) {
+            console.warn('Impossible de mettre à jour les couleurs:', colorError);
+          }
+
+          this.planiDocsCalendarId = cachedCalendarId;
+          return cachedCalendarId;
+        } catch (error) {
+          console.error('Impossible de se ré-abonner au calendrier:', error);
+          localStorage.removeItem('planidocs_calendar_id');
+        }
+      } else {
+        localStorage.removeItem('planidocs_calendar_id');
+      }
+    }
+
+    // ÉTAPE 3: Créer un nouveau calendrier
+    console.log('Création d\'un nouveau calendrier Gardes-SOS...');
+    try {
+      const newCalendar = await window.gapi.client.calendar.calendars.insert({
+        resource: {
+          summary: PLANIDOCS_CALENDAR_NAME,
+          description: PLANIDOCS_CALENDAR_DESCRIPTION,
+          timeZone: 'Europe/Paris'
+        }
+      });
+
+      if (newCalendar.result && newCalendar.result.id) {
+        console.log('Nouveau calendrier créé avec succès:', newCalendar.result.id);
+        
+        // Attendre un peu pour que le calendrier soit bien créé
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Mettre à jour la couleur du calendrier dans la liste
+        try {
+          await window.gapi.client.calendar.calendarList.update({
+            calendarId: newCalendar.result.id,
+            colorRgbFormat: true,
+            resource: {
+              backgroundColor: PLANIDOCS_CALENDAR_COLOR,
+              foregroundColor: '#ffffff',
+              selected: true
+            }
+          });
+          console.log('Couleurs et paramètres du calendrier mis à jour');
+        } catch (colorError) {
+          console.warn('Impossible de mettre à jour les couleurs du calendrier:', colorError);
+        }
+
+        this.planiDocsCalendarId = newCalendar.result.id;
+        localStorage.setItem('planidocs_calendar_id', newCalendar.result.id);
+        console.log('Calendrier PlaniDocs prêt à l\'utilisation');
+        return newCalendar.result.id;
+      } else {
+        console.error('La création du calendrier n\'a pas retourné d\'ID');
+        throw new Error('Pas d\'ID de calendrier retourné');
+      }
+    } catch (error: any) {
+      console.error('Erreur lors de la création du calendrier:', error);
+      console.error('Détails de l\'erreur:', {
+        message: error?.message,
+        status: error?.status,
+        code: error?.code,
+        details: error?.result?.error
+      });
+      
+      // En cas d'échec, utiliser le calendrier principal
+      console.warn('Impossible de créer le calendrier Gardes-SOS. Utilisation du calendrier principal.');
+      return 'primary';
+    }
+  }
+
   // Convertir les assignments en événements Google Calendar
   private convertAssignmentsToEvents(
     assignments: Record<string, ShiftAssignment>,
-    mode: 'grouped' | 'separated' = 'grouped'
+    mode: 'grouped' | 'separated' = 'grouped',
+    colorId: string = PLANIDOCS_EVENT_COLOR_ID
   ): GoogleCalendarEvent[] {
     if (mode === 'separated') {
-      return this.convertAssignmentsToSeparatedEvents(assignments);
+      return this.convertAssignmentsToSeparatedEvents(assignments, colorId);
     }
     // Grouper par date
     const eventsByDate = new Map<string, string[]>();
@@ -135,7 +298,7 @@ class GoogleCalendarService {
             },
           ],
         },
-        colorId: PLANIDOCS_EVENT_COLOR_ID,
+        colorId: colorId,
         extendedProperties: {
           private: {
             ...PLANIDOCS_EVENT_PROPERTIES,
@@ -178,7 +341,8 @@ class GoogleCalendarService {
 
   // Convertir les assignments en événements séparés avec horaires
   private convertAssignmentsToSeparatedEvents(
-    assignments: Record<string, ShiftAssignment>
+    assignments: Record<string, ShiftAssignment>,
+    colorId: string = PLANIDOCS_EVENT_COLOR_ID
   ): GoogleCalendarEvent[] {
     const events: GoogleCalendarEvent[] = [];
     
@@ -221,7 +385,7 @@ class GoogleCalendarService {
               },
             ],
           },
-          colorId: PLANIDOCS_EVENT_COLOR_ID,
+          colorId: colorId,
           extendedProperties: {
             private: {
               ...PLANIDOCS_EVENT_PROPERTIES,
@@ -244,10 +408,11 @@ class GoogleCalendarService {
     endDate?: Date
   ): Promise<GoogleCalendarEvent[]> {
     await this.ensureAuthenticated();
+    const calendarId = await this.getOrCreatePlaniDocsCalendar();
 
     try {
       const response = await window.gapi.client.calendar.events.list({
-        calendarId: 'primary',
+        calendarId,
         timeMin: startDate ? formatParisDate(startDate, "yyyy-MM-dd'T'HH:mm:ssXXX") : undefined,
         timeMax: endDate ? formatParisDate(endDate, "yyyy-MM-dd'T'HH:mm:ssXXX") : undefined,
         maxResults: 2500,
@@ -270,10 +435,11 @@ class GoogleCalendarService {
     endDate?: Date
   ): Promise<GoogleCalendarEvent[]> {
     await this.ensureAuthenticated();
+    const calendarId = await this.getOrCreatePlaniDocsCalendar();
 
     try {
       const response = await window.gapi.client.calendar.events.list({
-        calendarId: 'primary',
+        calendarId,
         timeMin: startDate ? formatParisDate(startDate, "yyyy-MM-dd'T'HH:mm:ssXXX") : undefined,
         timeMax: endDate ? formatParisDate(endDate, "yyyy-MM-dd'T'HH:mm:ssXXX") : undefined,
         maxResults: 2500,
@@ -285,6 +451,32 @@ class GoogleCalendarService {
       return response.result.items || [];
     } catch (error) {
       console.error('Error fetching all calendar events:', error);
+      return [];
+    }
+  }
+
+  // Récupérer les événements PlaniDocs du calendrier principal (pour migration)
+  async getPlaniDocsEventsFromPrimary(
+    startDate?: Date,
+    endDate?: Date
+  ): Promise<GoogleCalendarEvent[]> {
+    await this.ensureAuthenticated();
+
+    try {
+      const response = await window.gapi.client.calendar.events.list({
+        calendarId: 'primary', // Toujours chercher dans le principal
+        timeMin: startDate ? formatParisDate(startDate, "yyyy-MM-dd'T'HH:mm:ssXXX") : undefined,
+        timeMax: endDate ? formatParisDate(endDate, "yyyy-MM-dd'T'HH:mm:ssXXX") : undefined,
+        maxResults: 2500,
+        singleEvents: true,
+        orderBy: 'startTime',
+        // Rechercher uniquement les événements avec nos propriétés étendues
+        privateExtendedProperty: `source=${PLANIDOCS_EVENT_PROPERTIES.source}`,
+      });
+
+      return response.result.items || [];
+    } catch (error) {
+      console.error('Error fetching PlaniDocs events from primary calendar:', error);
       return [];
     }
   }
@@ -467,10 +659,11 @@ class GoogleCalendarService {
   // Supprimer un événement
   async deleteEvent(eventId: string): Promise<boolean | 'rate_limited' | 'already_deleted'> {
     await this.ensureAuthenticated();
+    const calendarId = await this.getOrCreatePlaniDocsCalendar();
 
     try {
       await window.gapi.client.calendar.events.delete({
-        calendarId: 'primary',
+        calendarId,
         eventId: eventId,
       });
       return true;
@@ -498,10 +691,11 @@ class GoogleCalendarService {
     event: GoogleCalendarEvent
   ): Promise<boolean> {
     await this.ensureAuthenticated();
+    const calendarId = await this.getOrCreatePlaniDocsCalendar();
 
     try {
       await window.gapi.client.calendar.events.update({
-        calendarId: 'primary',
+        calendarId,
         eventId: eventId,
         resource: event,
       });
@@ -519,29 +713,39 @@ class GoogleCalendarService {
     assignments: Record<string, ShiftAssignment>,
     associationId?: string,
     detectDuplicates: boolean = true,
-    eventMode: 'grouped' | 'separated' = 'grouped'
+    eventMode: 'grouped' | 'separated' = 'grouped',
+    colorId: string = PLANIDOCS_EVENT_COLOR_ID,
+    onProgress?: (progress: { current: number; total: number; message: string; phase: 'analyzing' | 'migrating' | 'creating' | 'updating' | 'deleting' | 'finalizing' }) => void
   ): Promise<GoogleCalendarSyncResult & { duplicatesFound?: number }> {
     await this.ensureAuthenticated();
+    const calendarId = await this.getOrCreatePlaniDocsCalendar();
 
     const result: GoogleCalendarSyncResult & { duplicatesFound?: number } = {
       created: 0,
       updated: 0,
       deleted: 0,
       converted: 0,
+      migrated: 0,
       errors: [],
       duplicatesFound: 0,
       createdEvents: [],
       updatedEvents: [],
       deletedEvents: [],
       convertedEvents: [],
+      migratedEvents: [],
     };
 
     try {
+      // Phase 1: Analyse des calendriers
+      onProgress?.({ current: 0, total: 100, message: 'Analyse des calendriers...', phase: 'analyzing' });
+      
       // 1. Récupérer les enregistrements de synchronisation existants
       const syncRecords = await getUserSyncRecords(userId, associationId);
       const syncRecordsMap = new Map(
         syncRecords.map(r => [r.assignmentKey, r])
       );
+      
+      onProgress?.({ current: 5, total: 100, message: 'Analyse des calendriers...', phase: 'analyzing' });
 
       // 2. Récupérer TOUS les événements du calendrier si détection activée
       let allEvents: GoogleCalendarEvent[] = [];
@@ -572,13 +776,66 @@ class GoogleCalendarService {
       }
 
       // 3. Récupérer les événements PlaniDocs
+      onProgress?.({ current: 10, total: 100, message: 'Récupération des événements PlaniDocs...', phase: 'analyzing' });
       const planiDocsEvents = await this.getPlaniDocsEvents();
       const planiDocsEventsMap = new Map(
         planiDocsEvents.map(e => [e.id!, e])
       );
+      
+      onProgress?.({ current: 15, total: 100, message: 'Analyse des événements...', phase: 'analyzing' });
+
+      // 3.5 Détecter et migrer les événements du calendrier principal
+      let primaryCalendarEvents: GoogleCalendarEvent[] = [];
+      const eventsToMigrate: string[] = [];
+      
+      // Vérifier si on doit chercher dans le calendrier principal
+      if (calendarId !== 'primary') {
+        onProgress?.({ current: 20, total: 100, message: 'Recherche des événements à migrer...', phase: 'analyzing' });
+        // Calculer la plage de dates pour la recherche
+        const dates = Object.values(assignments).map(a => new Date(a.date));
+        const minDate = dates.length > 0 ? new Date(Math.min(...dates.map(d => d.getTime()))) : undefined;
+        const maxDate = dates.length > 0 ? new Date(Math.max(...dates.map(d => d.getTime()))) : undefined;
+        
+        if (minDate && maxDate) {
+          // Ajouter une marge de sécurité
+          minDate.setDate(minDate.getDate() - 1);
+          maxDate.setDate(maxDate.getDate() + 1);
+          
+          // Récupérer les événements PlaniDocs du calendrier principal
+          primaryCalendarEvents = await this.getPlaniDocsEventsFromPrimary(minDate, maxDate);
+          console.log(`Trouvé ${primaryCalendarEvents.length} événement(s) PlaniDocs dans le calendrier principal`);
+          
+          // Identifier les événements à migrer (ceux qui correspondent aux assignments actuels)
+          primaryCalendarEvents.forEach(primaryEvent => {
+            const { date: eventDate } = this.extractDateAndKey(primaryEvent);
+            
+            // Vérifier si cet événement correspond à un assignment actuel
+            const hasMatchingAssignment = Object.entries(assignments).some(([key, assignment]) => {
+              // Extraire la date de la clé
+              const assignmentDate = assignment.date;
+              
+              // Vérifier si les dates correspondent
+              if (assignmentDate !== eventDate) return false;
+              
+              // Vérifier si les gardes correspondent (dans le summary)
+              const eventShifts = primaryEvent.summary?.split(/\s+/).filter(s => s).map(s => s.toUpperCase()).sort().join(',') || '';
+              const assignmentShifts = assignment.shiftType?.toUpperCase() || '';
+              
+              // Pour le mode groupé, plusieurs gardes peuvent être dans le summary
+              return eventShifts.includes(assignmentShifts);
+            });
+            
+            if (hasMatchingAssignment && primaryEvent.id) {
+              eventsToMigrate.push(primaryEvent.id);
+            }
+          });
+          
+          console.log(`${eventsToMigrate.length} événement(s) à migrer du calendrier principal`);
+        }
+      }
 
       // 4. Convertir les assignments actuels en événements
-      const currentEvents = this.convertAssignmentsToEvents(assignments, eventMode);
+      const currentEvents = this.convertAssignmentsToEvents(assignments, eventMode, colorId);
       let toCreate: GoogleCalendarEvent[] = [];
       const toUpdate: Array<{ eventId: string; event: GoogleCalendarEvent }> = [];
       let toDelete: Array<{ eventId: string; syncRecord: CalendarSyncRecord }> = [];
@@ -701,6 +958,7 @@ class GoogleCalendarService {
           if (googleEvent) {
             const hasChanged = 
               googleEvent.summary !== event.summary ||
+              googleEvent.colorId !== event.colorId ||
               JSON.stringify(googleEvent.extendedProperties?.private?.shifts) !== 
               JSON.stringify(event.extendedProperties?.private?.shifts);
 
@@ -889,14 +1147,16 @@ class GoogleCalendarService {
       // 6. Appliquer les changements
       // Créer les nouveaux événements
       if (toCreate.length > 0) {
+        onProgress?.({ current: 40, total: 100, message: `Création de ${toCreate.length} événement(s)...`, phase: 'creating' });
         const batchSize = 50;
+        let createdCount = 0;
         for (let i = 0; i < toCreate.length; i += batchSize) {
           const batch = toCreate.slice(i, i + batchSize);
           const batchRequest = window.gapi.client.newBatch();
 
           batch.forEach((event, index) => {
             const request = window.gapi.client.calendar.events.insert({
-              calendarId: 'primary',
+              calendarId,
               resource: event,
             });
             batchRequest.add(request, { id: `create-${i + index}` });
@@ -912,6 +1172,7 @@ class GoogleCalendarService {
             
             if (!response.error && response.result && response.result.id) {
               result.created++;
+              createdCount++;
               
               // Créer l'enregistrement de synchronisation
               const { date: dateKey, assignmentKey } = this.extractDateAndKey(event);
@@ -958,10 +1219,23 @@ class GoogleCalendarService {
               });
             }
           });
+          
+          // Mise à jour de la progression après chaque batch
+          const progressPercent = 40 + Math.round((createdCount / toCreate.length) * 20);
+          onProgress?.({ 
+            current: progressPercent, 
+            total: 100, 
+            message: `Création: ${createdCount}/${toCreate.length} événement(s)`, 
+            phase: 'creating' 
+          });
         }
       }
 
       // Mettre à jour les événements existants
+      if (toUpdate.length > 0) {
+        onProgress?.({ current: 60, total: 100, message: `Mise à jour de ${toUpdate.length} événement(s)...`, phase: 'updating' });
+      }
+      let updatedCount = 0;
       for (const { eventId, event } of toUpdate) {
         // Récupérer l'ancien événement pour comparer
         const oldEvent = planiDocsEventsMap.get(eventId);
@@ -974,6 +1248,7 @@ class GoogleCalendarService {
           
           if (!isConversion) {
             result.updated++;
+            updatedCount++;
             
             // Ajouter les détails de l'événement mis à jour
             if (result.updatedEvents) {
@@ -1014,16 +1289,78 @@ class GoogleCalendarService {
             error: 'Erreur lors de la mise à jour',
           });
         }
+        
+        // Mise à jour de la progression
+        if (toUpdate.length > 0) {
+          const progressPercent = 60 + Math.round((updatedCount / toUpdate.length) * 15);
+          onProgress?.({ 
+            current: progressPercent, 
+            total: 100, 
+            message: `Mise à jour: ${updatedCount}/${toUpdate.length} événement(s)`, 
+            phase: 'updating' 
+          });
+        }
+      }
+
+      // Supprimer les événements à migrer du calendrier principal
+      if (eventsToMigrate.length > 0) {
+        console.log(`Migration de ${eventsToMigrate.length} événement(s) du calendrier principal...`);
+        onProgress?.({ current: 25, total: 100, message: `Migration de ${eventsToMigrate.length} événement(s)...`, phase: 'migrating' });
+        
+        let migratedCount = 0;
+        for (const eventId of eventsToMigrate) {
+          try {
+            // Supprimer directement du calendrier principal
+            await window.gapi.client.calendar.events.delete({
+              calendarId: 'primary',
+              eventId: eventId,
+            });
+            
+            result.migrated++;
+            migratedCount++;
+            
+            // Ajouter les détails de l'événement migré
+            const migratedEvent = primaryCalendarEvents.find(e => e.id === eventId);
+            if (result.migratedEvents && migratedEvent) {
+              const { date: eventDate } = this.extractDateAndKey(migratedEvent);
+              result.migratedEvents.push({
+                date: eventDate,
+                shiftType: migratedEvent.summary || '',
+                timeSlot: migratedEvent.start.dateTime ? 'Avec horaire' : 'Journée entière'
+              });
+            }
+            
+            // Mise à jour de la progression
+            const progressPercent = 25 + Math.round((migratedCount / eventsToMigrate.length) * 15);
+            onProgress?.({ 
+              current: progressPercent, 
+              total: 100, 
+              message: `Migration: ${migratedCount}/${eventsToMigrate.length} événement(s)`, 
+              phase: 'migrating' 
+            });
+          } catch (error: any) {
+            // Ignorer les erreurs 410 (événement déjà supprimé)
+            if (error?.status !== 410) {
+              console.error(`Erreur lors de la migration de l'événement ${eventId}:`, error);
+            }
+          }
+        }
+        
+        if (result.migrated > 0) {
+          console.log(`${result.migrated} événement(s) migré(s) avec succès`);
+        }
       }
 
       // Supprimer les événements obsolètes par batch avec délai
       if (toDelete.length > 0) {
         console.log(`Suppression de ${toDelete.length} événement(s)...`);
+        onProgress?.({ current: 75, total: 100, message: `Suppression de ${toDelete.length} événement(s)...`, phase: 'deleting' });
         
         // Traiter par batch de 5 avec un délai de 1000ms entre chaque batch
         const batchSize = 5;
         const delayBetweenBatches = 1000; // ms
         const rateLimitedEvents: Array<{ eventId: string; syncRecord: CalendarSyncRecord }> = [];
+        let deletedCount = 0;
         
         for (let i = 0; i < toDelete.length; i += batchSize) {
           const batch = toDelete.slice(i, i + batchSize);
@@ -1056,6 +1393,7 @@ class GoogleCalendarService {
               // Ne compter que les vraies suppressions, pas les événements déjà supprimés
               if (!res.alreadyDeleted) {
                 result.deleted++;
+                deletedCount++;
                 
                 // Ajouter les détails de l'événement supprimé
                 if (result.deletedEvents && syncRecord) {
@@ -1082,6 +1420,15 @@ class GoogleCalendarService {
             } else if (res.error) {
               result.errors.push(res.error);
             }
+          });
+          
+          // Mise à jour de la progression après chaque batch
+          const progressPercent = 75 + Math.round((deletedCount / toDelete.length) * 20);
+          onProgress?.({ 
+            current: progressPercent, 
+            total: 100, 
+            message: `Suppression: ${deletedCount}/${toDelete.length} événement(s)`, 
+            phase: 'deleting' 
           });
           
           // Si on a atteint la limite, augmenter le délai
@@ -1139,6 +1486,8 @@ class GoogleCalendarService {
       }
 
       // 7. Sauvegarder les enregistrements de synchronisation
+      onProgress?.({ current: 95, total: 100, message: 'Finalisation...', phase: 'finalizing' });
+      
       if (newSyncRecords.length > 0) {
         // Filtrer les records invalides (sans googleEventId)
         const validSyncRecords = newSyncRecords.filter(record => {
@@ -1163,6 +1512,9 @@ class GoogleCalendarService {
         await deleteSyncRecordsBatch(recordsToDelete, associationId);
       }
 
+      // Progression terminée
+      onProgress?.({ current: 100, total: 100, message: 'Synchronisation terminée', phase: 'finalizing' });
+      
       return result;
     } catch (error) {
       console.error('Smart sync with duplicate detection error:', error);
