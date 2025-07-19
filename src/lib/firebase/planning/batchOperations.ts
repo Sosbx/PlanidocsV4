@@ -1,5 +1,5 @@
 import { doc, getDoc, getDocs, collection } from 'firebase/firestore';
-import { createParisDate } from '@/utils/timezoneUtils';
+import { createParisDate, firebaseTimestampToParisDate, formatParisDate } from '@/utils/timezoneUtils';
 import { db } from '../config';
 import { getCollectionName, COLLECTIONS } from '../../../utils/collectionUtils';
 import type { GeneratedPlanning, ShiftAssignment } from '../../../types/planning';
@@ -62,14 +62,19 @@ export const batchLoadUsersPlannings = async (
                     // Vérifier les dates si des filtres sont appliqués
                     if (startDate || endDate) {
                       const assignmentDate = new Date(assignment.date);
-                      if (startDate && assignmentDate < startDate) continue;
-                      if (endDate && assignmentDate > endDate) continue;
+                      // Utiliser des comparaisons de dates en string pour éviter les problèmes de timezone
+                      const assignmentDateStr = typeof assignment.date === 'string' ? assignment.date : formatParisDate(assignmentDate, 'yyyy-MM-dd');
+                      const startDateStr = startDate ? formatParisDate(startDate, 'yyyy-MM-dd') : null;
+                      const endDateStr = endDate ? formatParisDate(endDate, 'yyyy-MM-dd') : null;
+                      
+                      if (startDateStr && assignmentDateStr < startDateStr) continue;
+                      if (endDateStr && assignmentDateStr > endDateStr) continue;
                     }
                     
                     assignments[key] = {
                       ...assignment,
                       date: typeof assignment.date === 'object' && 'seconds' in assignment.date
-                        ? new Date((assignment.date as any).seconds * 1000).toISOString().split('T')[0]
+                        ? formatParisDate(firebaseTimestampToParisDate(assignment.date), 'yyyy-MM-dd')
                         : assignment.date
                     };
                   }

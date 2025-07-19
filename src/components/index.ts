@@ -23,3 +23,4 @@ export { SyncModeModal } from './modals/SyncModeModal';
 // Export Google Calendar components
 export { GoogleCalendarSyncCompact } from './GoogleCalendarSyncCompact';
 export { SyncResultsDetails } from './SyncResultsDetails';
+export { SyncProgressBar } from './SyncProgressBar';

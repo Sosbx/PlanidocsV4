@@ -20,7 +20,8 @@ import {
   CalendarOff,
   RefreshCw,
   FileSpreadsheet,
-  BarChart3
+  BarChart3,
+  Clock
 } from 'lucide-react';
 import LogoImage from '../assets/images/Logo.png';
 
@@ -139,6 +140,15 @@ const DashboardPage: React.FC = () => {
       color: "hover:border-purple-500 hover:bg-gradient-to-br hover:from-purple-50 hover:to-violet-50/50",
       disabled: true,
       isDev: false
+    },
+    {
+      to: "/history",
+      icon: <Clock className="h-6 w-6 text-indigo-600" />,
+      title: "Historique",
+      description: "Consulter l'historique de mes échanges et modifications",
+      color: "hover:border-indigo-500 hover:bg-gradient-to-br hover:from-indigo-50 hover:to-blue-50/50",
+      disabled: (canAccessSuperAdmin && isSuperAdminMode) ? false : getFeatureStatus(FEATURES.HISTORY) === 'disabled',
+      isDev: (canAccessSuperAdmin && isSuperAdminMode) ? false : getFeatureStatus(FEATURES.HISTORY) === 'dev'
     }
   ];
   

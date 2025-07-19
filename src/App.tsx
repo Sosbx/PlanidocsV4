@@ -35,6 +35,7 @@ const UsersManagementPage = lazy(() => import('./pages/UsersManagementPage'));
 const PlanningPreviewPage = lazy(() => import('./features/planning/pages/PlanningPreviewPage'));
 const ReplacementsPage = lazy(() => import('./pages/ReplacementsPage'));
 const DirectExchangePage = lazy(() => import('./features/directExchange/pages/DirectExchangePage'));
+const HistoryPage = lazy(() => import('./features/history/pages/HistoryPage'));
 
 // Import des pages migrées
 const ShiftExchangePage = lazy(() => import('./features/shiftExchange/pages/ShiftExchangePage'));
@@ -211,6 +212,18 @@ const App: React.FC = () => {
                                     <FeatureProtectedRoute feature={FEATURES.DIRECT_EXCHANGE}>
                                       <Suspense fallback={<div className="flex justify-center items-center h-screen"><LoadingSpinner /></div>}>
                                         <DirectExchangePage />
+                                      </Suspense>
+                                    </FeatureProtectedRoute>
+                                  </ProtectedRoute>
+                                } 
+                              />
+                              <Route 
+                                path="/history" 
+                                element={
+                                  <ProtectedRoute requiredRoles={['isUser']}>
+                                    <FeatureProtectedRoute feature={FEATURES.HISTORY}>
+                                      <Suspense fallback={<div className="flex justify-center items-center h-screen"><LoadingSpinner /></div>}>
+                                        <HistoryPage />
                                       </Suspense>
                                     </FeatureProtectedRoute>
                                   </ProtectedRoute>

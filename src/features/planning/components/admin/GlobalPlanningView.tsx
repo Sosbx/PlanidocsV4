@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { formatParisDate } from '@/utils/timezoneUtils';
+import { formatParisDate, parseParisDate } from '@/utils/timezoneUtils';
 import { format, eachDayOfInterval, isWeekend } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Archive, Calendar, FileSpreadsheet } from 'lucide-react';
@@ -378,7 +378,7 @@ const GlobalPlanningView: React.FC<GlobalPlanningViewProps> = ({
                         type="date"
                         id="start-date"
                         value={formatParisDate(tempStartDate, 'yyyy-MM-dd')}
-                        onChange={(e) => setTempStartDate(new Date(e.target.value))}
+                        onChange={(e) => setTempStartDate(parseParisDate(e.target.value))}
                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                       />
                     </div>
@@ -391,7 +391,7 @@ const GlobalPlanningView: React.FC<GlobalPlanningViewProps> = ({
                         type="date"
                         id="end-date"
                         value={formatParisDate(tempEndDate, 'yyyy-MM-dd')}
-                        onChange={(e) => setTempEndDate(new Date(e.target.value))}
+                        onChange={(e) => setTempEndDate(parseParisDate(e.target.value))}
                         min={formatParisDate(tempStartDate, 'yyyy-MM-dd')}
                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                       />

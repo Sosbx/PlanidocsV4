@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { formatParisDate } from '@/utils/timezoneUtils';
-import { CheckCircle2, AlertCircle, ChevronDown, ChevronUp, Calendar, Trash2, Plus, Edit, RefreshCw } from 'lucide-react';
+import { CheckCircle2, AlertCircle, ChevronDown, ChevronUp, Calendar, Trash2, Plus, Edit, RefreshCw, ArrowRight } from 'lucide-react';
 import { useGoogleCalendar } from '../hooks/useGoogleCalendar';
 import { format } from 'date-fns';
 import { frLocale } from '../utils/dateLocale';
@@ -17,7 +17,7 @@ export const SyncResultsDetails: React.FC = () => {
     return null;
   }
 
-  const hasChanges = lastSyncResult.created > 0 || lastSyncResult.updated > 0 || lastSyncResult.deleted > 0 || lastSyncResult.converted > 0;
+  const hasChanges = lastSyncResult.created > 0 || lastSyncResult.updated > 0 || lastSyncResult.deleted > 0 || lastSyncResult.converted > 0 || lastSyncResult.migrated > 0;
   const hasErrors = lastSyncResult.errors.length > 0;
 
   return (
@@ -76,6 +76,13 @@ export const SyncResultsDetails: React.FC = () => {
                 <div className="flex items-center gap-1 text-purple-600">
                   <RefreshCw className="w-4 h-4" />
                   <span>{lastSyncResult.converted} convertie{lastSyncResult.converted > 1 ? 's' : ''}</span>
+                </div>
+              )}
+              
+              {lastSyncResult.migrated > 0 && (
+                <div className="flex items-center gap-1 text-indigo-600">
+                  <ArrowRight className="w-4 h-4" />
+                  <span>{lastSyncResult.migrated} migrée{lastSyncResult.migrated > 1 ? 's' : ''}</span>
                 </div>
               )}
               

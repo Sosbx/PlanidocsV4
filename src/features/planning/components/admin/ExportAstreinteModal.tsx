@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { format, differenceInDays, isAfter, isBefore, addYears, startOfMonth, endOfMonth } from 'date-fns';
+import { format, differenceInDays, isAfter, isBefore, addYears } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { X, Calendar, Download, FileSpreadsheet } from 'lucide-react';
 import { exportPlanningToAstreinte } from '../../../../utils/astreinteExport';
 import { useToast } from '../../../../hooks/useToast';
-import { createParisDate, formatParisDate } from '../../../../utils/timezoneUtils';
+import { createParisDate, formatParisDate, parseParisDate, startOfMonthParis, endOfMonthParis } from '../../../../utils/timezoneUtils';
 
 interface ExportAstreinteModalProps {
   associationId: string;
@@ -26,8 +26,9 @@ export const ExportAstreinteModal: React.FC<ExportAstreinteModalProps> = ({ asso
 
     if (exportMode === 'month') {
       const [year, month] = selectedMonth.split('-').map(Number);
-      exportStartDate = startOfMonth(createParisDate(year, month - 1, 1));
-      exportEndDate = endOfMonth(createParisDate(year, month - 1, 1));
+      
+      exportStartDate = startOfMonthParis(createParisDate(year, month - 1, 1));
+      exportEndDate = endOfMonthParis(createParisDate(year, month - 1, 1));
     } else {
       if (!startDate || !endDate) {
         showToast({
@@ -37,8 +38,8 @@ export const ExportAstreinteModal: React.FC<ExportAstreinteModalProps> = ({ asso
         return;
       }
 
-      exportStartDate = new Date(startDate);
-      exportEndDate = new Date(endDate);
+      exportStartDate = parseParisDate(startDate);
+      exportEndDate = parseParisDate(endDate);
 
       // Validation des dates
       if (isAfter(exportStartDate, exportEndDate)) {
@@ -60,9 +61,10 @@ export const ExportAstreinteModal: React.FC<ExportAstreinteModalProps> = ({ asso
       }
     }
 
+
     setIsExporting(true);
     try {
-      await exportPlanningToAstreinte(exportStartDate, exportEndDate, associationId);
+      await exportPlanningToAstreinte(exportStartDate, exportEndDate, associationId, exportMode === 'month');
       showToast({
         type: 'success',
         message: 'Export des astreintes réussi'

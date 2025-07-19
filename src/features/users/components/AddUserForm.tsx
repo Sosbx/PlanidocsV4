@@ -108,6 +108,24 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({ type, onSuccess }) => 
         required
       />
 
+      {/* Information RGPD */}
+      <div className="bg-blue-50 border border-blue-200 rounded-md p-4 mt-4">
+        <div className="flex items-start space-x-3">
+          <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5" />
+          <div className="text-sm">
+            <p className="text-gray-700 font-medium">Information importante</p>
+            <p className="text-gray-600 mt-1">
+              L'utilisateur devra accepter les Conditions Générales d'Utilisation et la 
+              Politique de Confidentialité lors de sa première connexion.
+            </p>
+            <p className="text-gray-500 text-xs mt-2">
+              Un email sera envoyé avec les identifiants de connexion. L'utilisateur sera 
+              invité à lire et accepter les documents légaux avant d'accéder à l'application.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {error && (
         <div className="rounded-md bg-red-50 p-4">
           <div className="flex">

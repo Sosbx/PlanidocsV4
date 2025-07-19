@@ -8,3 +8,4 @@ export { default as ProtectedRoute } from './ProtectedRoute';
 export { default as HelpButton } from './HelpButton';
 export { FeatureProtectedRoute } from './FeatureProtectedRoute';
 export { default as AuthRedirectHandler } from './AuthRedirectHandler';
+export { default as FirstLoginConsent } from './FirstLoginConsent';

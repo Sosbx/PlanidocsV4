@@ -51,6 +51,7 @@ export interface GoogleCalendarSyncResult {
   updated: number;
   deleted: number;
   converted: number;
+  migrated: number;
   errors: Array<{
     date: string;
     error: string;
@@ -60,11 +61,20 @@ export interface GoogleCalendarSyncResult {
   updatedEvents?: SyncUpdateDetail[];
   deletedEvents?: SyncEventDetail[];
   convertedEvents?: ConvertedEventDetail[];
+  migratedEvents?: SyncEventDetail[];
+}
+
+export interface SyncProgress {
+  current: number;
+  total: number;
+  message: string;
+  phase: 'analyzing' | 'migrating' | 'creating' | 'updating' | 'deleting' | 'finalizing';
 }
 
 export interface GoogleCalendarSyncStatus {
   isAuthenticated: boolean;
   isSyncing: boolean;
+  syncProgress: SyncProgress | null;
   lastSync: Date | null;
   lastSyncResult: GoogleCalendarSyncResult | null;
 }

@@ -31,6 +31,7 @@ export const FEATURES = {
   USER_MANAGEMENT: 'userManagement',
   ADMIN_SHIFT_EXCHANGE: 'adminShiftExchange',
   ADMIN_DESIDERATA: 'adminDesiderata',
+  HISTORY: 'history',
 } as const;
 
 export type FeatureKey = typeof FEATURES[keyof typeof FEATURES];
@@ -105,5 +106,12 @@ export const DEFAULT_FEATURES: Record<FeatureKey, Omit<FeatureFlag, 'id' | 'last
     route: '/admin-shift-exchange',
     requiredRoles: ['ADMIN'],
     status: { RD: 'disabled', RG: 'disabled' }
+  },
+  [FEATURES.HISTORY]: {
+    name: 'Historique',
+    description: 'Consulter l\'historique de mes échanges et modifications',
+    route: '/history',
+    requiredRoles: ['USER'],
+    status: { RD: 'enabled', RG: 'enabled' }
   }
 };

@@ -18,6 +18,13 @@ export interface ManagementUser extends BaseUser {
   
   /** Full name (optional to maintain backward compatibility) */
   fullName?: string;
+  
+  // Champs RGPD
+  hasAcceptedTerms?: boolean;
+  termsAcceptedAt?: Timestamp;
+  termsVersion?: string;
+  privacyAcceptedAt?: Timestamp;
+  privacyVersion?: string;
 }
 
 /**
@@ -64,6 +71,12 @@ export interface UserExtended {
   metadata?: Record<string, any>;
   preferences?: UserPreferences;
   statistics?: UserStatistics;
+  // Champs RGPD
+  hasAcceptedTerms?: boolean;
+  termsAcceptedAt?: Timestamp;
+  termsVersion?: string;
+  privacyAcceptedAt?: Timestamp;
+  privacyVersion?: string;
 }
 
 /**

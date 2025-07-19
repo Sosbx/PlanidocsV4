@@ -325,6 +325,26 @@ export function subMonthsParis(date: Date | string | number, amount: number): Da
 }
 
 /**
+ * Wrapper pour addDays avec fuseau horaire Europe/Paris
+ * @param date Date de référence
+ * @param amount Nombre de jours à ajouter
+ * @returns Date avec les jours ajoutés en Europe/Paris
+ */
+export function addDaysParis(date: Date | string | number, amount: number): Date {
+  const parisDate = toParisTime(date);
+  const year = parisDate.getFullYear();
+  const month = parisDate.getMonth();
+  const day = parisDate.getDate();
+  const hours = parisDate.getHours();
+  const minutes = parisDate.getMinutes();
+  const seconds = parisDate.getSeconds();
+  const ms = parisDate.getMilliseconds();
+  
+  // Créer la nouvelle date avec les jours ajoutés
+  return createParisDate(year, month, day + amount, hours, minutes, seconds, ms);
+}
+
+/**
  * Alias courts pour les fonctions les plus utilisées
  */
 export const startOfDayParis = startOfParisDay;

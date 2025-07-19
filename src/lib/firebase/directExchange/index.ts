@@ -21,6 +21,7 @@ export type { ExchangeTransactionOptions } from './directExchangeOperations';
 export * from './directCessionOperations';
 export * from './directReplacementOperations';
 export * from './directProposalOperations';
+export * from './ValidationService';
 
 // Fonction centralisée pour gérer la soumission des échanges directs
 // Ceci permet d'unifier la logique utilisée par différentes parties de l'application
@@ -72,8 +73,20 @@ export const submitDirectExchange = async (
       selectedOperationTypes
     });
     
+    // Importer le ValidationService
+    const { ValidationService } = await import('./ValidationService');
+    
+    // Valider les types d'opération
+    const validationResult = ValidationService.validateOperationTypes(selectedOperationTypes);
+    if (!validationResult.isValid) {
+      throw new Error(validationResult.error || 'Types d\'opération invalides');
+    }
+    
+    // Utiliser les types nettoyés
+    const sanitizedTypes = validationResult.sanitizedTypes || selectedOperationTypes;
+    
     // Si aucune option sélectionnée, supprimer l'échange et/ou le remplacement
-    if (selectedOperationTypes.length === 0) {
+    if (sanitizedTypes.length === 0) {
       // Utiliser une promesse pour supprimer à la fois l'échange et le remplacement
       const deletePromises = [];
       
@@ -158,7 +171,7 @@ export const submitDirectExchange = async (
       return {};
     } 
     // Mettre à jour ou créer des échanges
-    else if (selectedOperationTypes.length > 0) {
+    else if (sanitizedTypes.length > 0) {
       let result: { exchangeId?: string; replacementId?: string } = {};
       
       // Rechercher d'abord s'il existe déjà un échange pour cette garde, même si data.exchangeId n'est pas fourni
@@ -238,7 +251,7 @@ export const submitDirectExchange = async (
       if (existingExchangeId) {
         console.log("Mise à jour de l'échange existant:", existingExchangeId, 
                    "Collection:", existingExchangeCollection || "à déterminer",
-                   "Types d'opération sélectionnés:", selectedOperationTypes);
+                   "Types d'opération sélectionnés:", sanitizedTypes);
         
         try {
           // Si la collection n'est pas déterminée, essayer de la déterminer
@@ -280,12 +293,12 @@ export const submitDirectExchange = async (
               comment: data.comment,
               lastModified: serverTimestamp(),
               // Mettre à jour directement les operationTypes pour s'assurer que les options désélectionnées sont bien supprimées
-              operationTypes: selectedOperationTypes
+              operationTypes: sanitizedTypes
             });
             
             // Mettre à jour les options de l'échange
             // Note: updateOptions est toujours appelé pour maintenir la compatibilité avec le reste du code
-            await updateOptions(existingExchangeId, selectedOperationTypes);
+            await updateOptions(existingExchangeId, sanitizedTypes);
             
             result.exchangeId = existingExchangeId;
           } else {
@@ -318,11 +331,11 @@ export const submitDirectExchange = async (
                   await updateDoc(alternativeRef, { 
                     comment: data.comment,
                     lastModified: serverTimestamp(),
-                    operationTypes: selectedOperationTypes
+                    operationTypes: sanitizedTypes
                   });
                   
                   // Mettre à jour les options de l'échange
-                  await updateOptions(existingExchangeId, selectedOperationTypes);
+                  await updateOptions(existingExchangeId, sanitizedTypes);
                   
                   result.exchangeId = existingExchangeId;
                   break;
@@ -348,7 +361,7 @@ export const submitDirectExchange = async (
               };
               
               // Créer l'échange combiné
-              result = await createCombinedExchange(exchangeData, selectedOperationTypes);
+              result = await createCombinedExchange(exchangeData, sanitizedTypes);
             }
           }
         } catch (error) {
@@ -368,7 +381,7 @@ export const submitDirectExchange = async (
           };
           
           // Créer l'échange combiné
-          result = await createCombinedExchange(exchangeData, selectedOperationTypes);
+          result = await createCombinedExchange(exchangeData, sanitizedTypes);
         }
       } 
       // Sinon, créer un nouvel échange
@@ -386,12 +399,12 @@ export const submitDirectExchange = async (
         };
         
         // Créer l'échange combiné
-        result = await createCombinedExchange(exchangeData, selectedOperationTypes);
+        result = await createCombinedExchange(exchangeData, sanitizedTypes);
       }
       
       // Vérifier si nous devons supprimer un remplacement existant
       // qui n'est plus sélectionné
-      if (data.existingReplacementId && !selectedOperationTypes.includes('replacement')) {
+      if (data.existingReplacementId && !sanitizedTypes.includes('replacement')) {
         console.log("Suppression du remplacement existant car l'option a été désélectionnée:", data.existingReplacementId);
         
         if (options?.removeExchange) {
@@ -413,9 +426,9 @@ export const submitDirectExchange = async (
       
       // Construire le message de succès
       const operationMessages = [];
-      if (selectedOperationTypes.includes('exchange')) operationMessages.push('échange');
-      if (selectedOperationTypes.includes('give')) operationMessages.push('cession');
-      if (selectedOperationTypes.includes('replacement')) operationMessages.push('remplaçant');
+      if (sanitizedTypes.includes('exchange')) operationMessages.push('échange');
+      if (sanitizedTypes.includes('give')) operationMessages.push('cession');
+      if (sanitizedTypes.includes('replacement')) operationMessages.push('remplaçant');
       
       // Appeler le callback de succès
       options?.onSuccess?.(
