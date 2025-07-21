@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Settings, History, BarChart as ChartBar, BarChart3, Filter, Sun, Sunset, Moon, ArrowLeftRight, Users, User as UserIcon, Sliders, Eye, EyeOff } from 'lucide-react';
+import { Settings, History, BarChart as ChartBar, BarChart3, Filter, Sun, Sunset, Moon, ArrowLeftRight, Users, User as UserIcon, Eye, EyeOff } from 'lucide-react';
+import { collection, query, where, orderBy, onSnapshot, getDocs } from 'firebase/firestore';
+import { db } from '../../../lib/firebase/config';
 import ConfirmationModal from '../../../components/ConfirmationModal';
 import Toast from '../../../components/common/Toast';
-import { useShiftExchangeCore, useScoringConfig } from '../hooks';
+import { useShiftExchangeCore } from '../hooks';
 import { revertToExchange } from '../../../lib/firebase/exchange';
 import { getAllShiftTypesFromPlannings } from '../../../lib/firebase/planning';
-import { EquityCalculator } from '../services/equityCalculator';
-import type { ExchangeHistory, SuggestionScore } from '../types';
+import type { ExchangeHistory, ShiftExchange } from '../types';
 import { ShiftPeriod } from '../types';
 import { ValidatePlanningButton, UserSelector } from '../../../features/planning/components/admin';
 import { useUserAssignments } from '../../../features/users/hooks';
@@ -24,8 +25,7 @@ import {
 import {
   ExchangeList,
   ExchangeHistoryList,
-  ParticipationPanel,
-  ScoreConfigPanel
+  ParticipationPanel
 } from '../components/admin';
 
 /**
@@ -55,14 +55,13 @@ const AdminShiftExchangePage: React.FC = () => {
   });
 
   // États locaux pour l'interface admin
-  const [activeTab, setActiveTab] = useState<'exchanges' | 'history' | 'statistics' | 'scoring'>('exchanges');
+  const [activeTab, setActiveTab] = useState<'exchanges' | 'history' | 'statistics'>('exchanges');
   const [showPhaseConfig, setShowPhaseConfig] = useState(false);
   const [showParticipationPanel, setShowParticipationPanel] = useState(false);
   const [selectedForReplacements, setSelectedForReplacements] = useState<Set<string>>(new Set());
   const [filterPeriod, setFilterPeriod] = useState<'all' | ShiftPeriod>('all');
   const [showOnlyWithInterested, setShowOnlyWithInterested] = useState(false);
   const [filterUserId, setFilterUserId] = useState<string>('');
-  const [showSuggestions, setShowSuggestions] = useState(true);
   const [toast, setToast] = useState({ 
     visible: false, 
     message: '', 
@@ -76,37 +75,15 @@ const AdminShiftExchangePage: React.FC = () => {
   // États pour les conflits détaillés par utilisateur
   const [conflictShiftTypes, setConflictShiftTypes] = useState<Record<string, Record<string, string>>>({});
   
+  // État pour toutes les gardes proposées (pour les statistiques)
+  const [allExchangesForStats, setAllExchangesForStats] = useState<ShiftExchange[]>([]);
+  
   // Hook pour les assignations utilisateur
   const { userAssignments } = useUserAssignments(exchanges);
   
-  // Hook pour la configuration du scoring
+  // Hook pour l'utilisateur courant
   const { user: currentUser } = useAuth();
-  const { config: scoringConfig, saveConfig: saveScoringConfig, loading: configLoading } = useScoringConfig(
-    currentUser?.associationId || 'RD'
-  );
   
-  // État pour stocker tous les types de gardes
-  const [allShiftTypes, setAllShiftTypes] = useState<{
-    M: Record<string, { count: number; sites: string[]; timeSlots: string[] }>;
-    AM: Record<string, { count: number; sites: string[]; timeSlots: string[] }>;
-    S: Record<string, { count: number; sites: string[]; timeSlots: string[] }>;
-  } | null>(null);
-  
-  // Charger tous les types de gardes au montage
-  useEffect(() => {
-    const loadAllShiftTypes = async () => {
-      try {
-        const types = await getAllShiftTypesFromPlannings(currentUser?.associationId || 'RD');
-        setAllShiftTypes(types);
-      } catch (error) {
-        console.error('Erreur lors du chargement des types de gardes:', error);
-      }
-    };
-    
-    if (activeTab === 'scoring') {
-      loadAllShiftTypes();
-    }
-  }, [activeTab, currentUser?.associationId]);
   
   // Utilisateurs triés par ordre alphabétique (excluant les admin-only)
   const sortedUsers = useMemo(() => {
@@ -123,32 +100,34 @@ const AdminShiftExchangePage: React.FC = () => {
       });
   }, [users]);
 
-  // Calculer les suggestions pour chaque échange
-  const suggestions = useMemo(() => {
-    if (!scoringConfig || !exchanges.length || !sortedUsers.length) return {};
+  // Récupérer TOUTES les gardes proposées pour les statistiques
+  useEffect(() => {
+    const fetchAllExchangesForStats = async () => {
+      try {
+        // Requête sans filtre de statut pour récupérer TOUTES les gardes proposées
+        const exchangesQuery = query(
+          collection(db, 'shift_exchanges'),
+          orderBy('date', 'asc')
+        );
+        
+        const unsubscribe = onSnapshot(exchangesQuery, (snapshot) => {
+          const allExchanges = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          })) as ShiftExchange[];
+          
+          setAllExchangesForStats(allExchanges);
+        });
+        
+        return () => unsubscribe();
+      } catch (error) {
+        console.error('Erreur lors de la récupération des exchanges pour les stats:', error);
+      }
+    };
     
-    try {
-      const calculator = new EquityCalculator(
-        scoringConfig,
-        sortedUsers,
-        exchanges,
-        history
-      );
-      
-      // Calculer les suggestions pour chaque échange
-      const suggestionMap: Record<string, SuggestionScore[]> = {};
-      exchanges.forEach(exchange => {
-        if (exchange.interestedUsers && exchange.interestedUsers.length > 0) {
-          suggestionMap[exchange.id] = calculator.calculateAllSuggestions(exchange);
-        }
-      });
-      
-      return suggestionMap;
-    } catch (error) {
-      console.error('Erreur lors du calcul des suggestions:', error);
-      return {};
-    }
-  }, [scoringConfig, exchanges, sortedUsers, history]);
+    fetchAllExchangesForStats();
+  }, []);
+
 
   // Vérification optimisée des conflits pour chaque utilisateur intéressé
   useEffect(() => {
@@ -493,35 +472,11 @@ const AdminShiftExchangePage: React.FC = () => {
                 Statistiques
               </div>
             </button>
-            <button
-              onClick={() => setActiveTab('scoring')}
-              className={`py-2 px-4 border-b-2 font-medium text-sm ${
-                activeTab === 'scoring'
-                  ? 'border-indigo-500 text-indigo-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <Sliders className="h-4 w-4" />
-                Configuration
-              </div>
-            </button>
           </nav>
         </div>
       </div>
 
       {renderStats}
-      
-      {/* Panneau de configuration du scoring */}
-      {activeTab === 'scoring' && scoringConfig && (
-        <ScoreConfigPanel
-          config={scoringConfig}
-          shiftTypes={Array.from(new Set(exchanges.map(e => e.shiftType)))}
-          allShiftTypes={allShiftTypes || undefined}
-          onSave={saveScoringConfig}
-          loading={configLoading}
-        />
-      )}
 
       <BagPhaseConfigModal
         isOpen={showPhaseConfig}
@@ -656,28 +611,13 @@ const AdminShiftExchangePage: React.FC = () => {
                 </button>
               )}
               
-              {/* Bouton pour afficher/masquer les scores */}
-              <button
-                onClick={() => setShowSuggestions(!showSuggestions)}
-                className={`flex items-center px-2 py-1 border text-xs font-medium rounded-md transition-colors ${
-                  showSuggestions
-                    ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
-                    : 'border-gray-300 text-gray-600 bg-white hover:bg-gray-50'
-                }`}
-                title={showSuggestions ? "Masquer les scores d'équité" : "Afficher les scores d'équité"}
-              >
-                {showSuggestions ? <Eye className="h-3.5 w-3.5 mr-1" /> : <EyeOff className="h-3.5 w-3.5 mr-1" />}
-                <span className="hidden sm:inline">
-                  {showSuggestions ? 'Scores' : 'Scores'}
-                </span>
-              </button>
             </div>
           </div>
         </div>
       )}
 
       {/* Contenu principal selon l'onglet actif */}
-      {activeTab !== 'statistics' && activeTab !== 'scoring' && (
+      {activeTab !== 'statistics' && (
         <div className="bg-white rounded-lg shadow-md mt-6">
           <div className="overflow-x-auto">
             {activeTab === 'history' ? (
@@ -703,8 +643,6 @@ const AdminShiftExchangePage: React.FC = () => {
                 conflictStates={adminConflictStates}
                 conflictShiftTypes={conflictShiftTypes}
                 userAssignments={userAssignments}
-                suggestions={suggestions}
-                showSuggestions={showSuggestions}
                 onValidateExchange={handleValidateExchangeClick}
                 onRejectExchange={handleRejectExchangeClick}
                 onRemoveUser={handleRemoveUserClick}
@@ -721,7 +659,7 @@ const AdminShiftExchangePage: React.FC = () => {
 
       {/* Panneau flottant de participation */}
       <ParticipationPanel
-        exchanges={exchanges as any}
+        exchanges={allExchangesForStats as any}
         users={sortedUsers}
         history={history as any}
         isOpen={showParticipationPanel}

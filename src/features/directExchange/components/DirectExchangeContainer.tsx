@@ -1,9 +1,9 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useEffect, useState } from 'react';
 import { createParisDate, firebaseTimestampToParisDate, addMonthsParis } from '@/utils/timezoneUtils';
 import { useAuth } from '../../../features/auth/hooks';
 import { useUsers } from '../../../features/auth/hooks/useUsers';
 import { usePlanningPeriod } from '../../../context/planning/PlanningPeriodContext';
-import { useComposableExchangeData } from '../hooks';
+import { useComposableExchangeData, useDirectExchangeCallbacks, useExchangeModal } from '../hooks';
 import { useCalendarNavigation } from '../../shiftExchange/hooks/useCalendarNavigation';
 import { addMonths } from 'date-fns';
 import Toast from '../../../components/common/Toast';
@@ -15,6 +15,19 @@ import { useDirectExchangeModals } from '../hooks/useDirectExchangeModals';
 import { useDirectExchangeActions } from '../hooks/useDirectExchangeActions';
 import { useDirectProposalActions } from '../hooks/useDirectProposalActions';
 import { useBottomNavPadding } from '../../../hooks/useBottomNavPadding';
+import { useDebounce } from '../../../hooks/useDebounce';
+import { 
+  validateOperationTypes, 
+  sanitizeOperationTypes, 
+  fetchExchangeDataForCellWithCache, 
+  invalidateExchangeDataCache, 
+  invalidateAllExchangeDataCache,
+  prepareModalData,
+  determineAvailableOperationTypes,
+  normalizeAssignment,
+  createExchangeSubmissionHandlers,
+  createRemoveExchangeWrapper
+} from '../utils';
 import type { ShiftExchange as PlanningShiftExchange } from '../../../types/planning';
 import type { ShiftExchange as ExchangeShiftExchange } from '../../../types/exchange';
 import type { OperationType } from '../types';
@@ -92,10 +105,38 @@ const DirectExchangeContainer: React.FC = () => {
     return result;
   }, [rawInterestedPeriodsMap]);
   
-  // Hooks pour la gestion des modals
+  // Hook unifié pour gérer le modal d'échange
   const {
     selectedCell,
     setSelectedCell,
+    handleSubmit: handleModalSubmit,
+    handleRemove,
+    isProcessing
+  } = useExchangeModal(user?.id, {
+    onSuccess: (message) => {
+      setToast({
+        visible: true,
+        message,
+        type: 'success'
+      });
+    },
+    onError: (message) => {
+      setToast({
+        visible: true,
+        message,
+        type: 'error'
+      });
+    },
+    refreshData: loadDirectExchanges,
+    removeExchange: async (id: string, operationType?: OperationType) => {
+      // Utiliser la fonction removeExchange existante
+      const { removeExchange: removeExchangeFn } = await import('../../../lib/firebase/directExchange');
+      await removeExchangeFn(id, operationType);
+    }
+  });
+
+  // Hooks pour la gestion des autres modals
+  const {
     selectedProposedExchange,
     setSelectedProposedExchange,
     selectedExchangeWithProposals,
@@ -105,19 +146,23 @@ const DirectExchangeContainer: React.FC = () => {
     closeAllModals
   } = useDirectExchangeModals();
   
-  // Hook pour les actions sur les échanges
-  const {
-    toast,
-    setToast,
-    isProcessing,
-    handleModalSubmit,
-    updateExchangeOptions,
-    removeExchange
-  } = useDirectExchangeActions({
-    onSuccess: (message) => {
-      // Rafraîchir les données immédiatement
-      console.log('Action réussie, rafraîchissement des données...');
+  // Toast state
+  const [toast, setToast] = useState<{
+    visible: boolean;
+    message: string;
+    type: 'success' | 'error' | 'info';
+  }>({
+    visible: false,
+    message: '',
+    type: 'info'
+  });
+  
+  // Hook pour les actions supplémentaires (updateExchangeOptions, removeExchange)
+  const { updateExchangeOptions, removeExchange } = useDirectExchangeActions({
+    onSuccess: () => {
+      invalidateAllExchangeDataCache();
       loadDirectExchanges();
+      window.dispatchEvent(new CustomEvent('directExchangeUpdated'));
     }
   });
   
@@ -131,314 +176,75 @@ const DirectExchangeContainer: React.FC = () => {
     handleRejectShiftProposal
   } = useDirectProposalActions(userProposals, userAssignments, {
     onSuccess: (message) => {
-      // Rafraîchir les données immédiatement
-      console.log('Action sur proposition réussie, rafraîchissement des données...');
+      // Invalider le cache et rafraîchir les données
+      console.log('Action sur proposition réussie, invalidation du cache...');
+      invalidateAllExchangeDataCache();
       loadDirectExchanges();
+      
+      // Émettre l'événement global pour synchroniser avec les autres composants
+      window.dispatchEvent(new CustomEvent('directExchangeUpdated'));
     }
   });
   
-  // Fonction pour gérer le clic sur une cellule
-  const handleCellClick = async (event: React.MouseEvent, assignment: any, hasIncomingProposals?: boolean, hasUserProposal?: boolean) => {
-    if (!assignment) return;
+  // Fonction de base pour gérer le clic sur une cellule
+  const handleCellClickBase = useCallback(async (event: React.MouseEvent, assignment: any, hasIncomingProposals?: boolean, hasUserProposal?: boolean) => {
+    if (!assignment || !user?.id) return;
     
-    // Normaliser l'assignation pour s'assurer que les données sont au bon format
-    const normalizedAssignment = {
-      ...assignment,
-      // S'assurer que period est défini, sinon utiliser type
-      period: assignment.period || assignment.type
-    };
+    // Normaliser l'assignation
+    const normalizedAssignment = normalizeAssignment(assignment);
     
-    console.log('Assignation normalisée pour la recherche d\'échanges:', normalizedAssignment);
+    console.log('🔍 Récupération optimisée des données pour la cellule:', normalizedAssignment);
     
-    // Forcer un rafraîchissement des données avant de continuer
-    // pour s'assurer que nous avons les données les plus récentes
-    await loadDirectExchanges();
-    
-    // Vérifier si cette garde a déjà été proposée dans différentes collections
-    // en tenant compte de la normalisation des périodes
-    const existingExchanges = directExchanges.filter(exchange => {
-      const matchesUser = exchange.userId === user?.id;
-      const matchesDate = exchange.date === normalizedAssignment.date;
+    try {
+      // Utiliser notre nouvelle fonction optimisée qui combine toutes les requêtes
+      const { directExchanges: existingExchanges, operationTypes: existingOperationTypes } = await fetchExchangeDataForCellWithCache({
+        userId: user.id,
+        date: normalizedAssignment.date,
+        period: normalizedAssignment.period
+      });
       
-      // Vérifier si la période correspond, en tenant compte des deux formats possibles
-      const matchesPeriod = exchange.period === normalizedAssignment.period;
+      console.log('✅ Données récupérées:', {
+        exchanges: existingExchanges.length,
+        operationTypes: existingOperationTypes
+      });
+      // Les requêtes Firebase ont déjà été effectuées de manière optimisée
+      const primaryExchange = existingExchanges.length > 0 ? existingExchanges[0] : undefined;
       
-      return matchesUser && matchesDate && matchesPeriod;
-    });
-    
-    // Récupérer les types d'opération existants
-    const existingOperationTypes: OperationType[] = [];
-    
-    console.log('Échanges existants trouvés:', existingExchanges.length, existingExchanges);
-    
-    // Parcourir tous les échanges existants
-    existingExchanges.forEach(exchange => {
-      console.log('Traitement de l\'échange:', exchange.id, 'operationType:', exchange.operationType, 'operationTypes:', exchange.operationTypes);
+      // Préparer les données pour le modal approprié
+      setIsLoadingProposals(true);
       
-      // Utiliser operationTypes s'il existe
-      if (exchange.operationTypes && Array.isArray(exchange.operationTypes)) {
-        console.log('Utilisation de operationTypes:', exchange.operationTypes);
-        exchange.operationTypes.forEach((type: OperationType) => {
-          if (!existingOperationTypes.includes(type)) {
-            existingOperationTypes.push(type);
-            console.log('Ajout du type d\'opération:', type);
-          }
-        });
-      } 
-      // Sinon, dériver de operationType
-      else if (exchange.operationType) {
-        console.log('Dérivation à partir de operationType:', exchange.operationType);
-        if (exchange.operationType === 'both') {
-          if (!existingOperationTypes.includes('exchange')) {
-            existingOperationTypes.push('exchange');
-            console.log('Ajout du type d\'opération: exchange (from both)');
-          }
-          if (!existingOperationTypes.includes('give')) {
-            existingOperationTypes.push('give');
-            console.log('Ajout du type d\'opération: give (from both)');
-          }
-        } else if (!existingOperationTypes.includes(exchange.operationType)) {
-          existingOperationTypes.push(exchange.operationType);
-          console.log('Ajout du type d\'opération:', exchange.operationType);
-        }
-      }
-    });
-    
-    console.log('Types d\'opération existants après traitement:', existingOperationTypes);
-    
-    // Vérifier également si un remplacement existe pour cette garde
-    // en utilisant une requête directe à Firestore pour avoir les données les plus récentes
-    const checkReplacement = async () => {
       try {
-        // Importer dynamiquement la fonction pour éviter les dépendances circulaires
-        const { collection, query, where, getDocs } = await import('firebase/firestore');
-        const { db } = await import('../../../lib/firebase/config');
-        
-        // Vérifier dans la collection direct_replacements
-        const replacementsQuery = query(
-          collection(db, 'direct_replacements'),
-          where('originalUserId', '==', user?.id),
-          where('date', '==', normalizedAssignment.date),
-          where('period', '==', normalizedAssignment.period),
-          where('status', '==', 'pending')
+        const modalData = await prepareModalData(
+          primaryExchange,
+          normalizedAssignment,
+          existingExchanges,
+          existingOperationTypes
         );
         
-        const replacementSnapshot = await getDocs(replacementsQuery);
-        
-        if (!replacementSnapshot.empty && !existingOperationTypes.includes('replacement')) {
-          console.log('Remplacement trouvé pour cette garde dans direct_replacements');
-          existingOperationTypes.push('replacement');
-        } else {
-          // Vérifier aussi dans la collection remplacements (ancienne collection)
-          const oldReplacementsQuery = query(
-            collection(db, 'remplacements'),
-            where('originalUserId', '==', user?.id),
-            where('date', '==', normalizedAssignment.date),
-            where('period', '==', normalizedAssignment.period),
-            where('status', '==', 'pending')
-          );
-          
-          const oldReplacementSnapshot = await getDocs(oldReplacementsQuery);
-          
-          if (!oldReplacementSnapshot.empty && !existingOperationTypes.includes('replacement')) {
-            console.log('Remplacement trouvé pour cette garde dans remplacements');
-            existingOperationTypes.push('replacement');
-          }
-        }
-      } catch (error) {
-        console.error('Erreur lors de la vérification des remplacements:', error);
-      }
-    };
-    
-    await checkReplacement();
-    
-    // Vérifier également dans la collection direct_exchanges pour avoir les données les plus récentes
-    const checkDirectExchanges = async () => {
-      try {
-        const { collection, query, where, getDocs } = await import('firebase/firestore');
-        const { db } = await import('../../../lib/firebase/config');
-        
-        const exchangesQuery = query(
-          collection(db, 'direct_exchanges'),
-          where('userId', '==', user?.id),
-          where('date', '==', normalizedAssignment.date),
-          where('period', '==', normalizedAssignment.period),
-          where('status', 'in', ['pending', 'unavailable'])
-        );
-        
-        const exchangeSnapshot = await getDocs(exchangesQuery);
-        
-        if (!exchangeSnapshot.empty) {
-          // Mettre à jour existingExchanges avec les données les plus récentes
-          exchangeSnapshot.docs.forEach(doc => {
-            const exchange = doc.data();
-            const existingIndex = existingExchanges.findIndex(ex => ex.id === doc.id);
-            
-            // Créer un objet correctement typé en tant que ShiftExchange
-            const typedExchange = {
-              id: doc.id,
-              ...exchange,
-              // S'assurer que toutes les propriétés requises sont présentes
-              exchangeType: exchange.exchangeType || 'direct',
-              operationTypes: exchange.operationTypes || [],
-              status: exchange.status || 'pending',
-              userId: exchange.userId || user?.id || '',
-              date: exchange.date || normalizedAssignment.date,
-              period: exchange.period || normalizedAssignment.period,
-              createdAt: exchange.createdAt || createParisDate().toISOString(),
-              lastModified: exchange.lastModified || createParisDate().toISOString()
-            } as ExchangeShiftExchange;
-            
-            if (existingIndex >= 0) {
-              // Mettre à jour l'échange existant
-              existingExchanges[existingIndex] = typedExchange;
-            } else {
-              // Ajouter le nouvel échange
-              existingExchanges.push(typedExchange);
-            }
-            
-            // Mettre à jour existingOperationTypes
-            if (exchange.operationTypes && Array.isArray(exchange.operationTypes)) {
-              exchange.operationTypes.forEach((type: OperationType) => {
-                if (!existingOperationTypes.includes(type)) {
-                  existingOperationTypes.push(type);
-                  console.log('Ajout du type d\'opération depuis Firestore:', type);
-                }
-              });
-            } else if (exchange.operationType) {
-              if (exchange.operationType === 'both') {
-                if (!existingOperationTypes.includes('exchange')) {
-                  existingOperationTypes.push('exchange');
-                }
-                if (!existingOperationTypes.includes('give')) {
-                  existingOperationTypes.push('give');
-                }
-              } else if (!existingOperationTypes.includes(exchange.operationType)) {
-                existingOperationTypes.push(exchange.operationType);
-              }
-            }
-          });
-          
-          console.log('Échanges mis à jour depuis Firestore:', existingExchanges);
-        }
-      } catch (error) {
-        console.error('Erreur lors de la vérification des échanges directs:', error);
-      }
-    };
-    
-    await checkDirectExchanges();
-    
-    // Utiliser le premier échange trouvé comme référence (pour l'ID et le commentaire)
-    const primaryExchange = existingExchanges.length > 0 ? existingExchanges[0] : undefined;
-    
-    // Vérifier explicitement si l'échange a des propositions
-    // en cherchant parmi les propositions reçues dans la base de données
-    const checkForProposals = async (exchangeId: string) => {
-      try {
-        // Importer dynamiquement la fonction pour éviter les dépendances circulaires
-        const { getProposalsForExchange } = await import('../../../lib/firebase/directExchange');
-        
-        // Récupérer les propositions pour cet échange
-        const directProposals = await getProposalsForExchange(exchangeId);
-        
-        return directProposals.length > 0 ? directProposals : null;
-      } catch (error) {
-        console.error('Erreur lors de la vérification des propositions:', error);
-        return null;
-      }
-    };
-    
-    // Vérifier les propositions pour cet échange, même si hasIncomingProposals est false
-    if (primaryExchange) {
-      try {
-        setIsLoadingProposals(true);
-        
-        const directProposals = await checkForProposals(primaryExchange.id);
-        
-        // Si des propositions sont trouvées, ouvrir le modal des propositions
-        if (directProposals && directProposals.length > 0) {
-          console.log('Propositions trouvées pour l\'échange:', directProposals.length);
-          
-          // Convertir les DirectExchangeProposal en ExchangeProposal
-          const proposals = directProposals.map(p => {
-            // Gérer les dates de manière sécurisée
-            let createdAtString = createParisDate().toISOString();
-            let lastModifiedString = createParisDate().toISOString();
-            
-            try {
-              if (p.createdAt) {
-                if (typeof p.createdAt === 'object' && 'toDate' in p.createdAt && typeof p.createdAt.toDate === 'function') {
-                  createdAtString = firebaseTimestampToParisDate(p.createdAt).toISOString();
-                } else if (p.createdAt instanceof Date) {
-                  createdAtString = p.createdAt.toISOString();
-                } else if (typeof p.createdAt === 'string') {
-                  createdAtString = p.createdAt;
-                }
-              }
-              
-              if (p.lastModified) {
-                if (typeof p.lastModified === 'object' && 'toDate' in p.lastModified && typeof p.lastModified.toDate === 'function') {
-                  lastModifiedString = firebaseTimestampToParisDate(p.lastModified).toISOString();
-                } else if (p.lastModified instanceof Date) {
-                  lastModifiedString = p.lastModified.toISOString();
-                } else if (typeof p.lastModified === 'string') {
-                  lastModifiedString = p.lastModified;
-                }
-              }
-            } catch (error) {
-              console.error('Erreur lors de la conversion des dates:', error);
-            }
-            
-            // S'assurer que proposedShifts est toujours un tableau
-            const proposedShifts = Array.isArray(p.proposedShifts) ? p.proposedShifts : [];
-            
-            return {
-              id: p.id || '',
-              userId: p.proposingUserId, // Ajouter userId qui est obligatoire dans ExchangeProposal
-              targetExchangeId: p.targetExchangeId,
-              targetUserId: p.targetUserId,
-              proposingUserId: p.proposingUserId,
-              proposalType: p.proposalType || 'exchange', // Valeur par défaut
-              targetShift: p.targetShift || {
-                date: '',
-                period: 'M',
-                shiftType: '',
-                timeSlot: ''
-              },
-              proposedShifts: proposedShifts,
-              comment: p.comment || '',
-              status: p.status || 'pending',
-              createdAt: createdAtString,
-              lastModified: lastModifiedString
-            };
-          });
-          
-          // Ouvrir le modal des propositions
+        // Ouvrir le modal approprié selon le type
+        if (modalData.type === 'proposals') {
           setSelectedExchangeWithProposals({
-            exchange: primaryExchange,
-            proposals
+            exchange: modalData.data.exchange!,
+            proposals: modalData.data.proposals!
           });
         } else {
-          console.log('Aucune proposition trouvée, ouverture du modal d\'échange standard');
-          
-          // Sinon, ouvrir le modal d'échange normal
           setSelectedCell({
-            assignment: normalizedAssignment, // Utiliser l'assignation normalisée
-            position: { x: 0, y: 0 }, // Valeurs par défaut, ne seront pas utilisées
-            existingExchanges: existingExchanges, // Stocker tous les échanges existants
-            existingExchange: primaryExchange,
-            operationTypes: existingOperationTypes
+            assignment: modalData.data.assignment!,
+            position: { x: 0, y: 0 },
+            existingExchanges: modalData.data.existingExchanges!,
+            existingExchange: modalData.data.exchange,
+            operationTypes: modalData.data.operationTypes as OperationType[]
           });
         }
       } catch (error) {
-        console.error('Erreur lors de la récupération des propositions:', error);
+        console.error('Erreur lors de la préparation du modal:', error);
         setToast({
           visible: true,
-          message: `Erreur: ${error instanceof Error ? error.message : 'Une erreur est survenue lors de la récupération des propositions'}`,
+          message: `Erreur: ${error instanceof Error ? error.message : 'Une erreur est survenue'}`,
           type: 'error'
         });
         
-        // En cas d'erreur, ouvrir le modal d'échange normal
+        // En cas d'erreur, ouvrir le modal d'échange standard
         setSelectedCell({
           assignment: normalizedAssignment,
           position: { x: 0, y: 0 },
@@ -449,24 +255,22 @@ const DirectExchangeContainer: React.FC = () => {
       } finally {
         setIsLoadingProposals(false);
       }
-    } else {
-      // Si aucun échange existant n'est trouvé, ouvrir le modal standard
-      setSelectedCell({
-        assignment: normalizedAssignment,
-        position: { x: 0, y: 0 },
-        existingExchanges: [],
-        existingExchange: undefined,
-        operationTypes: []
+    } catch (error) {
+      console.error('❌ Erreur lors de la récupération des données:', error);
+      setToast({
+        visible: true,
+        message: 'Erreur lors de la récupération des données. Veuillez réessayer.',
+        type: 'error'
       });
+      return;
     }
-  };
+  }, [user, setToast, setIsLoadingProposals, setSelectedExchangeWithProposals, setSelectedCell]);
+
+  // Version débouncée de handleCellClick pour éviter les doubles clics
+  const handleCellClick = useDebounce(handleCellClickBase, 1000);
   
-  // Fonction pour gérer la soumission du modal pour ses propres gardes
-  const onModalSubmit = (comment: string, operationTypes: OperationType[]) => {
-    handleModalSubmit(selectedCell, comment, operationTypes, () => {
-      setSelectedCell(null);
-    });
-  };
+  // Le hook unifié gère maintenant la soumission du modal
+  // handleModalSubmit est directement utilisé depuis le hook
   
   // Fonction pour gérer la soumission du modal pour les gardes proposées
   const onProposedExchangeSubmit = (exchangeId: string, userShiftKeys?: string, comment?: string, operationType?: string) => {
@@ -484,45 +288,16 @@ const DirectExchangeContainer: React.FC = () => {
     );
   };
   
-  // Nouvelle fonction pour gérer la proposition de cession
-  const handleCessionSubmit = (exchangeId: string, comment: string) => {
-    if (!selectedProposedExchange) return;
-    
-    handleProposedExchangeSubmit(
-      exchangeId,
-      selectedProposedExchange.exchange,
-      undefined, // Pas de sélection de garde pour une cession
-      comment,
-      'take', // Type d'opération : cession
-      () => {
-        setSelectedProposedExchange(null);
-      }
-    );
-  };
-  
-  // Nouvelle fonction pour gérer la proposition d'échange
-  const handleExchangeSubmit = (exchangeId: string, userShiftKeys: string[], comment: string) => {
-    if (!selectedProposedExchange) return;
-    
-    handleProposedExchangeSubmit(
-      exchangeId,
-      selectedProposedExchange.exchange,
-      userShiftKeys.join(','), // Convertir l'array en string séparé par des virgules
-      comment,
-      'exchange', // Type d'opération : échange
-      () => {
-        setSelectedProposedExchange(null);
-      }
-    );
-  };
+  // Créer les handlers pour les soumissions d'échange
+  const { handleCessionSubmit, handleExchangeSubmit } = createExchangeSubmissionHandlers(
+    selectedProposedExchange,
+    handleProposedExchangeSubmit,
+    setSelectedProposedExchange
+  );
   
   // Fonction pour gérer l'annulation d'une proposition
-  // Utilisation de useCallback pour stabiliser la référence de la fonction
   const onCancelProposal = useCallback((exchangeId: string) => {
-    // Créer un wrapper pour removeExchange qui accepte un operationType de type string
-    const removeExchangeWrapper = (id: string, operationType: string) => {
-      return removeExchange(id, operationType as OperationType);
-    };
+    const removeExchangeWrapper = createRemoveExchangeWrapper(removeExchange);
     
     handleCancelProposal(
       exchangeId,
@@ -552,7 +327,8 @@ const DirectExchangeContainer: React.FC = () => {
           type: 'success'
         });
         
-        // Rafraîchir les données
+        // Invalider le cache et rafraîchir les données
+        invalidateAllExchangeDataCache();
         loadDirectExchanges();
       }
     );
@@ -626,29 +402,7 @@ const DirectExchangeContainer: React.FC = () => {
     const hasProposal = userProposals.some(p => p.targetExchangeId === exchange.id);
     
     // Déterminer les types d'opération disponibles
-    let existingOperationTypes: OperationType[] = [];
-    
-    // Si l'échange a une propriété operationTypes, l'utiliser en priorité
-    if (exchange.operationTypes && Array.isArray(exchange.operationTypes)) {
-      existingOperationTypes = [...exchange.operationTypes];
-    }
-    // Sinon, dériver de operationType
-    else {
-      // Si l'échange est de type 'both', ajouter les deux types
-      if (exchange.operationType === 'both') {
-        existingOperationTypes = ['exchange', 'give'];
-      }
-      // Sinon, ajouter le type d'opération de l'échange
-      else if (exchange.operationType === 'exchange' || exchange.operationType === 'give') {
-        existingOperationTypes = [exchange.operationType];
-      }
-      // Par défaut, permettre au moins la reprise
-      else {
-        existingOperationTypes = ['give'];
-      }
-    }
-    
-    console.log('Types d\'opération disponibles pour cet échange:', existingOperationTypes);
+    const existingOperationTypes = determineAvailableOperationTypes(exchange);
     
     // Ouvrir le modal pour proposer un échange ou une reprise avec notre nouveau composant
     setSelectedProposedExchange({
@@ -658,32 +412,38 @@ const DirectExchangeContainer: React.FC = () => {
     });
   }, [userProposals, setSelectedProposedExchange]);
   
-  // Wrapper pour onCancelProposal qui n'attend pas de paramètres
-  const handleCancelProposalWrapper = useCallback(() => {
-    if (!selectedProposedExchange) return;
-    onCancelProposal(selectedProposedExchange.exchange.id || '');
-  }, [onCancelProposal, selectedProposedExchange]);
+  // Utiliser le hook pour gérer tous les wrappers de callbacks
+  const {
+    handleCancelProposalWrapper,
+    handleAcceptProposalWrapper,
+    handleRejectProposalWrapper,
+    handleAcceptShiftProposalWrapper,
+    handleRejectShiftProposalWrapper,
+    handleUpdateOptionsWrapper
+  } = useDirectExchangeCallbacks({
+    onCancelProposal,
+    onAcceptProposal,
+    onRejectProposal,
+    onAcceptShiftProposal,
+    onRejectShiftProposal,
+    onUpdateExchangeOptions,
+    selectedProposedExchange
+  });
   
-  // Wrappers pour les fonctions passées à ExchangeProposalsModal
-  const handleAcceptProposalWrapper = useCallback(async (proposalId: string) => {
-    onAcceptProposal(proposalId);
-  }, [onAcceptProposal]);
-  
-  const handleRejectProposalWrapper = useCallback(async (proposalId: string) => {
-    onRejectProposal(proposalId);
-  }, [onRejectProposal]);
-  
-  const handleAcceptShiftProposalWrapper = useCallback(async (proposalId: string, shiftIndex: number) => {
-    onAcceptShiftProposal(proposalId, shiftIndex);
-  }, [onAcceptShiftProposal]);
-  
-  const handleRejectShiftProposalWrapper = useCallback(async (proposalId: string, shiftIndex: number) => {
-    onRejectShiftProposal(proposalId, shiftIndex);
-  }, [onRejectShiftProposal]);
-  
-  const handleUpdateOptionsWrapper = useCallback(async (operationTypes: string[]) => {
-    onUpdateExchangeOptions(operationTypes as OperationType[]);
-  }, [onUpdateExchangeOptions]);
+  // Écouter l'événement global pour rafraîchir les données
+  useEffect(() => {
+    const handleDirectExchangeUpdate = () => {
+      console.log('Événement directExchangeUpdated reçu, rafraîchissement des données...');
+      invalidateAllExchangeDataCache();
+      loadDirectExchanges();
+    };
+    
+    window.addEventListener('directExchangeUpdated', handleDirectExchangeUpdate);
+    
+    return () => {
+      window.removeEventListener('directExchangeUpdated', handleDirectExchangeUpdate);
+    };
+  }, [loadDirectExchanges]);
   
   // Rendu du contenu personnalisé
   const renderCustomContent = () => {
@@ -754,7 +514,8 @@ const DirectExchangeContainer: React.FC = () => {
         <ExchangeModal
           isOpen={true}
           onClose={() => setSelectedCell(null)}
-          onSubmit={onModalSubmit}
+          onSubmit={handleModalSubmit}
+          onRemove={handleRemove}
           initialComment={selectedCell.existingExchange?.comment || ""}
           position={selectedCell.position}
           assignment={selectedCell.assignment}

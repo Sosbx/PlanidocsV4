@@ -475,9 +475,13 @@ export const createCombinedExchange = async (
         // Créer une référence pour le document de remplacement
         const replacementRef = doc(collection(db, getCollectionName(COLLECTIONS.DIRECT_REPLACEMENTS, associationId)));
         
+        // Si aucun échange ne sera créé (remplacement seul), utiliser l'ID du remplacement comme exchangeId
+        const exchangeId = includesExchangeOrGive ? null : replacementRef.id;
+        
         // Créer le document de remplacement
         transaction.set(replacementRef, {
-          // On mettra à jour l'exchangeId après si nécessaire
+          // On mettra à jour l'exchangeId après si un échange est créé, sinon on utilise l'ID du remplacement
+          exchangeId: exchangeId,
           date: exchange.date,
           period: normalizedPeriod,
           shiftType: exchange.shiftType,
@@ -493,7 +497,7 @@ export const createCombinedExchange = async (
         // Stocker l'ID du remplacement dans le résultat
         result.replacementId = replacementRef.id;
         
-        console.log('Remplacement créé avec ID:', replacementRef.id);
+        console.log('Remplacement créé avec ID:', replacementRef.id, 'exchangeId:', exchangeId);
       }
       
       // Si l'échange ou la cession est sélectionné, créer un document dans direct_exchanges

@@ -1,7 +1,14 @@
 import React from 'react';
-import { UserPlus, X } from 'lucide-react';
+import { UserPlus, X, Check } from 'lucide-react';
 import type { ShiftExchange } from '../types';
 import type { User } from '../../../types/users';
+
+interface ReplacementInfo {
+  id: string;
+  replacementName: string;
+  assignedAt: string;
+  assignedBy: string;
+}
 
 interface CompletedPhaseExchangeItemProps {
   exchange: ShiftExchange;
@@ -10,6 +17,7 @@ interface CompletedPhaseExchangeItemProps {
   removingShift: string | null;
   onProposeToReplacements: (exchange: ShiftExchange) => void;
   onRemoveFromExchange: (exchange: ShiftExchange) => void;
+  replacementInfo?: ReplacementInfo;
 }
 
 /**
@@ -21,12 +29,13 @@ const CompletedPhaseExchangeItem: React.FC<CompletedPhaseExchangeItemProps> = ({
   proposingShift,
   removingShift,
   onProposeToReplacements,
-  onRemoveFromExchange
+  onRemoveFromExchange,
+  replacementInfo
 }) => {
   return (
     <div className="flex flex-col w-full relative">
       {/* Indicateur de proposition aux remplaçants */}
-      {exchange.proposedToReplacements && (
+      {exchange.proposedToReplacements && !replacementInfo && (
         <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-yellow-500 border border-white"></div>
       )}
       
@@ -44,8 +53,18 @@ const CompletedPhaseExchangeItem: React.FC<CompletedPhaseExchangeItemProps> = ({
         </div>
       )}
       
-      {/* Boutons d'action */}
-      <div className="mt-2 flex flex-col gap-2 w-full">
+      {/* Affichage conditionnel : Badge vert si remplaçant trouvé, sinon boutons d'action */}
+      {replacementInfo ? (
+        <div className="mt-2 w-full">
+          <div className="flex items-center justify-center gap-2 px-3 py-2 bg-green-100 text-green-800 rounded-md">
+            <Check className="h-4 w-4" />
+            <span className="text-xs sm:text-sm font-medium">
+              Remplaçant: {replacementInfo.replacementName}
+            </span>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-2 flex flex-col gap-2 w-full">
         {/* Bouton "Garder cette garde" */}
         <button
           onClick={(e) => {
@@ -88,6 +107,7 @@ const CompletedPhaseExchangeItem: React.FC<CompletedPhaseExchangeItemProps> = ({
           </span>
         </button>
       </div>
+      )}
     </div>
   );
 };

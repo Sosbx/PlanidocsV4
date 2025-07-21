@@ -365,10 +365,10 @@ export const acceptProposalTransaction = async (
       let targetPlanningDoc = null;
       
       if (updatePlanning) {
-        console.log(`PLANNINGS: Récupération des plannings dans la collection ${COLLECTIONS.PLANNINGS}`);
+        console.log(`PLANNINGS: Récupération des plannings dans la collection ${COLLECTIONS.GENERATED_PLANNINGS}`);
         
         // Récupérer le planning de l'utilisateur source (qui cède la garde)
-        const sourcePlanningRef = doc(db, COLLECTIONS.PLANNINGS, exchange.userId);
+        const sourcePlanningRef = doc(db, COLLECTIONS.GENERATED_PLANNINGS, exchange.userId);
         console.log(`PLANNINGS: Récupération du planning source pour l'utilisateur ${exchange.userId}`);
         sourcePlanningDoc = await transaction.get(sourcePlanningRef);
         
@@ -380,7 +380,7 @@ export const acceptProposalTransaction = async (
         }
         
         // Récupérer le planning de l'utilisateur cible (qui reprend la garde)
-        const targetPlanningRef = doc(db, COLLECTIONS.PLANNINGS, proposal.proposingUserId);
+        const targetPlanningRef = doc(db, COLLECTIONS.GENERATED_PLANNINGS, proposal.proposingUserId);
         console.log(`PLANNINGS: Récupération du planning cible pour l'utilisateur ${proposal.proposingUserId}`);
         targetPlanningDoc = await transaction.get(targetPlanningRef);
         
@@ -422,12 +422,12 @@ export const acceptProposalTransaction = async (
           };
           
           // Récupérer les références des plannings pour éviter les répétitions
-          const targetPlanningRef = doc(db, COLLECTIONS.PLANNINGS, proposal.proposingUserId);
-          const sourcePlanningRef = doc(db, COLLECTIONS.PLANNINGS, exchange.userId);
+          const targetPlanningRef = doc(db, COLLECTIONS.GENERATED_PLANNINGS, proposal.proposingUserId);
+          const sourcePlanningRef = doc(db, COLLECTIONS.GENERATED_PLANNINGS, exchange.userId);
           
           console.log(`TRACE TRANSFERT: Transfert de garde de ${exchange.userId} vers ${proposal.proposingUserId}`);
           console.log(`TRACE TRANSFERT: Date: ${exchange.date}, Période: ${exchange.period}`);
-          console.log(`TRACE TRANSFERT: Utilisation de la collection ${COLLECTIONS.PLANNINGS} pour les mises à jour`);
+          console.log(`TRACE TRANSFERT: Utilisation de la collection ${COLLECTIONS.GENERATED_PLANNINGS} pour les mises à jour`);
           
           // Mettre à jour le planning cible - Ajouter la garde au médecin qui la reprend
           if (targetPlanningDoc && targetPlanningDoc.exists()) {
@@ -540,10 +540,10 @@ export const acceptProposalTransaction = async (
             console.log(`ÉCHANGE: Médecin A (qui a créé l'échange): ${exchange.userId}, Médecin B (qui a proposé): ${proposal.proposingUserId}`);
             
             // Récupérer les références des plannings pour éviter les répétitions
-            const sourcePlanningRef = doc(db, COLLECTIONS.PLANNINGS, exchange.userId);
-            const targetPlanningRef = doc(db, COLLECTIONS.PLANNINGS, proposal.proposingUserId);
+            const sourcePlanningRef = doc(db, COLLECTIONS.GENERATED_PLANNINGS, exchange.userId);
+            const targetPlanningRef = doc(db, COLLECTIONS.GENERATED_PLANNINGS, proposal.proposingUserId);
             
-            console.log(`ÉCHANGE: Utilisation de la collection ${COLLECTIONS.PLANNINGS} pour les mises à jour`);
+            console.log(`ÉCHANGE: Utilisation de la collection ${COLLECTIONS.GENERATED_PLANNINGS} pour les mises à jour`);
             
             // Standardiser les périodes pour s'assurer qu'elles sont au bon format
             const sourceStandardizedPeriod = normalizePeriod(exchange.period);
@@ -858,7 +858,7 @@ export const acceptProposalTransaction = async (
             console.log(`ÉCHANGE: Médecin A (${exchange.userId}) a maintenant la garde ${targetAssignmentKey}`);
             console.log(`ÉCHANGE: Médecin B (${proposal.proposingUserId}) a maintenant la garde ${sourceAssignmentKey}`);
             console.log(`ÉCHANGE: La proposition ${proposalId} a été acceptée et l'échange ${proposal.targetExchangeId} validé`);
-            console.log(`ÉCHANGE: Les plannings ont été mis à jour dans la collection ${COLLECTIONS.PLANNINGS}`);
+            console.log(`ÉCHANGE: Les plannings ont été mis à jour dans la collection ${COLLECTIONS.GENERATED_PLANNINGS}`);
             console.log(`ÉCHANGE: ===================================`);
           }
         }

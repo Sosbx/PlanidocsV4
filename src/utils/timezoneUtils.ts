@@ -67,10 +67,21 @@ export function createParisDate(...args: any[]): Date {
 
 /**
  * Parse une date string en forçant le fuseau horaire Europe/Paris
- * @param dateString String de date au format YYYY-MM-DD
+ * @param dateString String de date au format YYYY-MM-DD ou objet Date
  * @returns Date en Europe/Paris
  */
-export function parseParisDate(dateString: string): Date {
+export function parseParisDate(dateString: string | Date): Date {
+  // Si c'est déjà une Date, la retourner directement
+  if (dateString instanceof Date) {
+    return dateString;
+  }
+  
+  // Vérifier que c'est une string
+  if (typeof dateString !== 'string') {
+    console.error('parseParisDate: entrée invalide (ni string ni Date):', dateString);
+    return toParisTime(new DateConstructor());
+  }
+  
   if (!dateString || !dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
     console.error('Format de date invalide:', dateString);
     return toParisTime(new DateConstructor());

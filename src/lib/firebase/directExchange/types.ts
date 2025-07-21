@@ -8,7 +8,7 @@ export const COLLECTIONS = {
   DIRECT_REPLACEMENTS: 'remplacements', // Utiliser 'remplacements' au lieu de 'direct_replacements'
   DIRECT_HISTORY: 'direct_exchange_history',
   DIRECT_PROPOSALS: 'direct_exchange_proposals',
-  PLANNINGS: 'generated_plannings' // Cohérent avec collectionUtils.ts : GENERATED_PLANNINGS
+  GENERATED_PLANNINGS: 'generated_plannings' // Nom plus clair et cohérent avec collectionUtils.ts
 };
 
 // Type commun pour les données d'échange

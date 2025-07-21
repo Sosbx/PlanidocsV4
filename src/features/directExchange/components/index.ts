@@ -1,7 +1,7 @@
 // Composants existants
 export { default as ExchangeModal } from './ExchangeModal';
 export { default as DirectExchangeContainer } from './DirectExchangeContainer';
-export { default as DirectExchangeTable } from './DirectExchangeTable';
+export { default as DirectExchangeTable } from './DirectExchangeTableOptimized'; // Utiliser la version optimisée
 export { default as ProposedShiftModal } from './ProposedShiftModal';
 export { default as ExchangeProposalsModal } from './ExchangeProposalsModal';
 

@@ -11,8 +11,6 @@ export const SyncResultsDetails: React.FC = () => {
   const [showDetails, setShowDetails] = useState(false);
   const [showModal, setShowModal] = useState(false);
 
-  console.log('SyncResultsDetails - lastSyncResult:', lastSyncResult);
-
   if (!isAuthenticated || !lastSyncResult) {
     return null;
   }

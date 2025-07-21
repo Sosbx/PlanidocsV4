@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { Badge } from './common';
 import type { ShiftAssignment } from '../types/planning';
 import type { ShiftExchange } from '../types/exchange';
@@ -17,6 +17,12 @@ interface PlanningGridCellProps {
     replacementUserId: string;
     originalUserId: string;
     status: 'pending' | 'accepted' | 'rejected';
+  };
+  assignedReplacement?: {
+    id: string;
+    replacementName: string;
+    assignedAt: string;
+    assignedBy: string;
   };
   desideratum?: { type: 'primary' | 'secondary' | null };
   receivedShift?: {
@@ -44,6 +50,7 @@ const PlanningGridCell: React.FC<PlanningGridCellProps> = React.memo(({
   exchange,
   directExchange,
   replacement,
+  assignedReplacement,
   desideratum,
   receivedShift,
   userId,
@@ -71,6 +78,13 @@ const PlanningGridCell: React.FC<PlanningGridCellProps> = React.memo(({
   
   // Vérifier si la garde est proposée aux remplaçants
   const isProposedToReplacements = replacement && replacement.originalUserId === userId;
+  
+  // Debug: log si un remplaçant est assigné
+  useEffect(() => {
+    if (assignedReplacement) {
+      console.log(`Remplaçant assigné pour la cellule ${cellKey}:`, assignedReplacement);
+    }
+  }, [assignedReplacement, cellKey]);
   
   // Obtenir les types d'opération à partir de l'échange
   const operationTypes = useMemo(() => {
@@ -167,6 +181,9 @@ const PlanningGridCell: React.FC<PlanningGridCellProps> = React.memo(({
 
   // Construire les classes de fond
   const bgClasses = useMemo(() => {
+    // Si un remplaçant est assigné, ne pas appliquer de couleur de fond orange
+    const shouldShowReplacementBackground = isProposedToReplacements && !assignedReplacement;
+    
     // Utiliser l'utilitaire centralisé pour déterminer la classe de fond
     const baseClass = getCellBackgroundClass({
       isGrayedOut,
@@ -174,7 +191,7 @@ const PlanningGridCell: React.FC<PlanningGridCellProps> = React.memo(({
       showDesiderata: !!desideratum,
       exchange,
       directExchange,
-      isProposedToReplacements,
+      isProposedToReplacements: shouldShowReplacementBackground,
       isReceivedShift,
       isReceivedPermutation,
       userId,
@@ -205,6 +222,11 @@ const PlanningGridCell: React.FC<PlanningGridCellProps> = React.memo(({
       classes.push('cursor-default');
     }
     
+    // Ajouter la bordure orange si un remplaçant est assigné
+    if (assignedReplacement) {
+      classes.push('ring-2 ring-orange-400');
+    }
+    
     // Ajouter une classe de transition pour les animations
     classes.push('cell-transition');
     
@@ -226,7 +248,8 @@ const PlanningGridCell: React.FC<PlanningGridCellProps> = React.memo(({
     userId,
     exchange,
     directExchange,
-    isProposedToReplacements
+    isProposedToReplacements,
+    assignedReplacement
   ]);
   
   // Générer le titre (tooltip) de la cellule
@@ -249,8 +272,12 @@ const PlanningGridCell: React.FC<PlanningGridCellProps> = React.memo(({
         title += ' (Vous avez reçu des propositions pour cette garde)';
       }
       
+      // Info sur le remplaçant assigné
+      if (assignedReplacement) {
+        title += ` (Remplaçant trouvé: ${assignedReplacement.replacementName})`;
+      }
       // Info sur tous les types d'opérations dans un seul message
-      if (hasProposedGuard || isProposedToReplacements) {
+      else if (hasProposedGuard || isProposedToReplacements) {
         const proposedFor = [
           hasExchangeOp ? 'Échange' : '',
           hasGiveOp ? 'Cession' : '',
@@ -273,7 +300,8 @@ const PlanningGridCell: React.FC<PlanningGridCellProps> = React.memo(({
     isProposedToReplacements, 
     hasExchangeOp, 
     hasGiveOp,
-    hasIncomingProposals
+    hasIncomingProposals,
+    assignedReplacement
   ]);
   
   // Si pas d'assignment, rendre une cellule vide mais avec le grisage et les desiderata appropriés
@@ -349,6 +377,27 @@ const PlanningGridCell: React.FC<PlanningGridCellProps> = React.memo(({
                       size="xs" 
                       operationTypes={directExchange.operationTypes || []}
                     />
+                  </div>
+                );
+              }
+              
+              // Si un remplaçant est assigné, afficher un badge spécial
+              if (assignedReplacement) {
+                const initials = assignedReplacement.replacementName
+                  .split(' ')
+                  .map(n => n[0])
+                  .join('')
+                  .toUpperCase()
+                  .substring(0, 2);
+                
+                return (
+                  <div className="badge-appear" style={{ position: 'absolute', zIndex: 40, top: '-4px', right: '0' }}>
+                    <div 
+                      className="inline-flex items-center justify-center w-6 h-6 text-[10px] font-bold bg-orange-100 text-orange-800 border border-orange-300 rounded-full"
+                      title={`Remplaçant: ${assignedReplacement.replacementName}`}
+                    >
+                      {initials}
+                    </div>
                   </div>
                 );
               }

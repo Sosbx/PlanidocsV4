@@ -83,22 +83,41 @@ const ParticipationPanel: React.FC<ParticipationPanelProps> = ({
         }
       });
 
-      // Compter les postes reçus
+      // Compter les postes reçus (avec déduplication)
+      const processedHistoryIds = new Set<string>();
       safeHistory.forEach(h => {
         if (h && h.newUserId && stats[h.newUserId]) {
-          stats[h.newUserId].receivedCount++;
+          // Éviter les doublons basés sur la combinaison date-period-userId
+          const uniqueKey = `${h.date}-${h.period}-${h.newUserId}`;
+          if (!processedHistoryIds.has(uniqueKey)) {
+            processedHistoryIds.add(uniqueKey);
+            stats[h.newUserId].receivedCount++;
+          }
         }
       });
 
-      // Calculer les taux
+      // Calculer les taux avec validation
       Object.values(stats).forEach(stat => {
         stat.interestRate = totalPositions > 0 
           ? Math.round((stat.interestCount / totalPositions) * 100) 
           : 0;
         
-        stat.attributionRate = stat.interestCount > 0 
-          ? Math.round((stat.receivedCount / stat.interestCount) * 100)
+        // Calculer le taux d'attribution avec plafonnement à 100%
+        const rawAttributionRate = stat.interestCount > 0 
+          ? (stat.receivedCount / stat.interestCount) * 100
           : 0;
+        
+        // Log pour débogage si le taux dépasse 100%
+        if (rawAttributionRate > 100) {
+          console.warn(`Taux d'attribution anormal pour ${stat.userName}:`, {
+            receivedCount: stat.receivedCount,
+            interestCount: stat.interestCount,
+            calculatedRate: rawAttributionRate
+          });
+        }
+        
+        // Plafonner à 100% maximum
+        stat.attributionRate = Math.min(100, Math.round(rawAttributionRate));
       });
 
       // Filtrer uniquement les utilisateurs qui ont au moins manifesté un intérêt
@@ -328,16 +347,19 @@ const ParticipationPanel: React.FC<ParticipationPanelProps> = ({
                         </td>
                         <td className="text-center py-2 px-1">
                           <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-full ${
+                            stat.receivedCount > stat.interestCount ? 'bg-red-50' :
                             stat.attributionRate >= 50 ? 'bg-blue-50' :
                             stat.attributionRate >= 25 ? 'bg-yellow-50' :
                             'bg-gray-50'
                           }`}>
                             <span className={`font-semibold ${
+                              stat.receivedCount > stat.interestCount ? 'text-red-600' :
                               stat.attributionRate >= 50 ? 'text-blue-600' :
                               stat.attributionRate >= 25 ? 'text-yellow-600' :
                               'text-gray-600'
                             }`}>
                               {stat.attributionRate}%
+                              {stat.receivedCount > stat.interestCount && ' ⚠️'}
                             </span>
                             <span className="text-xs text-gray-600">
                               ({stat.receivedCount}/{stat.interestCount})

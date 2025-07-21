@@ -147,6 +147,9 @@ export interface ShiftReplacement {
   timeSlot: string;
   originalUserId: string;
   createdAt: string;
-  status: 'pending' | 'completed' | 'cancelled';
+  status: 'pending' | 'completed' | 'cancelled' | 'assigned';
   notifiedUsers: string[];
+  replacementName?: string;
+  assignedAt?: string;
+  assignedBy?: string;
 }

@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { useDirectExchange } from './useDirectExchange';
+import { validateOperationTypes, isValidOperationCombination } from '../utils/validation';
 import type { OperationType } from '../../../types/exchange';
 import type { ShiftExchange as ExchangeShiftExchange } from '../../../types/exchange';
 
@@ -52,6 +53,17 @@ export const useDirectExchangeActions = (options?: UseDirectExchangeActionsOptio
     onComplete?: () => void
   ) => {
     if (!selectedCell) return;
+    
+    // Valider les types d'opération
+    const validTypes = validateOperationTypes(operationTypes);
+    if (!isValidOperationCombination(validTypes)) {
+      setToast({
+        visible: true,
+        message: 'Combinaison de types d\'opération invalide',
+        type: 'error'
+      });
+      return;
+    }
     
     try {
       // Importer la fonction unifiée submitDirectExchange
@@ -106,10 +118,10 @@ export const useDirectExchangeActions = (options?: UseDirectExchangeActionsOptio
       
       console.log('Données pour création d\'échange:', exchangeData);
       
-      // Appeler la fonction unifiée
+      // Appeler la fonction unifiée avec les types validés
       const result = await submitDirectExchange(
         exchangeData,
-        operationTypes,
+        validTypes,
         {
           removeExchange: removeExchange,
           onSuccess: (message) => {
@@ -176,12 +188,23 @@ export const useDirectExchangeActions = (options?: UseDirectExchangeActionsOptio
     operationTypes: OperationType[],
     onComplete?: () => void
   ) => {
+    // Valider les types d'opération
+    const validTypes = validateOperationTypes(operationTypes);
+    if (!isValidOperationCombination(validTypes)) {
+      setToast({
+        visible: true,
+        message: 'Combinaison de types d\'opération invalide',
+        type: 'error'
+      });
+      return;
+    }
+    
     try {
       // Importer dynamiquement la fonction pour éviter les dépendances circulaires
       const { updateExchangeOptions: updateOptions } = await import('../../../lib/firebase/directExchange');
       
-      // Mettre à jour les options d'échange
-      await updateOptions(exchangeId, operationTypes);
+      // Mettre à jour les options d'échange avec les types validés
+      await updateOptions(exchangeId, validTypes);
       
       setToast({
         visible: true,

@@ -4,7 +4,7 @@ import { ShiftPeriod } from '../types/exchange';
 import { isHoliday as checkHoliday, isBridgeDay } from './holidayUtils';
 import { parseParisDate, formatParisDate, toParisTime, createParisDate } from './timezoneUtils';
 import { formatDateCapitalized } from './dates/dateHelpers';
-import { normalizePeriod as normalizePeriodHelper } from './dates/periodHelpers';
+import { normalizePeriod as normalizePeriodHelper, getPeriodName } from './dates/periodHelpers';
 import { frLocale as fr } from './dateLocale';
 
 /**
@@ -91,8 +91,7 @@ export const getDaysArray = (startDate: Date, endDate: Date): Date[] => {
  * @deprecated Utiliser getPeriodName depuis dates/periodHelpers
  */
 export const formatPeriod = (period: string): string => {
-  // Importer dynamiquement pour éviter les dépendances circulaires
-  const { getPeriodName } = require('./dates/periodHelpers');
+  // Utiliser directement getPeriodName qui est déjà importé en haut du fichier
   return getPeriodName(period);
 };
 

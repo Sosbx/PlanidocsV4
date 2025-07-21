@@ -11,7 +11,6 @@ import type { ShiftExchange as FeatureShiftExchange } from '../../types';
 // Type union pour accepter les deux types de ShiftExchange
 type ShiftExchange = PlanningShiftExchange | FeatureShiftExchange;
 import type { User } from '../../../../types/users';
-import type { SuggestionScore } from '../../types/scoring';
 import { isGrayedOut } from '../../../../utils/dateUtils';
 import InterestedUserCard from './InterestedUserCard';
 import { ConfirmationModal } from '../../../../components/modals';
@@ -24,8 +23,6 @@ interface ExchangeListProps {
   conflictStates: Record<string, Record<string, boolean>>;
   conflictShiftTypes?: Record<string, Record<string, string>>;
   userAssignments: Record<string, Record<string, ShiftAssignment>>;
-  suggestions?: Record<string, SuggestionScore[]>;
-  showSuggestions?: boolean;
   onValidateExchange: (exchangeId: string, interestedUserId: string, hasConflict: boolean) => void;
   onRejectExchange: (exchangeId: string) => void;
   onRemoveUser: (exchangeId: string, userId: string) => void;
@@ -50,8 +47,6 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
   conflictStates,
   conflictShiftTypes,
   userAssignments,
-  suggestions = {},
-  showSuggestions = true,
   onValidateExchange,
   onRejectExchange,
   onRemoveUser,
@@ -104,11 +99,19 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
   const handleProposeToReplacements = async (exchange: ShiftExchange) => {
     try {
       setProposingToReplacements(exchange.id);
-      await proposeToReplacements(exchange as PlanningShiftExchange);
-      alert(`La garde du ${formatParisDate(new Date(exchange.date), 'dd/MM/yyyy')} (${exchange.period}) a été proposée aux remplaçants.`);
+      
+      if (exchange.proposedToReplacements) {
+        // Retirer la proposition
+        await cancelPropositionToReplacements(exchange as PlanningShiftExchange);
+        alert(`La garde du ${formatParisDate(new Date(exchange.date), 'dd/MM/yyyy')} (${exchange.period}) a été retirée de la liste des remplaçants.`);
+      } else {
+        // Proposer aux remplaçants
+        await proposeToReplacements(exchange as PlanningShiftExchange);
+        alert(`La garde du ${formatParisDate(new Date(exchange.date), 'dd/MM/yyyy')} (${exchange.period}) a été proposée aux remplaçants.`);
+      }
     } catch (error) {
-      console.error('Error proposing to replacements:', error);
-      alert('Une erreur est survenue lors de la proposition aux remplaçants.');
+      console.error('Error proposing/canceling to replacements:', error);
+      alert('Une erreur est survenue lors de l\'opération.');
     } finally {
       setProposingToReplacements(null);
     }
@@ -117,9 +120,11 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
   // Fonction pour vérifier si une garde est éligible pour être proposée aux remplaçants
   const isEligibleForReplacement = (exchange: ShiftExchange) => {
     // Vérifier si la garde est en attente et que la date limite est dépassée
-    return exchange.status === 'pending' && 
+    // OU si elle est déjà proposée aux remplaçants (pour permettre de retirer la proposition)
+    return (exchange.status === 'pending' && 
            (exchange.interestedUsers?.length === 0 || exchange.interestedUsers?.length === 0) &&
-           bagPhaseConfig.phase === 'distribution';
+           bagPhaseConfig.phase === 'distribution') ||
+           exchange.proposedToReplacements;
   };
 
   // Fonction pour gérer le clic sur une colonne triable
@@ -344,8 +349,6 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
                             onRemoveUser={onRemoveUser}
                             exchanges={exchanges}
                             history={history}
-                            suggestion={suggestions[exchange.id]?.find(s => s.userId === userId)}
-                            showSuggestion={showSuggestions}
                           />
                         ))}
                       </div>
@@ -385,11 +388,19 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
                           {isEligibleForReplacement(exchange) && (
                             <button
                               onClick={() => handleProposeToReplacements(exchange)}
-                              className="inline-flex items-center px-2.5 py-1.5 border border-blue-300 text-xs font-medium rounded text-blue-700 bg-white hover:bg-blue-50"
+                              className={`inline-flex items-center px-2.5 py-1.5 border text-xs font-medium rounded ${
+                                exchange.proposedToReplacements 
+                                  ? 'border-green-300 text-green-700 bg-green-50 hover:bg-green-100'
+                                  : 'border-blue-300 text-blue-700 bg-white hover:bg-blue-50'
+                              }`}
                               disabled={proposingToReplacements === exchange.id}
                             >
                               <UserPlus className="h-3 w-3 mr-1" />
-                              {proposingToReplacements === exchange.id ? 'En cours...' : 'Proposer aux remplaçants'}
+                              {exchange.proposedToReplacements 
+                                ? 'Rempla' 
+                                : proposingToReplacements === exchange.id 
+                                  ? 'En cours...' 
+                                  : 'Proposer aux remplaçants'}
                             </button>
                           )}
                         </>
@@ -482,8 +493,6 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
                       onRemoveUser={onRemoveUser}
                       exchanges={exchanges}
                       history={history}
-                      suggestion={suggestions[exchange.id]?.find(s => s.userId === userId)}
-                      showSuggestion={showSuggestions}
                     />
                   ))
                 ) : !isUnavailable ? (
@@ -524,9 +533,13 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
                       {isEligibleForReplacement(exchange) && (
                         <button
                           onClick={() => handleProposeToReplacements(exchange)}
-                          className="inline-flex items-center p-2 border border-blue-300 rounded-full text-blue-700 bg-white hover:bg-blue-50"
+                          className={`inline-flex items-center p-2 border rounded-full ${
+                            exchange.proposedToReplacements 
+                              ? 'border-green-300 text-green-700 bg-green-50 hover:bg-green-100'
+                              : 'border-blue-300 text-blue-700 bg-white hover:bg-blue-50'
+                          }`}
                           disabled={proposingToReplacements === exchange.id}
-                          title="Proposer aux remplaçants"
+                          title={exchange.proposedToReplacements ? "Retirer de la liste des remplaçants" : "Proposer aux remplaçants"}
                         >
                           <UserPlus className="h-5 w-5" />
                         </button>

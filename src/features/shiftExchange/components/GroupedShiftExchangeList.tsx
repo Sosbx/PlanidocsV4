@@ -13,6 +13,9 @@ import { useDesiderataState } from '../../../features/planning/hooks/useDesidera
 import ShiftStatusBadge, { ShiftStatus } from '../../../components/ShiftStatusBadge';
 import useResponsiveDisplay from '../../../hooks/useResponsiveDisplay';
 import { ShiftPeriod } from '../types';
+import { useReplacements } from '../hooks/useReplacements';
+import { proposeToReplacements, cancelPropositionToReplacements } from '../../../lib/firebase/shifts';
+import type { ShiftExchange as PlanningShiftExchange } from '../../../types/planning';
 
 interface GroupedShiftExchangeListProps {
   exchanges: ShiftExchange[];
@@ -64,6 +67,12 @@ const GroupedShiftExchangeList: React.FC<GroupedShiftExchangeListProps> = ({
   // Récupération de l'état responsive
   const { isMobile, isTablet } = useResponsiveDisplay();
   
+  // Récupérer les IDs des échanges pour charger les remplacements
+  const exchangeIds = React.useMemo(() => exchanges.map(e => e.id), [exchanges]);
+  
+  // Charger les remplacements associés aux échanges
+  const { replacements } = useReplacements(exchangeIds);
+  
   // Access desiderata state if needed
   const { /* selections, isLoading: isLoadingDesiderata */ } = useDesiderataState();
   const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>({});
@@ -77,16 +86,43 @@ const GroupedShiftExchangeList: React.FC<GroupedShiftExchangeListProps> = ({
   const [proposingShift, setProposingShift] = useState<string | null>(null);
   const [removingShift, setRemovingShift] = useState<string | null>(null);
   
-  // Fonctions placeholder pour les remplacements
+  // Fonction pour proposer aux remplaçants
   const handleProposeToReplacements = useCallback(async (exchange: ShiftExchange) => {
     try {
       setProposingShift(exchange.id);
-      // TODO: Implémenter la proposition aux remplaçants
-      console.log('Proposition aux remplaçants pour:', exchange);
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      alert('Fonctionnalité de proposition aux remplaçants à implémenter');
+      
+      // Convertir le type ShiftExchange local vers le type PlanningShiftExchange
+      const planningExchange: PlanningShiftExchange = {
+        id: exchange.id,
+        userId: exchange.userId,
+        date: exchange.date,
+        period: exchange.period,
+        shiftType: exchange.shiftType,
+        timeSlot: exchange.timeSlot,
+        comment: exchange.comment,
+        createdAt: exchange.createdAt,
+        interestedUsers: exchange.interestedUsers,
+        status: exchange.status,
+        lastModified: exchange.lastModified,
+        proposedToReplacements: exchange.proposedToReplacements,
+        operationTypes: exchange.operationTypes || []
+      };
+      
+      if (exchange.proposedToReplacements) {
+        // Annuler la proposition
+        await cancelPropositionToReplacements(planningExchange, true);
+        console.log('Proposition annulée pour:', exchange.id);
+      } else {
+        // Proposer aux remplaçants
+        await proposeToReplacements(planningExchange, [], true);
+        console.log('Proposé aux remplaçants:', exchange.id);
+      }
+      
+      // Les données seront automatiquement mises à jour via les listeners
     } catch (error) {
-      console.error('Erreur:', error);
+      console.error('Erreur lors de la proposition aux remplaçants:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Une erreur est survenue';
+      alert(errorMessage);
     } finally {
       setProposingShift(null);
     }
@@ -508,6 +544,7 @@ const GroupedShiftExchangeList: React.FC<GroupedShiftExchangeListProps> = ({
                               removingShift={removingShift}
                               onProposeToReplacements={handleProposeToReplacements}
                               onRemoveFromExchange={handleRemoveFromExchange}
+                              replacementInfo={replacements[exchange.id]}
                             />
                           ) : (
                             <>

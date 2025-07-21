@@ -706,12 +706,12 @@ export const getPlanningPeriods = async (associationId: string = 'RD'): Promise<
     return snapshot.docs.map(doc => ({
       id: doc.id,
       name: doc.data().name,
-      startDate: doc.data().firebaseTimestampToParisDate(startDate),
-      endDate: doc.data().firebaseTimestampToParisDate(endDate),
+      startDate: firebaseTimestampToParisDate(doc.data().startDate),
+      endDate: firebaseTimestampToParisDate(doc.data().endDate),
       status: doc.data().status,
       bagPhase: doc.data().bagPhase,
       isValidated: doc.data().isValidated,
-      validatedAt: doc.data().validatedAt?.toDate() || null
+      validatedAt: doc.data().validatedAt ? firebaseTimestampToParisDate(doc.data().validatedAt) : null
     }));
   } catch (error) {
     console.error('Error getting planning periods:', error);

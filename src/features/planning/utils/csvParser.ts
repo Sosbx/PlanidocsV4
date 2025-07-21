@@ -3,6 +3,16 @@ import { formatParisDate } from '@/utils/timezoneUtils';
 import { format } from 'date-fns';
 
 /**
+ * Parser CSV pour l'import de plannings
+ * 
+ * Formats de date acceptés:
+ * - JJ-MM-AA : L'année sera déterminée intelligemment
+ *   - Si AA > année actuelle + 10 : utilise le siècle précédent (ex: 95 -> 1995)
+ *   - Sinon : utilise le siècle actuel (ex: 24 -> 2024)
+ * - JJ-MM-AAAA : Année complète (ex: 15-05-2024)
+ */
+
+/**
  * Détecte le séparateur utilisé dans un fichier CSV
  */
 export const detectSeparator = (line: string): string => {
@@ -128,15 +138,41 @@ export const parseCSVFile = async (file: File): Promise<Record<string, ShiftAssi
           }
           
           try {
-            // Valider la date (format JJ-MM-AA)
+            // Valider la date (format JJ-MM-AA ou JJ-MM-AAAA)
             const dateParts = dateStr.split('-');
             if (dateParts.length !== 3) {
-              throw new Error(`Format de date invalide à la ligne ${i + 1}: ${dateStr}. Format attendu: JJ-MM-AA`);
+              throw new Error(`Format de date invalide à la ligne ${i + 1}: ${dateStr}. Format attendu: JJ-MM-AA ou JJ-MM-AAAA`);
             }
             
             const day = parseInt(dateParts[0], 10);
             const month = parseInt(dateParts[1], 10) - 1; // Les mois commencent à 0 en JavaScript
-            const year = parseInt(`20${dateParts[2]}`, 10); // Ajouter 20 pour avoir l'année complète
+            
+            let year: number;
+            if (dateParts[2].length === 2) {
+              // Format AA - Déterminer le siècle intelligemment
+              const shortYear = parseInt(dateParts[2], 10);
+              const currentYear = new Date().getFullYear();
+              const currentCentury = Math.floor(currentYear / 100) * 100;
+              const currentYearInCentury = currentYear % 100;
+              
+              // Logique améliorée pour l'interprétation des années:
+              // - Si l'année est <= année actuelle + 1 : utiliser le siècle actuel
+              // - Si l'année est > année actuelle + 1 : utiliser le siècle précédent
+              // Cela permet d'importer des plannings jusqu'à l'année prochaine
+              if (shortYear > currentYearInCentury + 1) {
+                year = currentCentury - 100 + shortYear;
+              } else {
+                year = currentCentury + shortYear;
+              }
+              
+              // Log pour le débogage
+              console.log(`Année interprétée: ${dateParts[2]} -> ${year} (année courante: ${currentYear})`);
+            } else if (dateParts[2].length === 4) {
+              // Format AAAA
+              year = parseInt(dateParts[2], 10);
+            } else {
+              throw new Error(`Format d'année invalide à la ligne ${i + 1}: ${dateParts[2]}. Format attendu: AA ou AAAA`);
+            }
             
             const date = new Date(year, month, day);
             

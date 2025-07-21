@@ -3,3 +3,8 @@
  */
 
 export * from './directExchangeUtils';
+export * from './validation';
+export * from './exchangeDataFetcher';
+export * from './modalHelpers';
+export * from './operationTypeHelpers';
+export * from './exchangeSubmissionHelpers';

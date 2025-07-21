@@ -54,19 +54,54 @@ export const usePlanningPeriods = ({
     
     // Vérifier s'il y a des périodes qui chevauchent partiellement
     const overlappingPeriods = allPeriods.filter(period => {
-      // Calculer les dates de début et de fin du chevauchement
-      const overlapStart = new Date(Math.max(startDate.getTime(), period.startDate.getTime()));
-      const overlapEnd = new Date(Math.min(endDate.getTime(), period.endDate.getTime()));
+      // Normaliser les dates en Europe/Paris sans les secondes
+      const normalizeDate = (date: Date, isEndDate: boolean = false): Date => {
+        const normalized = new Date(date);
+        if (isEndDate) {
+          // Pour la fin: mettre à 23:59:00 (sans secondes)
+          normalized.setHours(23, 59, 0, 0);
+        } else {
+          // Pour le début: mettre à 00:00:00 (sans secondes)
+          normalized.setHours(0, 0, 0, 0);
+        }
+        return normalized;
+      };
       
-      // Si pas de chevauchement (overlapStart > overlapEnd), retourner false
-      // On ajoute une marge de tolérance d'un jour pour éviter les problèmes dus aux heures/minutes
-      const oneDayInMs = 24 * 60 * 60 * 1000;
-      if (overlapStart.getTime() > overlapEnd.getTime() + oneDayInMs) {
+      const newPeriodStart = normalizeDate(startDate);
+      const newPeriodEnd = normalizeDate(endDate, true);
+      const existingPeriodStart = normalizeDate(period.startDate);
+      const existingPeriodEnd = normalizeDate(period.endDate, true);
+      
+      // Vérifier si les périodes sont exactement adjacentes
+      // Une journée = 24h * 60min * 60sec * 1000ms = 86400000ms
+      const ONE_DAY = 86400000;
+      
+      // La nouvelle période se termine juste avant l'existante (adjacente)
+      const isAdjacentBefore = (existingPeriodStart.getTime() - newPeriodEnd.getTime()) <= ONE_DAY && 
+                              (existingPeriodStart.getTime() - newPeriodEnd.getTime()) > 0;
+      
+      // La nouvelle période commence juste après l'existante (adjacente)
+      const isAdjacentAfter = (newPeriodStart.getTime() - existingPeriodEnd.getTime()) <= ONE_DAY && 
+                             (newPeriodStart.getTime() - existingPeriodEnd.getTime()) > 0;
+      
+      // Si les périodes sont adjacentes, pas de chevauchement
+      if (isAdjacentBefore || isAdjacentAfter) {
+        console.log(`Périodes adjacentes détectées: nouvelle (${newPeriodStart.toLocaleDateString()} - ${newPeriodEnd.toLocaleDateString()}) et existante (${existingPeriodStart.toLocaleDateString()} - ${existingPeriodEnd.toLocaleDateString()})`);
         return false;
       }
       
-      // Il y a chevauchement
-      return true;
+      // Calculer le chevauchement réel
+      const overlapStart = Math.max(newPeriodStart.getTime(), existingPeriodStart.getTime());
+      const overlapEnd = Math.min(newPeriodEnd.getTime(), existingPeriodEnd.getTime());
+      
+      // Il y a chevauchement seulement si overlapStart <= overlapEnd
+      const hasOverlap = overlapStart <= overlapEnd;
+      
+      if (hasOverlap) {
+        console.log(`Chevauchement détecté entre ${newPeriodStart.toLocaleDateString()} - ${newPeriodEnd.toLocaleDateString()} et ${existingPeriodStart.toLocaleDateString()} - ${existingPeriodEnd.toLocaleDateString()}`);
+      }
+      
+      return hasOverlap;
     });
     
     // Log pour le débogage
@@ -110,18 +145,15 @@ export const usePlanningPeriods = ({
       const yesterdayDate = new Date(today);
       yesterdayDate.setDate(today.getDate() - 1);
       
-      // Pour éviter tout problème avec les dates, on prend une marge
-      // Première date : 1er janvier de l'année de la date de début - 1 an
-      const safeStartDate = new Date(startDate);
-      safeStartDate.setMonth(0); // Janvier
-      safeStartDate.setDate(1);  // 1er jour du mois
-      safeStartDate.setFullYear(safeStartDate.getFullYear() - 1); // -1 an pour plus de sécurité
+      // Utiliser la date de début réelle des données importées
+      // Pas besoin d'étendre artificiellement la période
+      const periodStartDate = new Date(startDate);
       
-      console.log(`[PERIOD_CREATE] Date de début de période passée étendue: ${safeStartDate.toISOString()} (original: ${startDate.toISOString()})`);
+      console.log(`[PERIOD_CREATE] Date de début de période passée: ${periodStartDate.toISOString()}`);
       
       const pastPeriod: Omit<PlanningPeriod, 'id'> = {
         name: `${periodName} - Passé`,
-        startDate: safeStartDate,
+        startDate: periodStartDate,
         endDate: yesterdayDate,
         status: 'archived',
         bagPhase: 'completed',

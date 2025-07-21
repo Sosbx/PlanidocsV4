@@ -73,20 +73,12 @@ export const submitDirectExchange = async (
       selectedOperationTypes
     });
     
-    // Importer le ValidationService
-    const { ValidationService } = await import('./ValidationService');
-    
-    // Valider les types d'opération
-    const validationResult = ValidationService.validateOperationTypes(selectedOperationTypes);
-    if (!validationResult.isValid) {
-      throw new Error(validationResult.error || 'Types d\'opération invalides');
-    }
-    
-    // Utiliser les types nettoyés
-    const sanitizedTypes = validationResult.sanitizedTypes || selectedOperationTypes;
-    
-    // Si aucune option sélectionnée, supprimer l'échange et/ou le remplacement
-    if (sanitizedTypes.length === 0) {
+    // Cas spécial : si aucune option n'est sélectionnée (tableau vide), 
+    // c'est une demande de suppression
+    if (selectedOperationTypes.length === 0) {
+      console.log("Aucune option sélectionnée - suppression demandée");
+      
+      // Traiter directement la suppression sans validation
       // Utiliser une promesse pour supprimer à la fois l'échange et le remplacement
       const deletePromises = [];
       
@@ -152,15 +144,19 @@ export const submitDirectExchange = async (
       }
       
       // Supprimer l'échange s'il existe
-      if (data.exchangeId && options?.removeExchange) {
+      if (data.exchangeId) {
         console.log("Suppression de l'échange existant car aucune option sélectionnée:", data.exchangeId);
-        deletePromises.push(options.removeExchange(data.exchangeId, data.operationType));
+        // Importer et utiliser directement removeDirectExchange
+        const { removeDirectExchange } = await import('./directExchangeOperations');
+        deletePromises.push(removeDirectExchange(data.exchangeId, data.operationType));
       }
       
       // Supprimer le remplacement s'il existe
-      if (data.existingReplacementId && options?.removeExchange) {
+      if (data.existingReplacementId) {
         console.log("Suppression du remplacement existant:", data.existingReplacementId);
-        deletePromises.push(options.removeExchange(data.existingReplacementId, 'replacement'));
+        // Importer et utiliser directement removeDirectExchange
+        const { removeDirectExchange } = await import('./directExchangeOperations');
+        deletePromises.push(removeDirectExchange(data.existingReplacementId, 'replacement'));
       }
       
       // Attendre que toutes les suppressions soient terminées
@@ -169,9 +165,23 @@ export const submitDirectExchange = async (
       options?.onSuccess?.('Propositions retirées avec succès');
       options?.onComplete?.();
       return {};
-    } 
+    }
+    
+    // Si on arrive ici, c'est qu'on a des types d'opération à valider
+    // Importer le ValidationService
+    const { ValidationService } = await import('./ValidationService');
+    
+    // Valider les types d'opération
+    const validationResult = ValidationService.validateOperationTypes(selectedOperationTypes);
+    if (!validationResult.isValid) {
+      throw new Error(validationResult.error || 'Types d\'opération invalides');
+    }
+    
+    // Utiliser les types nettoyés
+    const sanitizedTypes = validationResult.sanitizedTypes || selectedOperationTypes;
+    
     // Mettre à jour ou créer des échanges
-    else if (sanitizedTypes.length > 0) {
+    if (sanitizedTypes.length > 0) {
       let result: { exchangeId?: string; replacementId?: string } = {};
       
       // Rechercher d'abord s'il existe déjà un échange pour cette garde, même si data.exchangeId n'est pas fourni

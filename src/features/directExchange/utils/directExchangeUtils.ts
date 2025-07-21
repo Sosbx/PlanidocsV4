@@ -1,6 +1,6 @@
 import { ShiftPeriod } from '../../../types/exchange';
 import { createParisDate, formatParisDate } from '@/utils/timezoneUtils';
-import { standardizePeriod } from '../../../utils/dateUtils';
+import { standardizePeriod } from '../../../utils/periodUtils';
 import { format } from 'date-fns';
 
 /**

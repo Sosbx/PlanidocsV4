@@ -90,8 +90,24 @@ export const useImport = ({
         });
       });
       
-      console.log(`Plage de dates détectée: ${detectedStartDate.toISOString()} - ${detectedEndDate.toISOString()}`);
+      // Afficher les dates détectées dans un format lisible
+      const formatDate = (date: Date) => {
+        return date.toLocaleDateString('fr-FR', { 
+          day: '2-digit', 
+          month: 'long', 
+          year: 'numeric' 
+        });
+      };
+      
+      console.log(`Plage de dates détectée: ${formatDate(detectedStartDate)} - ${formatDate(detectedEndDate)}`);
+      console.log(`Dates brutes: ${detectedStartDate.toISOString()} - ${detectedEndDate.toISOString()}`);
       console.log(`${detectDateFailedFiles.length} fichiers n'ont pas pu être analysés pour les dates`);
+      
+      // Avertir si les dates semblent être dans le futur lointain
+      const currentYear = new Date().getFullYear();
+      if (detectedStartDate.getFullYear() > currentYear + 5) {
+        console.warn(`ATTENTION: Les dates détectées semblent être dans le futur lointain (${detectedStartDate.getFullYear()}). Vérifiez le format des années dans le CSV.`);
+      }
       
       // Étape 2: Vérifier si une période existante correspond à cette plage
       let selectedPeriodId = uploadPeriodId;
@@ -112,6 +128,22 @@ export const useImport = ({
           onError?.('Fonctions de création de période non disponibles');
           setIsProcessing(false);
           return;
+        }
+        
+        // Demander confirmation des dates détectées si elles semblent suspectes
+        const currentYear = new Date().getFullYear();
+        if (detectedStartDate.getFullYear() > currentYear + 2 || detectedEndDate.getFullYear() > currentYear + 2) {
+          const confirmMessage = `Les dates détectées sont:\n` +
+            `Début: ${formatDate(detectedStartDate)}\n` +
+            `Fin: ${formatDate(detectedEndDate)}\n\n` +
+            `Ces dates semblent être dans le futur. Voulez-vous continuer avec ces dates ?\n` +
+            `(Si les années sont incorrectes, annulez et vérifiez le format du CSV)`;
+          
+          if (!window.confirm(confirmMessage)) {
+            onError?.('Import annulé par l\'utilisateur. Vérifiez le format des dates dans le CSV (JJ-MM-AA ou JJ-MM-AAAA).');
+            setIsProcessing(false);
+            return;
+          }
         }
         
         // Vérifier s'il existe des périodes similaires (avec un chevauchement d'au moins 50%)
@@ -526,12 +558,13 @@ export const useImport = ({
       
       if (failedFiles.length > 0) {
         const errorMessage = `${failedFiles.length} fichiers n'ont pas pu être importés:\n` + 
-          failedFiles.map(f => `- ${f.fileName}: ${f.reason}`).join('\n');
+          failedFiles.map(f => `- ${f.fileName}: ${f.reason}`).join('\n') +
+          '\n\nFormat de date accepté: JJ-MM-AA (ex: 15-05-24) ou JJ-MM-AAAA (ex: 15-05-2024)';
         setError(errorMessage);
         onError?.(errorMessage);
       } else if (successfulImports.length === 0) {
-        setError('Aucun fichier n\'a pu être importé');
-        onError?.('Aucun fichier n\'a pu être importé');
+        setError('Aucun fichier n\'a pu être importé. Vérifiez le format des dates (JJ-MM-AA ou JJ-MM-AAAA).');
+        onError?.('Aucun fichier n\'a pu être importé. Vérifiez le format des dates (JJ-MM-AA ou JJ-MM-AAAA).');
       }
     } catch (error: any) {
       const errorMessage = error instanceof Error ? error.message : String(error);

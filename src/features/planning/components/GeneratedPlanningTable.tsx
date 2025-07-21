@@ -28,7 +28,7 @@ import { CommentModal } from '../../../components/modals';
 import { Portal } from '../../../components';
 import { ExchangeModal } from '../../../features/directExchange/components';
 import { useAuth } from '../../../features/auth/hooks';
-import { useDirectExchange } from '../../../features/directExchange/hooks';
+import { useDirectExchange, useExchangeModal } from '../../../features/directExchange/hooks';
 import { useToastContext } from '../../../context/toast';
 import { useFeatureFlags } from '../../../context/featureFlags/FeatureFlagsContext';
 import { FEATURES } from '../../../types/featureFlags';
@@ -38,6 +38,8 @@ import VirtualizedMonthList from '../../../components/VirtualizedMonthList';
 import useConsolidatedExchanges from '../../../hooks/useConsolidatedExchanges';
 import { getCellBackgroundClass } from '../../../utils/cellColorUtils';
 import PlanningGridCell from '../../../components/PlanningGridCell';
+import { invalidateAllExchangeDataCache } from '../../../features/directExchange/utils';
+import { useReplacements } from '../../../features/shiftExchange/hooks/useReplacements';
 
 // Importer les styles pour les couleurs des opérations
 import '../../../styles/OperationColors.css';
@@ -101,16 +103,32 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
     position: { x: number; y: number };
     assignment: ShiftAssignment;
   } | null>(null);
-  const [selectedDirectExchangeCell, setSelectedDirectExchangeCell] = useState<{
-    key: string;
-    position: { x: number; y: number };
-    assignment: ShiftAssignment;
-    operationTypes?: OperationType[];
-    existingExchangeId?: string;
-  } | null>(null);
+  // D'abord obtenir removeExchange depuis useDirectExchange
   const { proposeDirectExchange, proposeDirectCession, proposeDirectReplacement, removeExchange } = useDirectExchange({
     onSuccess: (message) => showToast(message, 'success'),
     onError: (message) => showToast(message, 'error')
+  });
+  
+  // Créer une référence pour refreshDirectExchanges qui sera mise à jour plus tard
+  const refreshDirectExchangesRef = useRef<(() => Promise<void>) | null>(null);
+  
+  // Utiliser le hook unifié pour gérer le modal d'échange
+  const {
+    selectedCell: selectedDirectExchangeCell,
+    setSelectedCell: setSelectedDirectExchangeCell,
+    handleSubmit: handleExchangeModalSubmit,
+    handleRemove,
+    isProcessing
+  } = useExchangeModal(user?.id, {
+    onSuccess: (message) => showToast(message, 'success'),
+    onError: (message) => showToast(message, 'error'),
+    refreshData: async () => {
+      // Utiliser la référence qui sera mise à jour
+      if (refreshDirectExchangesRef.current) {
+        await refreshDirectExchangesRef.current();
+      }
+    },
+    removeExchange
   });
   const [desiderataState, setDesiderataState] = useState<Selections>({});
   // Utiliser les desiderata passés en props s'ils sont fournis, sinon utiliser l'état local
@@ -120,6 +138,27 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
   const [directExchanges, setDirectExchanges] = useState<Record<string, ShiftExchange>>({});
   const [replacements, setReplacements] = useState<Record<string, ShiftReplacement>>({});
   const { showToast } = useToastContext();
+  
+  // Récupérer les IDs des échanges pour les remplacements validés
+  const replacementExchangeIds = useMemo(() => {
+    const ids = Object.values(replacements)
+      .map(r => r.exchangeId)
+      .filter(Boolean);
+    console.log('GeneratedPlanningTable - replacementExchangeIds extraits:', ids);
+    console.log('GeneratedPlanningTable - replacements complets:', replacements);
+    return ids;
+  }, [replacements]);
+  
+  // Utiliser le hook pour récupérer les remplacements validés
+  const { replacements: assignedReplacements } = useReplacements(replacementExchangeIds);
+  
+  // Debug: log les remplacements assignés
+  useEffect(() => {
+    if (Object.keys(assignedReplacements).length > 0) {
+      console.log('Remplacements assignés trouvés:', assignedReplacements);
+      console.log('Remplacements locaux:', replacements);
+    }
+  }, [assignedReplacements, replacements]);
 
   // Fonction pour trouver la date de début de la bourse aux gardes
   const findBagStartDate = useCallback(() => {
@@ -267,6 +306,11 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
       console.error("Erreur lors du rafraîchissement des échanges et remplacements:", error);
     }
   }, [user, convertExchangesToMap]);
+  
+  // Mettre à jour la référence
+  useEffect(() => {
+    refreshDirectExchangesRef.current = refreshDirectExchanges;
+  }, [refreshDirectExchanges]);
   
   // S'abonner aux changements en temps réel des échanges directs
   useEffect(() => {
@@ -451,7 +495,6 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
         
         // Ouvrir la modale d'échange direct
         setSelectedDirectExchangeCell({
-          key: cellKey,
           position: { x: event.clientX, y: event.clientY },
           assignment: {
             ...assignment,
@@ -459,7 +502,9 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
             period: period as 'M' | 'AM' | 'S'
           },
           operationTypes: operationTypes,
-          existingExchangeId: existingDirectExchange?.id
+          existingExchange: existingDirectExchange,
+          existingExchangeId: existingDirectExchange?.id,
+          existingReplacementId: existingReplacement?.id
         });
       });
       
@@ -521,7 +566,6 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
           
           // Si la garde est dans la période courante, ouvrir le modal d'échange direct
           setSelectedDirectExchangeCell({
-            key: cellKey,
             position: { x: event.clientX, y: event.clientY },
             assignment: {
               ...assignment,
@@ -529,7 +573,9 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
               period: period as 'M' | 'AM' | 'S'
             },
             operationTypes: operationTypes,
-            existingExchangeId: existingExchange?.id
+            existingExchange: existingExchange,
+            existingExchangeId: existingExchange?.id,
+            existingReplacementId: existingReplacement?.id
           });
         });
       } else {
@@ -587,7 +633,6 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
           }
           
           setSelectedDirectExchangeCell({
-            key: cellKey,
             position: { x: event.clientX, y: event.clientY },
             assignment: {
               ...assignment,
@@ -595,7 +640,9 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
               period: period as 'M' | 'AM' | 'S'
             },
             operationTypes: operationTypes,
-            existingExchangeId: existingDirectExchange?.id
+            existingExchange: existingDirectExchange,
+            existingExchangeId: existingDirectExchange?.id,
+            existingReplacementId: existingReplacement?.id
           });
         });
       }
@@ -614,154 +661,7 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
     });
   }, [bagPhaseConfig.phase, isAdminView, isInCurrentPeriod, user, directExchanges, exchanges, replacements, showToast, setSelectedDirectExchangeCell, setSelectedCell, findBagStartDate, isPeriodWithoutBag, isFeatureEnabled, isFirstDayOfBagPeriod, refreshDirectExchanges]);
   
-  // Fonction pour gérer la soumission d'un échange direct
-  const handleDirectExchangeSubmit = useCallback(async (comment: string, operationTypes: OperationType[]) => {
-    if (!user || !selectedDirectExchangeCell) return;
-    
-    const { assignment, existingExchangeId, operationTypes: selectedOperationTypes } = selectedDirectExchangeCell;
-    
-    try {
-      console.log("Handling exchange submission:", {
-        operationTypes,
-        existingExchangeId,
-        selectedOperationTypes
-      });
-      
-      // Si c'est une suppression (aucune opération sélectionnée), forcer un rafraîchissement des données
-      if (operationTypes.length === 0) {
-        console.log("Suppression demandée, rafraîchissement préalable des données...");
-        await refreshDirectExchanges();
-      }
-      
-      // Vérifier aussi le remplacement existant après le rafraîchissement si nécessaire
-      const existingReplacement = Object.values(replacements).find(rep => 
-        rep.originalUserId === user?.id && 
-        rep.date === assignment.date && 
-        rep.period === (assignment.period || assignment.type)
-      );
-      
-      // Utiliser la fonction unifiée submitDirectExchange
-      const { submitDirectExchange } = await import('../../../lib/firebase/directExchange');
-      
-      // Trouver l'échange existant pour obtenir operationType et d'autres infos
-      // Chercher dans les deux collections d'échanges (directs et bourse aux gardes)
-      let existingExchange: ShiftExchange | undefined;
-      
-      if (existingExchangeId) {
-        // D'abord chercher dans les échanges directs
-        existingExchange = Object.values(directExchanges).find(ex => ex.id === existingExchangeId);
-        
-        // Si pas trouvé, chercher dans la bourse aux gardes
-        if (!existingExchange) {
-          existingExchange = Object.values(exchanges).find(ex => ex.id === existingExchangeId);
-        }
-        
-        // Si toujours pas trouvé, essayer de retrouver un échange par date/période
-        if (!existingExchange) {
-          console.log("Échange non trouvé par ID. Recherche par date/période...");
-          
-          // Chercher par date et période
-          existingExchange = Object.values(directExchanges).find(ex => 
-            ex.userId === user.id && 
-            ex.date === assignment.date && 
-            ex.period === (assignment.period || assignment.type)
-          ) || Object.values(exchanges).find(ex => 
-            ex.userId === user.id && 
-            ex.date === assignment.date && 
-            ex.period === (assignment.period || assignment.type)
-          );
-          
-          if (existingExchange) {
-            console.log("Échange trouvé par date/période:", existingExchange.id);
-          }
-        }
-      }
-      
-      // Log pour le debugging
-      console.log("Utilisation de l'échange existant:", existingExchange ? existingExchange.id : "aucun");
-      
-      // Préparer les données pour la fonction unifiée
-      // Utiliser uniquement operationTypes comme source de vérité
-      const exchangeData = {
-        // Utiliser l'ID de l'échange trouvé s'il existe
-        exchangeId: existingExchange?.id || existingExchangeId,
-        userId: user.id,
-        date: assignment.date,
-        period: assignment.period || assignment.type,
-        shiftType: assignment.shiftType,
-        timeSlot: assignment.timeSlot,
-        comment: comment || '',
-        // Utiliser les operationTypes de l'échange existant comme source unique de vérité
-        operationTypes: existingExchange?.operationTypes || selectedOperationTypes || [],
-        // Ajouter l'ID du remplacement existant s'il y en a un
-        existingReplacementId: existingReplacement?.id
-      };
-      
-      // Invalider les caches avant de soumettre pour éviter les problèmes de synchronisation
-      try {
-        const { FirestoreCacheUtils } = await import('../../../utils/cacheUtils');
-        FirestoreCacheUtils.invalidate('direct_exchanges_all');
-        console.log("Cache des échanges directs invalidé avant soumission");
-      } catch (error) {
-        console.error("Erreur lors de l'invalidation du cache:", error);
-      }
-      
-      // Appeler la fonction unifiée
-      await submitDirectExchange(
-        exchangeData,
-        operationTypes,
-        {
-          removeExchange: removeExchange,
-          onSuccess: (message) => {
-            showToast(message, 'success');
-          },
-          onError: (message) => {
-            showToast(message, 'error');
-          },
-          onComplete: async () => {
-            console.log("Traitement terminé, rafraîchissement des données...");
-            
-            // Attendre un court délai pour s'assurer que Firebase a terminé ses opérations
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
-            // Rafraîchir les données immédiatement
-            await refreshDirectExchanges();
-            
-            // Après le rafraîchissement, on évalue s'il faut fermer la modale ou la mettre à jour
-            // Une vérification supplémentaire spécifique pour les remplacements
-            try {
-              const remplacementsData = await getReplacementsForUser(user.id);
-              const replacementsMap = remplacementsData.reduce((acc, replacement) => {
-                acc[`${replacement.date}-${replacement.period}`] = replacement;
-                return acc;
-              }, {} as Record<string, ShiftReplacement>);
-              setReplacements(replacementsMap);
-              console.log("Remplacements rafraîchis après mise à jour. Trouvés:", remplacementsData.length);
-            } catch (error) {
-              console.error("Erreur lors du rafraîchissement des remplacements:", error);
-            }
-            
-            // Fermer la modale dans tous les cas après une soumission réussie
-            setSelectedDirectExchangeCell(null);
-            
-            // Message de confirmation que les modifications ont été appliquées
-            showToast(
-              operationTypes.length === 0 
-                ? "Propositions retirées avec succès" 
-                : "Propositions mises à jour avec succès",
-              "success"
-            );
-          }
-        }
-      );
-      
-      // La gestion du remplacement est maintenant intégrée dans submitDirectExchange
-    } catch (error) {
-      console.error('Error handling direct exchange:', error);
-      showToast(`Erreur: ${error instanceof Error ? error.message : 'Une erreur est survenue'}`, 'error');
-      setSelectedDirectExchangeCell(null);
-    }
-  }, [user, selectedDirectExchangeCell, directExchanges, exchanges, replacements, removeExchange, refreshDirectExchanges, showToast]);
+  // La fonction handleDirectExchangeSubmit est maintenant fournie par useExchangeModal sous le nom handleExchangeModalSubmit
 
   // Charger les desiderata pour affichage en superposition si non fournis en props
   useEffect(() => {
@@ -1398,6 +1298,21 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
                         const directExchange = directExchanges[cellKey];
                         const replacement = replacements[cellKey];
                         
+                        // Debug : log du remplacement et de l'exchangeId
+                        if (replacement) {
+                          console.log(`Remplacement trouvé pour ${cellKey}:`, replacement);
+                          console.log(`ExchangeId: ${replacement.exchangeId}`);
+                          console.log(`Remplacements assignés disponibles:`, assignedReplacements);
+                        }
+                        
+                        // Récupérer le remplaçant assigné s'il existe
+                        const assignedReplacement = replacement?.exchangeId ? assignedReplacements[replacement.exchangeId] : undefined;
+                        
+                        // Debug : log du résultat
+                        if (replacement?.exchangeId) {
+                          console.log(`Résultat assignedReplacement pour exchangeId ${replacement.exchangeId}:`, assignedReplacement);
+                        }
+                        
                         // Vérifier si la cellule représente une garde reçue via un échange
                         const receivedShift = receivedShifts[cellKey];
                         
@@ -1438,6 +1353,7 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
                             exchange={exchange}
                             directExchange={directExchange}
                             replacement={replacement}
+                            assignedReplacement={assignedReplacement}
                             desideratum={desideratum}
                             receivedShift={receivedShift}
                             userId={userId}
@@ -1470,6 +1386,22 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
     // Fonction désactivée
     console.log("Fonction de rafraîchissement forcé désactivée");
   }, []);
+  
+  // Écouter l'événement global pour rafraîchir les données
+  useEffect(() => {
+    const handleDirectExchangeUpdate = () => {
+      console.log('Événement directExchangeUpdated reçu dans GeneratedPlanningTable, rafraîchissement...');
+      // Invalider le cache et rafraîchir
+      invalidateAllExchangeDataCache();
+      refreshDirectExchanges();
+    };
+    
+    window.addEventListener('directExchangeUpdated', handleDirectExchangeUpdate);
+    
+    return () => {
+      window.removeEventListener('directExchangeUpdated', handleDirectExchangeUpdate);
+    };
+  }, [refreshDirectExchanges]);
   
   // Effet pour marquer la fin du chargement initial
   useEffect(() => {
@@ -1568,18 +1500,8 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
           <ExchangeModal
             isOpen={true}
             onClose={() => setSelectedDirectExchangeCell(null)}
-            onSubmit={handleDirectExchangeSubmit}
-  onRemove={() => {
-    // Cette fonction supprime à la fois l'échange et le remplacement s'ils existent
-    console.log("Suppression complète de l'échange et du remplacement");
-    
-    // Utiliser handleDirectExchangeSubmit avec une liste vide d'opérations
-    // pour que submitDirectExchange supprime tout
-    // Ne pas fermer la modale immédiatement pour permettre la suppression complète
-    handleDirectExchangeSubmit('', []);
-    
-    // Le toast et la fermeture de la modale seront gérés par le callback onComplete dans handleDirectExchangeSubmit
-  }}
+            onSubmit={handleExchangeModalSubmit}
+            onRemove={handleRemove}
             initialComment={selectedDirectExchangeCell.existingExchangeId ? 
               Object.values(exchanges).find(ex => ex.id === selectedDirectExchangeCell.existingExchangeId)?.comment || "" 
               : ""}

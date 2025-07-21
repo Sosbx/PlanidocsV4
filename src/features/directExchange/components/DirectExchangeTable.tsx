@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, memo } from 'react';
 import { formatParisDate } from '@/utils/timezoneUtils';
 import { format, isToday } from 'date-fns';
 import { frLocale } from '../../../utils/dateLocale';
@@ -42,7 +42,7 @@ interface DirectExchangeTableProps {
  * dans un tableau avec des colonnes pour les jours, les gardes de l'utilisateur (M, AM, S)
  * et les gardes proposées (M, AM, S)
  */
-const DirectExchangeTable: React.FC<DirectExchangeTableProps> = ({
+const DirectExchangeTable: React.FC<DirectExchangeTableProps> = memo(({
   startDate,
   endDate,
   userAssignments,

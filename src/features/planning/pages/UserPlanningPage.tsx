@@ -1,5 +1,5 @@
-import React, { useState, useEffect, lazy, Suspense, useRef } from 'react';
-import { createParisDate, firebaseTimestampToParisDate, formatParisDate } from '@/utils/timezoneUtils';
+import React, { useState, useEffect, lazy, Suspense, useRef, useMemo, useCallback } from 'react';
+import { createParisDate, firebaseTimestampToParisDate, formatParisDate, parseParisDate, addMonthsParis, subMonthsParis, addDaysParis } from '@/utils/timezoneUtils';
 import { Calendar, Download, HelpCircle, X, Mail, Grid, Settings, FileSpreadsheet, Import, CheckCircle2 } from 'lucide-react';
 import { ChevronDown, FileText, Columns, LayoutList } from 'lucide-react';
 import { useAuth } from '../../../features/auth/hooks';
@@ -166,7 +166,7 @@ const UserPlanningPage: React.FC = () => {
       // Filtrer les assignments pour la période sélectionnée
       const filteredAssignments: Record<string, ShiftAssignment> = {};
       Object.entries(planning.assignments).forEach(([key, assignment]) => {
-        const assignmentDate = new Date(assignment.date);
+        const assignmentDate = parseParisDate(assignment.date);
         if (assignmentDate >= startDate && assignmentDate <= endDate) {
           filteredAssignments[key] = assignment;
         }
@@ -194,7 +194,7 @@ const UserPlanningPage: React.FC = () => {
       // Filtrer les assignments pour la période sélectionnée
       const filteredAssignments: Record<string, ShiftAssignment> = {};
       Object.entries(planning.assignments).forEach(([key, assignment]) => {
-        const assignmentDate = new Date(assignment.date);
+        const assignmentDate = parseParisDate(assignment.date);
         if (assignmentDate >= startDate && assignmentDate <= endDate) {
           filteredAssignments[key] = assignment;
         }
@@ -288,7 +288,7 @@ const UserPlanningPage: React.FC = () => {
                 // Convertir le timestamp Firestore en Date
                 const uploadedAt = periodData.uploadedAt && typeof periodData.uploadedAt.toDate === 'function' 
                   ? firebaseTimestampToParisDate(periodData.uploadedAt) 
-                  : new Date(periodData.uploadedAt || Date.now());
+                  : createParisDate(periodData.uploadedAt || Date.now());
                 
                 // Stocker le planning dans la structure par période
                 setPlanningsByPeriod(prev => {
@@ -323,7 +323,7 @@ const UserPlanningPage: React.FC = () => {
             // Convertir le timestamp Firestore en Date
             const uploadedAt = data.uploadedAt && typeof data.uploadedAt.toDate === 'function' 
               ? firebaseTimestampToParisDate(data.uploadedAt) 
-              : new Date(data.uploadedAt);
+              : createParisDate(data.uploadedAt);
             
             const periodId = data.periodId || 'current';
           
@@ -395,13 +395,12 @@ const UserPlanningPage: React.FC = () => {
       
       // Charger 1 mois en arrière à partir d'aujourd'hui
       const today = createParisDate();
-      const newStartDate = new Date(today);
-      newStartDate.setMonth(today.getMonth() - 1);
-      newStartDate.setDate(1); // Premier jour du mois précédent
+      const newStartDate = subMonthsParis(today, 1);
+      const firstDayOfMonth = createParisDate(newStartDate.getFullYear(), newStartDate.getMonth(), 1);
       
       setDynamicDateRange(prev => ({
-        startDate: newStartDate,
-        endDate: prev?.endDate || new Date(today.setMonth(today.getMonth() + 6))
+        startDate: firstDayOfMonth,
+        endDate: prev?.endDate || addMonthsParis(today, 6)
       }));
       
       setLoadedMonths(1); // Un mois chargé
@@ -410,8 +409,7 @@ const UserPlanningPage: React.FC = () => {
       setDynamicDateRange(prev => {
         if (!prev) return null;
         
-        const newStartDate = new Date(prev.startDate);
-        newStartDate.setMonth(newStartDate.getMonth() - 1);
+        const newStartDate = subMonthsParis(prev.startDate, 1);
         
         return {
           startDate: newStartDate,
@@ -428,8 +426,7 @@ const UserPlanningPage: React.FC = () => {
     setDynamicDateRange(prev => {
       if (!prev) return null;
       
-      const newEndDate = new Date(prev.endDate);
-      newEndDate.setMonth(newEndDate.getMonth() + 1);
+      const newEndDate = addMonthsParis(prev.endDate, 1);
       
       return {
         startDate: prev.startDate,
@@ -489,7 +486,7 @@ const UserPlanningPage: React.FC = () => {
           const dateStr = `${dateParts[0]}-${dateParts[1]}-${dateParts[2]}`;
           
           try {
-            const date = new Date(dateStr);
+            const date = parseParisDate(dateStr);
             if (!isNaN(date.getTime())) {
               // Inclure toutes les dates pour les périodes archivées
               // Pour les périodes actives, filtrer selon shouldShowPastDates
@@ -510,20 +507,17 @@ const UserPlanningPage: React.FC = () => {
     // Calculer les dates min et max si des dates valides ont été trouvées
     if (allDates.length > 0) {
       // Toujours trouver la date minimale réelle pour avoir toutes les gardes
-      const minDate = new Date(Math.min(...allDates.map(d => d.getTime())));
-      const maxDate = new Date(Math.max(...allDates.map(d => d.getTime())));
+      const minDate = createParisDate(Math.min(...allDates.map(d => d.getTime())));
+      const maxDate = createParisDate(Math.max(...allDates.map(d => d.getTime())));
       
       console.log(`Date min trouvée: ${minDate.toISOString()}`);
       console.log(`Date max trouvée: ${maxDate.toISOString()}`);
       
       // Créer une copie de minDate pour la manipulation
-      const adjustedMinDate = new Date(minDate);
-      // Ajouter une marge de 15 jours avant et après pour une meilleure visualisation
-      adjustedMinDate.setDate(adjustedMinDate.getDate() - 15);
+      const adjustedMinDate = addDaysParis(minDate, -15);
       
       // Copie de maxDate pour la manipulation
-      const adjustedMaxDate = new Date(maxDate);
-      adjustedMaxDate.setDate(adjustedMaxDate.getDate() + 15);
+      const adjustedMaxDate = addDaysParis(maxDate, 15);
       
       // Vérifier si les désiderata de septembre-octobre 2025 sont présents
       const septOctDesiderata = Object.keys(desiderataForDisplay).filter(key => 
@@ -535,14 +529,10 @@ const UserPlanningPage: React.FC = () => {
       
       // Pour l'affichage initial, afficher tous les mois jusqu'à la dernière garde
       // Utiliser maxDate (date de la dernière garde) au lieu d'une limite arbitraire
-      let displayEndDate = new Date(maxDate);
-      
-      // Ajouter un mois de marge après la dernière garde pour une meilleure visibilité
-      displayEndDate.setMonth(displayEndDate.getMonth() + 1);
+      let displayEndDate = addMonthsParis(maxDate, 1);
       
       // S'assurer que la date de fin est au moins aujourd'hui + 1 mois
-      const minDisplayEndDate = new Date(today);
-      minDisplayEndDate.setMonth(minDisplayEndDate.getMonth() + 1);
+      const minDisplayEndDate = addMonthsParis(today, 1);
       if (displayEndDate < minDisplayEndDate) {
         displayEndDate = minDisplayEndDate;
       }
@@ -590,42 +580,34 @@ const UserPlanningPage: React.FC = () => {
     };
   }, [planning]);
   
-  // Fonction pour déterminer si un jour est le premier jour d'une période BAG
-  const isFirstDayOfBagPeriod = (date: Date) => {
+  // Mémoriser le premier jour de la période BAG pour éviter de recalculer
+  const bagPeriodStartDate = useMemo(() => {
+    const bagPeriod = allPeriods.find(p => p.status === 'future');
+    return bagPeriod ? formatParisDate(bagPeriod.startDate, 'yyyy-MM-dd') : null;
+  }, [allPeriods]);
+
+  // Fonction optimisée pour déterminer si un jour est le premier jour d'une période BAG
+  const isFirstDayOfBagPeriod = useCallback((date: Date) => {
+    // Si pas de période BAG, retourner false immédiatement
+    if (!bagPeriodStartDate) return false;
+    
     // Vérifier d'abord si la date appartient à une période importée sans BAG
     const matchingPeriod = allPeriods.find(period => {
-      const startDate = new Date(period.startDate);
-      const endDate = new Date(period.endDate);
+      const startDate = period.startDate;
+      const endDate = period.endDate;
       return date >= startDate && date <= endDate;
     });
     
     // Si la période existe et est soit en phase 'completed' soit a le statut 'active',
-    // alors c'est une période importée sans BAG - ignorer la détection de début de BAG
+    // alors c'est une période importée sans BAG
     if (matchingPeriod && (matchingPeriod.bagPhase === 'completed' || matchingPeriod.status === 'active')) {
-      console.log(`Date ${formatParisDate(date, 'yyyy-MM-dd')} appartient à une période importée sans BAG: ${matchingPeriod.name}`);
-      return false;
-    }
-    
-    // Trouver la période future (BAG)
-    const bagPeriod = allPeriods.find(p => p.status === 'future');
-    if (!bagPeriod) {
-      console.log("Aucune période BAG (future) trouvée");
       return false;
     }
     
     // Vérifier si c'est le premier jour de la période BAG
     const dateStr = formatParisDate(date, 'yyyy-MM-dd');
-    const bagStartStr = formatParisDate(bagPeriod.startDate, 'yyyy-MM-dd');
-    
-    const isBagStart = dateStr === bagStartStr;
-    
-    // Log pour débogage - uniquement si c'est le premier jour
-    if (isBagStart) {
-      console.log(`Jour de début de BAG détecté: ${dateStr}`);
-    }
-    
-    return isBagStart;
-  };
+    return dateStr === bagPeriodStartDate;
+  }, [allPeriods, bagPeriodStartDate]);
 
   if (!user?.roles.isUser) {
     return (
@@ -910,7 +892,7 @@ const UserPlanningPage: React.FC = () => {
             const filteredDesiderata: Record<string, 'primary' | 'secondary' | null> = {};
             
             Object.entries(planning.assignments).forEach(([key, assignment]) => {
-              const assignmentDate = new Date(assignment.date);
+              const assignmentDate = parseParisDate(assignment.date);
               if (assignmentDate >= startDate && assignmentDate <= endDate) {
                 filteredAssignments[key] = assignment;
               }
@@ -919,7 +901,7 @@ const UserPlanningPage: React.FC = () => {
             // Filtrer les desiderata pour la période sélectionnée
             Object.entries(desiderata).forEach(([key, value]) => {
               const [year, month] = key.split('-');
-              const keyDate = new Date(parseInt(year), parseInt(month) - 1, 1);
+              const keyDate = createParisDate(parseInt(year), parseInt(month) - 1, 1);
               if (keyDate >= startDate && keyDate <= endDate) {
                 filteredDesiderata[key] = value;
               }

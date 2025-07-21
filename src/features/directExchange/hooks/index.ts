@@ -11,6 +11,9 @@ export * from './useExchangeListFilters'; // Nouveau système de filtres
 export * from './useOptimizedExchangeQueries';
 export * from './useDebouncedAction';
 
+// Hook unifié pour le modal d'échange
+export * from './useExchangeModal';
+
 // Hooks existants (progressivement remplacés par les nouveaux)
 export * from './useDirectExchangeFilters';
 export * from './useDirectExchangeModals';
@@ -19,3 +22,4 @@ export * from './useDirectExchangeActions';
 export * from './useDirectProposalActions';
 export * from './useDirectExchange';
 export * from './useComposableExchangeData';
+export * from './useDirectExchangeCallbacks';
