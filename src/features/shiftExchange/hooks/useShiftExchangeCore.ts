@@ -104,6 +104,7 @@ export const useShiftExchangeCore = (
   
   // Core states
   const [exchanges, setExchanges] = useState<ShiftExchange[]>([]);
+  const [allExchangesForPositions, setAllExchangesForPositions] = useState<ShiftExchange[]>([]);
   const [history, setHistory] = useState<ExchangeHistory[]>([]);
   const [userAssignments, setUserAssignments] = useState<Record<string, ShiftAssignment>>({});
   const [receivedShifts, setReceivedShifts] = useState<Record<string, any>>({});
@@ -183,7 +184,12 @@ export const useShiftExchangeCore = (
   const filteredExchanges = useMemo(() => {
     if (!user) return [];
     
-    return exchanges.filter(exchange => {
+    // Utiliser allExchangesForPositions si on affiche "Mes positions"
+    const dataSource = showMyInterests && allExchangesForPositions.length > 0 
+      ? allExchangesForPositions 
+      : exchanges;
+    
+    return dataSource.filter(exchange => {
       const isUserShift = exchange.userId === user.id;
       const isUserInterested = exchange.interestedUsers?.includes(user.id) || false;
       
@@ -204,7 +210,7 @@ export const useShiftExchangeCore = (
       
       return true;
     });
-  }, [exchanges, user, showMyInterests, showOwnShifts, bagPhaseConfig.phase]);
+  }, [exchanges, allExchangesForPositions, user, showMyInterests, showOwnShifts, bagPhaseConfig.phase]);
   
   // Fonction pour charger les données initiales et configurer les listeners
   useEffect(() => {
@@ -372,6 +378,45 @@ export const useShiftExchangeCore = (
       conflictCheckCache.current.clear();
     };
   }, [user, enableHistory, enableConflictCheck, limitResults, checkForConflict]);
+  
+  // Effet pour charger toutes les gardes quand "Mes positions" est activé
+  useEffect(() => {
+    if (!showMyInterests || !user) {
+      setAllExchangesForPositions([]);
+      return;
+    }
+    
+    let unsubscribe: Unsubscribe | null = null;
+    
+    const loadAllExchanges = async () => {
+      try {
+        // Requête sans filtre de statut pour récupérer TOUTES les gardes
+        const allExchangesQuery = query(
+          collection(db, 'shift_exchanges'),
+          orderBy('date', 'asc')
+        );
+        
+        unsubscribe = onSnapshot(allExchangesQuery, (snapshot) => {
+          const allExchanges = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          })) as ShiftExchange[];
+          
+          setAllExchangesForPositions(allExchanges);
+        });
+      } catch (error) {
+        console.error('Erreur lors du chargement de toutes les gardes pour Mes positions:', error);
+      }
+    };
+    
+    loadAllExchanges();
+    
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, [showMyInterests, user]);
   
   // Actions optimisées
   const toggleInterestAction = useCallback(async (exchange: ShiftExchange) => {

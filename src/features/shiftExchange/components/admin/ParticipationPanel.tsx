@@ -189,16 +189,31 @@ const ParticipationPanel: React.FC<ParticipationPanelProps> = ({
 
   // Fonction pour récupérer les détails des gardes d'un utilisateur
   const getUserExchangeDetails = (userId: string) => {
-    return safeExchanges
+    const userExchanges = safeExchanges
       .filter(exchange => exchange.interestedUsers?.includes(userId))
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-      .map(exchange => ({
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    
+    // Log temporaire pour debug
+    if (userExchanges.length > 0) {
+      console.log(`Détails pour ${userId}:`, {
+        exchanges: userExchanges.slice(0, 3), // Premiers échanges
+        history: safeHistory.filter(h => h.newUserId === userId).slice(0, 3) // Historique correspondant
+      });
+    }
+    
+    return userExchanges.map(exchange => ({
         id: exchange.id,
         date: exchange.date,
         period: exchange.period,
         shiftType: exchange.shiftType,
         isAttributed: safeHistory.some(h => 
-          h.originalExchangeId === exchange.id && h.newUserId === userId
+          // Vérifier par originalExchangeId (méthode moderne)
+          (h.originalExchangeId === exchange.id && h.newUserId === userId) ||
+          // OU vérifier par correspondance date/période/utilisateurs (pour les anciennes données)
+          (h.date === exchange.date && 
+           h.period === exchange.period && 
+           h.originalUserId === exchange.userId && 
+           h.newUserId === userId)
         )
       }));
   };
