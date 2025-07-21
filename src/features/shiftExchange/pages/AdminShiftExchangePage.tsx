@@ -77,6 +77,7 @@ const AdminShiftExchangePage: React.FC = () => {
   
   // État pour toutes les gardes proposées (pour les statistiques)
   const [allExchangesForStats, setAllExchangesForStats] = useState<ShiftExchange[]>([]);
+  const [allExchangesLoading, setAllExchangesLoading] = useState(true);
   
   // Hook pour les assignations utilisateur
   const { userAssignments } = useUserAssignments(exchanges);
@@ -102,30 +103,46 @@ const AdminShiftExchangePage: React.FC = () => {
 
   // Récupérer TOUTES les gardes proposées pour les statistiques
   useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
+    
     const fetchAllExchangesForStats = async () => {
       try {
-        // Requête sans filtre de statut pour récupérer TOUTES les gardes proposées
+        setAllExchangesLoading(true);
+        
+        // Requête sans filtre de statut mais avec filtre de date pour éviter de charger trop de données anciennes
+        const today = new Date();
+        today.setMonth(today.getMonth() - 3); // Gardes des 3 derniers mois et futures
+        const threeMonthsAgo = today.toISOString().split('T')[0];
+        
         const exchangesQuery = query(
           collection(db, 'shift_exchanges'),
+          where('date', '>=', threeMonthsAgo),
           orderBy('date', 'asc')
         );
         
-        const unsubscribe = onSnapshot(exchangesQuery, (snapshot) => {
+        unsubscribe = onSnapshot(exchangesQuery, (snapshot) => {
           const allExchanges = snapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data()
           })) as ShiftExchange[];
           
+          console.log('AllExchangesForStats chargés:', allExchanges.length, 'gardes');
           setAllExchangesForStats(allExchanges);
+          setAllExchangesLoading(false);
         });
-        
-        return () => unsubscribe();
       } catch (error) {
         console.error('Erreur lors de la récupération des exchanges pour les stats:', error);
+        setAllExchangesLoading(false);
       }
     };
     
     fetchAllExchangesForStats();
+    
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, []);
 
 
@@ -336,12 +353,12 @@ const AdminShiftExchangePage: React.FC = () => {
     return (
       <BagStatsViz
         users={sortedUsers}
-        exchanges={allExchangesForStats as any}
+        exchanges={(!allExchangesLoading && allExchangesForStats.length > 0 ? allExchangesForStats : exchanges) as any}
         history={history as any}
         className="mb-6"
       />
     );
-  }, [activeTab, sortedUsers, allExchangesForStats, history]);
+  }, [activeTab, sortedUsers, allExchangesForStats, allExchangesLoading, exchanges, history]);
 
   // Vérification des droits admin
   if (!user?.roles.isAdmin) {
@@ -637,6 +654,7 @@ const AdminShiftExchangePage: React.FC = () => {
             ) : (
               <ExchangeList
                 exchanges={exchanges as any}
+                allExchanges={(!allExchangesLoading && allExchangesForStats.length > 0 ? allExchangesForStats : exchanges) as any}
                 users={sortedUsers}
                 history={history as any}
                 bagPhaseConfig={bagPhaseConfig}
@@ -659,7 +677,7 @@ const AdminShiftExchangePage: React.FC = () => {
 
       {/* Panneau flottant de participation */}
       <ParticipationPanel
-        exchanges={allExchangesForStats as any}
+        exchanges={(!allExchangesLoading && allExchangesForStats.length > 0 ? allExchangesForStats : exchanges) as any}
         users={sortedUsers}
         history={history as any}
         isOpen={showParticipationPanel}

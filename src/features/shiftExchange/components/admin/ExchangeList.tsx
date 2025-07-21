@@ -18,6 +18,7 @@ import '../../../../styles/BadgeStyles.css';
 
 interface ExchangeListProps {
   exchanges: ShiftExchange[]; // Utiliser le type union défini plus haut
+  allExchanges?: ShiftExchange[]; // Toutes les gardes pour les statistiques
   users: User[];
   bagPhaseConfig: BagPhaseConfig;
   conflictStates: Record<string, Record<string, boolean>>;
@@ -42,6 +43,7 @@ const periodNames = {
 
 const ExchangeList: React.FC<ExchangeListProps> = ({
   exchanges,
+  allExchanges,
   users,
   bagPhaseConfig,
   conflictStates,
@@ -347,7 +349,7 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
                             bagPhaseConfig={bagPhaseConfig}
                             onValidateExchange={onValidateExchange}
                             onRemoveUser={onRemoveUser}
-                            exchanges={exchanges}
+                            exchanges={allExchanges || exchanges}
                             history={history}
                           />
                         ))}
@@ -491,7 +493,7 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
                       bagPhaseConfig={bagPhaseConfig}
                       onValidateExchange={onValidateExchange}
                       onRemoveUser={onRemoveUser}
-                      exchanges={exchanges}
+                      exchanges={allExchanges || exchanges}
                       history={history}
                     />
                   ))
