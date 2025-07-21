@@ -120,6 +120,19 @@ const BagStatsViz: React.FC<BagStatsVizProps> = ({ users, exchanges, history, cl
         
         // Compter les gardes données (où il est le originalUserId)
         const givenTotal = history.filter(ex => ex.originalUserId === user.id).length;
+        
+        // Log pour débogage si les valeurs semblent anormales
+        if (user.lastName === 'DEMO' || receivedTotal > positionedTotal) {
+          console.log(`Stats pour ${user.lastName}:`, {
+            proposedTotal,
+            positionedTotal,
+            receivedTotal,
+            givenTotal,
+            exchanges: exchanges.filter(ex => ex.userId === user.id),
+            positioned: exchanges.filter(ex => ex.interestedUsers?.includes(user.id)),
+            received: history.filter(ex => ex.newUserId === user.id)
+          });
+        }
 
         // Compter par période
         const proposedByPeriod = {

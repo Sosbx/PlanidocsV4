@@ -336,12 +336,12 @@ const AdminShiftExchangePage: React.FC = () => {
     return (
       <BagStatsViz
         users={sortedUsers}
-        exchanges={exchanges as any}
+        exchanges={allExchangesForStats as any}
         history={history as any}
         className="mb-6"
       />
     );
-  }, [activeTab, sortedUsers, exchanges, history]);
+  }, [activeTab, sortedUsers, allExchangesForStats, history]);
 
   // Vérification des droits admin
   if (!user?.roles.isAdmin) {
