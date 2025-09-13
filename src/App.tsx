@@ -34,6 +34,10 @@ if (import.meta.env.DEV) {
   import('./utils/fcmTokenManager').then(() => {
     console.log('🔧 FCM Token Manager chargé - utilisez fcmManager.help() pour l\'aide');
   });
+  
+  import('./utils/notificationDiagnostic').then(() => {
+    console.log('🔧 Diagnostic des notifications chargé - utilisez notificationDiagnostic.run() pour le diagnostic');
+  });
 }
 
 // Import des pages critiques directement (utiles dès le début)

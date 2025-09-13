@@ -4,12 +4,45 @@ import { app } from "./config";
 // Initialiser Firebase Cloud Messaging
 export const messaging = typeof window !== 'undefined' ? getMessaging(app) : null;
 
+// Fonction pour enregistrer le service worker
+const registerServiceWorker = async (): Promise<ServiceWorkerRegistration | null> => {
+  try {
+    if (!('serviceWorker' in navigator)) {
+      console.log('Service Worker non supporté dans ce navigateur');
+      return null;
+    }
+
+    // Attendre que le service worker soit prêt
+    const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+      scope: '/'
+    });
+    
+    console.log('Service Worker enregistré avec succès:', registration);
+    
+    // Attendre que le service worker soit actif
+    await navigator.serviceWorker.ready;
+    console.log('Service Worker est prêt');
+    
+    return registration;
+  } catch (error) {
+    console.error('Erreur lors de l\'enregistrement du Service Worker:', error);
+    return null;
+  }
+};
+
 // Demander la permission et obtenir le token FCM
 export const requestNotificationPermission = async (): Promise<string | null> => {
   try {
     // Vérifier si le navigateur supporte les notifications et si nous sommes dans un environnement navigateur
     if (typeof window === 'undefined' || !("Notification" in window) || !messaging) {
       console.log("Ce navigateur ne prend pas en charge les notifications ou nous ne sommes pas dans un environnement navigateur.");
+      return null;
+    }
+
+    // S'assurer que le service worker est enregistré
+    const swRegistration = await registerServiceWorker();
+    if (!swRegistration) {
+      console.error('Impossible d\'enregistrer le service worker');
       return null;
     }
 
@@ -21,20 +54,44 @@ export const requestNotificationPermission = async (): Promise<string | null> =>
       return null;
     }
     
+    console.log('Tentative d\'obtention du token FCM...');
+    
     // Obtenir le token FCM avec la clé VAPID générée dans la console Firebase
     const token = await getToken(messaging, {
       vapidKey: "BMRQROKtx98URmi7ZrQ35M_kY0WnVm3JcGnR36ljC8V9PhIEAUGjzseCqvhj4Qag7qwMgsyLgWEJYMAY2viymxI",
+      serviceWorkerRegistration: swRegistration
     });
     
     if (token) {
-      console.log("Token FCM obtenu:", token);
+      console.log("Token FCM obtenu:", token.substring(0, 20) + '...');
       return token;
     } else {
       console.log("Impossible d'obtenir le token.");
       return null;
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error("Erreur lors de la demande de permission:", error);
+    
+    // Logs détaillés pour l'erreur
+    if (error.code) {
+      console.error('Code d\'erreur:', error.code);
+    }
+    if (error.message) {
+      console.error('Message d\'erreur:', error.message);
+    }
+    if (error.stack) {
+      console.error('Stack trace:', error.stack);
+    }
+    
+    // Erreurs spécifiques FCM
+    if (error.code === 'messaging/registration-token-not-registered') {
+      console.error('Le token FCM n\'est pas enregistré. Réessayez.');
+    } else if (error.code === 'messaging/invalid-vapid-key') {
+      console.error('Clé VAPID invalide.');
+    } else if (error.code === 'messaging/permission-blocked') {
+      console.error('Les notifications sont bloquées dans le navigateur.');
+    }
+    
     return null;
   }
 };

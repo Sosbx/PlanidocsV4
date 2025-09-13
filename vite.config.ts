@@ -101,7 +101,13 @@ export default defineConfig({
     port: 5173,
     host: true,
     headers: {
-      'Cross-Origin-Opener-Policy': 'unsafe-none'
+      'Cross-Origin-Opener-Policy': 'unsafe-none',
+      // Headers pour le service worker
+      'Service-Worker-Allowed': '/'
+    },
+    // Configuration pour servir le service worker avec le bon type MIME
+    fs: {
+      strict: false
     },
     // Activer la compression pour le serveur de développement
     middlewareMode: false
