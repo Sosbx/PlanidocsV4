@@ -719,14 +719,21 @@ exports.scheduledReminderEmails = functions.region(region).pubsub
  */
 const sendPushNotification = async (userId, title, body, data = {}) => {
   try {
+    console.log(`\n🔍 Début sendPushNotification pour utilisateur: ${userId}`);
+    console.log(`   Titre: ${title}`);
+    console.log(`   Message: ${body}`);
+    
     // Récupérer les tokens de l'utilisateur
     const tokensSnapshot = await admin.firestore()
       .collection('device_tokens')
       .where('userId', '==', userId)
       .get();
     
+    console.log(`   Nombre de documents trouvés dans device_tokens: ${tokensSnapshot.size}`);
+    
     if (tokensSnapshot.empty) {
-      console.log(`Aucun token FCM trouvé pour l'utilisateur ${userId}`);
+      console.log(`⚠️  Aucun token FCM trouvé pour l'utilisateur ${userId}`);
+      console.log(`   Vérifiez que l'utilisateur a bien activé les notifications`);
       return { 
         success: false, 
         reason: 'no_tokens',
@@ -739,15 +746,24 @@ const sendPushNotification = async (userId, title, body, data = {}) => {
     const tokenDocs = [];
     tokensSnapshot.forEach(doc => {
       const docData = doc.data();
-      tokenDocs.push({
-        id: doc.id,
-        token: docData.token,
-        platform: docData.platform
-      });
+      console.log(`   Document ${doc.id}:`);
+      console.log(`     - Platform: ${docData.platform?.type || 'unknown'} (${docData.platform?.browser || 'unknown'})`);
+      console.log(`     - LastActive: ${docData.lastActive || 'unknown'}`);
+      console.log(`     - Token: ${docData.token ? docData.token.substring(0, 20) + '...' : 'MISSING'}`);
+      
+      if (docData.token) {
+        tokenDocs.push({
+          id: doc.id,
+          token: docData.token,
+          platform: docData.platform
+        });
+      } else {
+        console.log(`   ❌ Token manquant dans le document ${doc.id}`);
+      }
     });
     
     const tokens = tokenDocs.map(doc => doc.token);
-    console.log(`${tokens.length} token(s) trouvé(s) pour l'utilisateur ${userId}`);
+    console.log(`📨 ${tokens.length} token(s) valide(s) trouvé(s) pour l'utilisateur ${userId}`);
     
     // Préparer le message FCM avec configuration complète
     const message = {
@@ -804,33 +820,44 @@ const sendPushNotification = async (userId, title, body, data = {}) => {
     };
     
     // Envoyer via FCM
+    console.log(`🚀 Envoi du message FCM à ${tokens.length} token(s)...`);
     const response = await admin.messaging().sendMulticast(message);
     
-    console.log(`Résultat FCM pour ${userId}: ${response.successCount}/${tokens.length} envoyés`);
+    console.log(`🎯 Résultat FCM pour ${userId}: ${response.successCount}/${tokens.length} envoyés avec succès`);
+    if (response.successCount > 0) {
+      console.log(`   ✅ Notifications push envoyées avec succès`);
+    }
     
     // Gérer les échecs et nettoyer les tokens invalides
     if (response.failureCount > 0) {
+      console.log(`   ⚠️ ${response.failureCount} échec(s) détecté(s)`);
       const tokensToDelete = [];
       const errorDetails = [];
       
       response.responses.forEach((resp, idx) => {
         if (!resp.success && resp.error) {
-          errorDetails.push({
+          const errorInfo = {
             token: tokens[idx].substring(0, 20) + '...',
             error: resp.error.message,
             code: resp.error.code
-          });
+          };
+          errorDetails.push(errorInfo);
+          console.log(`   ❌ Erreur pour token ${idx}: ${resp.error.code} - ${resp.error.message}`);
           
           // Marquer pour suppression si token invalide
           if (resp.error.code === 'messaging/invalid-registration-token' ||
               resp.error.code === 'messaging/registration-token-not-registered' ||
               resp.error.code === 'messaging/invalid-argument') {
             tokensToDelete.push(tokens[idx]);
+            console.log(`   🗑️ Token marqué pour suppression`);
           }
         }
       });
       
-      console.error(`Erreurs FCM pour ${userId}:`, errorDetails);
+      console.log(`📊 Résumé des erreurs FCM pour ${userId}:`);
+      errorDetails.forEach(err => {
+        console.log(`   - ${err.code}: ${err.error}`);
+      });
       
       // Supprimer les tokens invalides de Firestore
       if (tokensToDelete.length > 0) {

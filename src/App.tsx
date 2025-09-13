@@ -46,6 +46,10 @@ if (import.meta.env.DEV) {
   import('./utils/pushDiagnostic').then(() => {
     console.log('🔍 Diagnostic push chargé - utilisez pushDiagnostic.run() pour lancer le diagnostic complet');
   });
+  
+  import('./utils/checkTokenStatus').then(() => {
+    console.log('🔑 Vérification des tokens FCM chargée - utilisez checkTokenStatus.report() pour un rapport complet');
+  });
 }
 
 // Import des pages critiques directement (utiles dès le début)
