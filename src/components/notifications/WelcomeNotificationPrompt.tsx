@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, X, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
+import { Bell, X, CheckCircle, AlertCircle, RefreshCw, Activity } from 'lucide-react';
 import { useAuth } from '../../features/auth/hooks';
 import { requestNotificationPermission } from '../../lib/firebase/messaging';
 import { saveDeviceToken } from '../../lib/firebase/deviceTokens';
 import { resetNotificationSystem } from '../../utils/notificationReset';
+import { runCompleteDiagnostic } from '../../utils/pushDiagnostic';
 
 /**
  * Composant de bienvenue qui apparaît à la connexion
@@ -13,10 +14,20 @@ const WelcomeNotificationPrompt: React.FC = () => {
   const { user } = useAuth();
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [status, setStatus] = useState<'idle' | 'success' | 'error' | 'error-reset-needed' | 'resetting' | 'reset-success' | 'reset-failed' | 'diagnosing'>('idle');
+  const [diagnosticResults, setDiagnosticResults] = useState<any[]>([]);
   
   useEffect(() => {
     if (!user) return;
+    
+    // Détecter si c'est un mobile
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    
+    // NE PAS afficher sur desktop - uniquement sur mobile
+    if (!isMobile) {
+      console.log('💻 Desktop détecté - notifications désactivées');
+      return;
+    }
     
     // Vérifier si c'est une nouvelle session
     const sessionKey = `session_${user.id}_${new Date().toDateString()}`;
@@ -26,7 +37,7 @@ const WelcomeNotificationPrompt: React.FC = () => {
     const tokenKey = `fcm_token_${user.id}`;
     const hasToken = localStorage.getItem(tokenKey);
     
-    // Montrer le prompt si:
+    // Montrer le prompt UNIQUEMENT sur mobile si:
     // 1. Nouvelle session du jour
     // 2. Pas de token enregistré
     // 3. Notifications pas refusées
@@ -108,6 +119,21 @@ const WelcomeNotificationPrompt: React.FC = () => {
     }
   };
   
+  const handleDiagnostic = async () => {
+    setLoading(true);
+    setStatus('diagnosing');
+    
+    try {
+      console.log('🔍 Lancement du diagnostic...');
+      const results = await runCompleteDiagnostic();
+      setDiagnosticResults(results);
+    } catch (error) {
+      console.error('Erreur lors du diagnostic:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
   if (!show || !user) return null;
   
   return (
@@ -184,14 +210,24 @@ const WelcomeNotificationPrompt: React.FC = () => {
               <p className="text-sm text-orange-700 mb-3">
                 Le système de notifications rencontre un problème. Une réinitialisation est nécessaire.
               </p>
-              <button
-                onClick={handleReset}
-                disabled={loading}
-                className="flex items-center justify-center px-3 py-2 bg-orange-600 text-white font-medium rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Réinitialiser le système
-              </button>
+              <div className="flex space-x-2">
+                <button
+                  onClick={handleReset}
+                  disabled={loading}
+                  className="flex-1 flex items-center justify-center px-3 py-2 bg-orange-600 text-white font-medium rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Réinitialiser
+                </button>
+                <button
+                  onClick={handleDiagnostic}
+                  disabled={loading}
+                  className="flex-1 flex items-center justify-center px-3 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <Activity className="h-4 w-4 mr-2" />
+                  Diagnostic
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -224,6 +260,34 @@ const WelcomeNotificationPrompt: React.FC = () => {
               <p className="text-sm text-red-700">
                 Veuillez recharger la page manuellement et réessayer.
               </p>
+            </div>
+          </div>
+        )}
+        
+        {status === 'diagnosing' && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+            <div className="flex items-center text-blue-800">
+              <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></span>
+              <span className="font-medium">Diagnostic en cours...</span>
+            </div>
+          </div>
+        )}
+        
+        {diagnosticResults.length > 0 && (
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4 max-h-40 overflow-y-auto">
+            <div className="text-sm">
+              <div className="font-medium text-gray-900 mb-2">Résultats du diagnostic :</div>
+              {diagnosticResults.map((result, index) => (
+                <div key={index} className="flex items-start mb-1">
+                  <span className="mr-2">
+                    {result.status === 'success' ? '✅' : 
+                     result.status === 'warning' ? '⚠️' : '❌'}
+                  </span>
+                  <span className="text-gray-700">
+                    <strong>{result.test}:</strong> {result.message}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
         )}

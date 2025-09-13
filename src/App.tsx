@@ -42,6 +42,10 @@ if (import.meta.env.DEV) {
   import('./utils/notificationReset').then(() => {
     console.log('🔧 Réinitialisation des notifications chargée - utilisez notificationReset.reset() pour réinitialiser');
   });
+  
+  import('./utils/pushDiagnostic').then(() => {
+    console.log('🔍 Diagnostic push chargé - utilisez pushDiagnostic.run() pour lancer le diagnostic complet');
+  });
 }
 
 // Import des pages critiques directement (utiles dès le début)

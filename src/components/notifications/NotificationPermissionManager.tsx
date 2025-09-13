@@ -29,6 +29,14 @@ const NotificationPermissionManager: React.FC = () => {
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
   const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
   const isPWA = window.matchMedia('(display-mode: standalone)').matches;
+  
+  // DÉSACTIVER pour desktop
+  const isDesktop = !isMobile;
+  
+  // Si desktop, ne rien faire
+  if (isDesktop) {
+    return null;
+  }
 
   // Nettoyer les données si changement d'utilisateur
   useEffect(() => {
@@ -64,16 +72,19 @@ const NotificationPermissionManager: React.FC = () => {
       setStatus(prev => ({ ...prev, token: storedToken }));
     }
     
-    // TOUJOURS afficher la bannière si:
+    // Afficher la bannière UNIQUEMENT sur mobile si:
     // 1. L'utilisateur est connecté
     // 2. Pas de token enregistré
     // 3. Permissions pas encore refusées
-    if (user && !storedToken && currentPermission !== 'denied') {
+    // 4. C'est un mobile (vérifié plus haut)
+    if (user && !storedToken && currentPermission !== 'denied' && isMobile) {
       console.log('🔔 Notifications non activées pour', user.firstName, user.lastName);
       console.log('   Affichage de la bannière d\'activation...');
       setShowBanner(true);
-    } else if (user && storedToken) {
+    } else if (user && storedToken && isMobile) {
       console.log('✅ Notifications déjà activées pour', user.firstName, user.lastName);
+    } else if (!isMobile) {
+      console.log('💻 Desktop - notifications désactivées');
     }
   }, [user]);
   

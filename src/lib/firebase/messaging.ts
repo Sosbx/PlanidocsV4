@@ -40,6 +40,13 @@ const waitForServiceWorkerActivation = async (registration: ServiceWorkerRegistr
 // Fonction pour enregistrer le service worker avec activation garantie
 const registerServiceWorker = async (): Promise<ServiceWorkerRegistration | null> => {
   try {
+    // Vérifier si c'est un desktop - ne pas enregistrer le SW
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    if (!isMobile) {
+      console.log('💻 Desktop détecté - Service Worker désactivé');
+      return null;
+    }
+    
     if (!('serviceWorker' in navigator)) {
       console.log('❌ Service Worker non supporté dans ce navigateur');
       return null;
@@ -100,13 +107,14 @@ const registerServiceWorker = async (): Promise<ServiceWorkerRegistration | null
 // Fonction pour obtenir le token FCM avec retry
 const getTokenWithRetry = async (
   swRegistration: ServiceWorkerRegistration,
-  maxRetries: number = 3
+  maxRetries: number = 3,
+  useVapid: boolean = true
 ): Promise<string | null> => {
   let lastError: any = null;
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      console.log(`🔄 Tentative ${attempt}/${maxRetries} d'obtention du token FCM...`);
+      console.log(`🔄 Tentative ${attempt}/${maxRetries} d'obtention du token FCM${useVapid ? ' avec VAPID' : ' SANS VAPID'}...`);
       
       // Vérifier que le SW est toujours actif
       if (!swRegistration.active) {
@@ -121,19 +129,32 @@ const getTokenWithRetry = async (
         await new Promise(resolve => setTimeout(resolve, delay));
       }
       
-      // Tenter d'obtenir le token
-      const token = await getToken(messaging, {
-        vapidKey: "BMRQROKtx98URmi7ZrQ35M_kY0WnVm3JcGnR36ljC8V9PhIEAUGjzseCqvhj4Qag7qwMgsyLgWEJYMAY2viymxI",
+      // Préparer les options
+      const options: any = {
         serviceWorkerRegistration: swRegistration
-      });
+      };
+      
+      // Ajouter VAPID si demandé
+      if (useVapid) {
+        options.vapidKey = "BMRQROKtx98URmi7ZrQ35M_kY0WnVm3JcGnR36ljC8V9PhIEAUGjzseCqvhj4Qag7qwMgsyLgWEJYMAY2viymxI";
+      }
+      
+      // Tenter d'obtenir le token
+      const token = await getToken(messaging, options);
       
       if (token) {
-        console.log(`✅ Token FCM obtenu au tentative ${attempt}`);
+        console.log(`✅ Token FCM obtenu au tentative ${attempt}${useVapid ? ' avec VAPID' : ' SANS VAPID'}`);
         return token;
       }
     } catch (error: any) {
       lastError = error;
       console.warn(`⚠️ Tentative ${attempt} échouée:`, error.message);
+      
+      // Si c'est une erreur de push service avec VAPID, essayer sans
+      if (useVapid && error.message?.includes('push service error') && attempt === maxRetries) {
+        console.log('🔄 Échec avec VAPID, tentative SANS VAPID...');
+        return getTokenWithRetry(swRegistration, 1, false);
+      }
       
       // Si c'est une erreur "no active Service Worker", réessayer
       if (error.message?.includes('no active Service Worker')) {
@@ -151,6 +172,13 @@ const getTokenWithRetry = async (
 // Demander la permission et obtenir le token FCM
 export const requestNotificationPermission = async (autoReset: boolean = true): Promise<string | null> => {
   try {
+    // Vérifier si c'est un desktop - bloquer les notifications
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    if (!isMobile) {
+      console.log('💻 Desktop détecté - notifications désactivées');
+      return null;
+    }
+    
     console.log('🔔 === Début de la demande de permission pour les notifications ===');
     
     // Vérifier si le navigateur supporte les notifications
@@ -191,8 +219,8 @@ export const requestNotificationPermission = async (autoReset: boolean = true): 
     
     console.log('✅ Permission accordée, obtention du token FCM...');
     
-    // Obtenir le token FCM avec retry
-    const token = await getTokenWithRetry(swRegistration);
+    // Obtenir le token FCM avec retry (essai avec VAPID d'abord)
+    const token = await getTokenWithRetry(swRegistration, 3, true);
     
     if (token) {
       console.log("✅ === Token FCM obtenu avec succès ===");
