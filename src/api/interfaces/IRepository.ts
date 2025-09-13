@@ -4,6 +4,9 @@
 
 import { FirestoreDocument } from '@/types/firebase';
 
+// Re-export FirestoreDocument pour les autres interfaces
+export { FirestoreDocument };
+
 /**
  * Options de requête génériques
  */

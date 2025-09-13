@@ -4,6 +4,8 @@ import { COLLECTIONS, createExchangeValidationError, ShiftExchange } from './typ
 import { doc } from 'firebase/firestore';
 import { verifyNoReceivedGuard } from './validation';
 import { createReplacement, deleteReplacement } from '../replacements';
+import { createParisDate } from '@/utils/timezoneUtils';
+import { auth } from '../config';
 
 /**
  * Ajoute ou supprime l'intérêt d'un utilisateur pour un échange
@@ -55,6 +57,41 @@ export const toggleInterest = async (exchangeId: string, userId: string): Promis
           exchange.period,
           userId
         );
+        
+        // 2.5. Vérifier aussi si l'utilisateur n'a pas déjà obtenu une garde via la BAG
+        const validatedExchangeQuery = query(
+          collection(db, COLLECTIONS.HISTORY),
+          where('newUserId', '==', userId),
+          where('date', '==', exchange.date),
+          where('period', '==', exchange.period),
+          where('status', '==', 'completed')
+        );
+        
+        const validatedSnapshot = await getDocs(validatedExchangeQuery);
+        if (!validatedSnapshot.empty) {
+          const validatedExchange = validatedSnapshot.docs[0].data();
+          throw createExchangeValidationError(
+            'USER_ALREADY_HAS_SHIFT',
+            `Vous avez déjà obtenu une garde ${validatedExchange.shiftType} sur ce créneau`
+          );
+        }
+        
+        // Vérifier aussi si l'utilisateur n'a pas donné sa garde sur ce créneau
+        const givenExchangeQuery = query(
+          collection(db, COLLECTIONS.HISTORY),
+          where('originalUserId', '==', userId),
+          where('date', '==', exchange.date),
+          where('period', '==', exchange.period),
+          where('status', '==', 'completed')
+        );
+        
+        const givenSnapshot = await getDocs(givenExchangeQuery);
+        if (!givenSnapshot.empty) {
+          throw createExchangeValidationError(
+            'USER_ALREADY_GAVE_SHIFT',
+            'Vous avez déjà donné votre garde sur ce créneau'
+          );
+        }
       }
       
       // PARTIE 2: TOUTES LES ÉCRITURES
@@ -112,7 +149,43 @@ export const removeUserFromExchange = async (exchangeId: string, userId: string)
       
       const interestedUsers = exchange.interestedUsers || [];
       
+      // Vérifier que l'utilisateur est bien dans la liste
+      if (!interestedUsers.includes(userId)) {
+        throw createExchangeValidationError(
+          'INVALID_EXCHANGE',
+          'L\'utilisateur n\'est pas dans la liste des intéressés'
+        );
+      }
+      
       // PARTIE 2: ÉCRITURES
+      
+      // Créer une entrée d'historique pour tracer le retrait
+      const historyRef = doc(collection(db, COLLECTIONS.HISTORY));
+      const currentUser = auth.currentUser;
+      const removedBy = currentUser?.uid || 'admin';
+      
+      transaction.set(historyRef, {
+        originalUserId: exchange.userId,
+        originalShiftType: exchange.shiftType,
+        newUserId: userId, // L'utilisateur qui a été retiré
+        newShiftType: null,
+        validatedBy: removedBy,
+        date: exchange.date,
+        period: exchange.period,
+        shiftType: exchange.shiftType,
+        timeSlot: exchange.timeSlot,
+        comment: exchange.comment || '',
+        interestedUsers: exchange.interestedUsers || [],
+        exchangedAt: createParisDate().toISOString(),
+        createdAt: exchange.createdAt || createParisDate().toISOString(),
+        isPermutation: false,
+        status: 'interest_removed',
+        originalExchangeId: exchangeId,
+        removedBy: removedBy,
+        removedUserId: userId // L'utilisateur qui a été retiré
+      });
+      
+      // Mettre à jour la liste des intéressés
       transaction.update(exchangeRef, {
         interestedUsers: interestedUsers.filter(id => id !== userId),
         lastModified: serverTimestamp()

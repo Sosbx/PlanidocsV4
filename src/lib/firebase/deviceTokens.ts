@@ -1,4 +1,4 @@
-import { doc, setDoc, getDoc, deleteDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, setDoc, getDoc, deleteDoc, collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
 import { createParisDate } from '@/utils/timezoneUtils';
 import { db } from './config';
 import { ASSOCIATIONS } from '../../constants/associations';
@@ -18,6 +18,7 @@ export interface DeviceToken {
     userAgent: string;
   };
   lastActive: string;
+  docId?: string; // ID du document pour faciliter la gestion
 }
 
 /**
@@ -33,21 +34,54 @@ export const saveDeviceToken = async (
   associationId: string = ASSOCIATIONS.RIVE_DROITE
 ): Promise<boolean> => {
   try {
-    const deviceTokenRef = doc(db, 'device_tokens', `${userId}_${token}`);
+    // Vérifier si ce token existe déjà pour éviter les doublons
+    const exists = await tokenExists(userId, token);
+    if (exists) {
+      console.log(`ℹ️ Token déjà enregistré pour ${userId}, mise à jour de lastActive`);
+      // Mettre à jour lastActive pour le token existant
+      await updateDeviceTokenLastActive(userId, token);
+      return true;
+    }
+    
+    // Créer un ID sûr sans caractères spéciaux
+    // Format: userId_deviceType_browser_timestamp
+    const timestamp = Date.now();
+    const tokenHash = token.substring(0, 10).replace(/[^a-zA-Z0-9]/g, '');
+    const platform = getPlatformInfo();
+    const deviceType = platform.type || 'unknown';
+    const browser = platform.browser || 'unknown';
+    const docId = `${userId}_${deviceType}_${browser}_${tokenHash}_${timestamp}`;
+    
+    console.log(`📱 Enregistrement d'un nouveau token pour ${userId}`);
+    console.log(`   ID du document: ${docId}`);
+    
+    const deviceTokenRef = doc(db, 'device_tokens', docId);
     
     await setDoc(deviceTokenRef, {
       userId,
       token,
       associationId,
       createdAt: createParisDate().toISOString(),
-      platform: getPlatformInfo(),
-      lastActive: createParisDate().toISOString()
+      platform,
+      lastActive: createParisDate().toISOString(),
+      docId // Stocker l'ID pour faciliter la suppression
     });
     
-    console.log(`Token d'appareil enregistré pour l'utilisateur ${userId}`);
+    console.log(`✅ Token FCM enregistré avec succès`);
+    console.log(`   👤 Utilisateur: ${userId}`);
+    console.log(`   📱 Appareil: ${deviceType} (${platform.os})`);
+    console.log(`   🌐 Navigateur: ${browser}`);
+    
+    // Nettoyer les anciens tokens (garder max 5 par utilisateur)
+    await cleanupOldTokens(userId);
+    
+    // Afficher le nombre total de tokens pour cet utilisateur
+    const allTokens = await getDeviceTokensForUser(userId);
+    console.log(`   📊 Total: ${allTokens.length} appareil(s) enregistré(s) pour cet utilisateur`);
+    
     return true;
   } catch (error) {
-    console.error("Erreur lors de l'enregistrement du token d'appareil:", error);
+    console.error("❌ Erreur lors de l'enregistrement du token FCM:", error);
     throw error;
   }
 };
@@ -60,13 +94,29 @@ export const saveDeviceToken = async (
  */
 export const removeDeviceToken = async (userId: string, token: string): Promise<boolean> => {
   try {
-    const deviceTokenRef = doc(db, 'device_tokens', `${userId}_${token}`);
-    await deleteDoc(deviceTokenRef);
+    // Rechercher le document avec ce token car l'ID a changé
+    const tokensRef = collection(db, 'device_tokens');
+    const q = query(
+      tokensRef, 
+      where('userId', '==', userId),
+      where('token', '==', token)
+    );
     
-    console.log(`Token d'appareil supprimé pour l'utilisateur ${userId}`);
+    const snapshot = await getDocs(q);
+    
+    if (snapshot.empty) {
+      console.log(`Aucun token à supprimer pour l'utilisateur ${userId}`);
+      return false;
+    }
+    
+    // Supprimer tous les documents trouvés (normalement un seul)
+    const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref));
+    await Promise.all(deletePromises);
+    
+    console.log(`✅ ${snapshot.size} token(s) supprimé(s) pour l'utilisateur ${userId}`);
     return true;
   } catch (error) {
-    console.error("Erreur lors de la suppression du token d'appareil:", error);
+    console.error("❌ Erreur lors de la suppression du token:", error);
     throw error;
   }
 };
@@ -79,12 +129,28 @@ export const removeDeviceToken = async (userId: string, token: string): Promise<
  */
 export const updateDeviceTokenLastActive = async (userId: string, token: string): Promise<boolean> => {
   try {
-    const deviceTokenRef = doc(db, 'device_tokens', `${userId}_${token}`);
+    // Rechercher le document avec ce token
+    const tokensRef = collection(db, 'device_tokens');
+    const q = query(
+      tokensRef,
+      where('userId', '==', userId),
+      where('token', '==', token)
+    );
     
-    await setDoc(deviceTokenRef, {
+    const snapshot = await getDocs(q);
+    
+    if (snapshot.empty) {
+      console.log(`Token non trouvé pour mise à jour: ${userId}`);
+      return false;
+    }
+    
+    // Mettre à jour le premier document trouvé (normalement un seul)
+    const docRef = snapshot.docs[0].ref;
+    await setDoc(docRef, {
       lastActive: createParisDate().toISOString()
     }, { merge: true });
     
+    console.log(`✅ Dernière activité mise à jour pour le token de ${userId}`);
     return true;
   } catch (error) {
     console.error("Erreur lors de la mise à jour de la date de dernière activité:", error);
@@ -112,6 +178,65 @@ export const getDeviceTokensForUser = async (userId: string): Promise<DeviceToke
   } catch (error) {
     console.error("Erreur lors de la récupération des tokens d'appareil:", error);
     throw error;
+  }
+};
+
+/**
+ * Nettoie les anciens tokens inactifs d'un utilisateur
+ * Garde seulement les 5 tokens les plus récents
+ * @param userId ID de l'utilisateur
+ */
+export const cleanupOldTokens = async (userId: string): Promise<void> => {
+  try {
+    const tokens = await getDeviceTokensForUser(userId);
+    
+    // Si plus de 5 tokens, supprimer les plus anciens
+    if (tokens.length > 5) {
+      console.log(`🧹 Nettoyage des anciens tokens pour ${userId}: ${tokens.length} tokens trouvés`);
+      
+      // Trier par date de dernière activité
+      const sortedTokens = tokens.sort((a, b) => 
+        new Date(b.lastActive).getTime() - new Date(a.lastActive).getTime()
+      );
+      
+      // Garder seulement les 5 plus récents
+      const tokensToDelete = sortedTokens.slice(5);
+      
+      for (const tokenData of tokensToDelete) {
+        if (tokenData.docId) {
+          const docRef = doc(db, 'device_tokens', tokenData.docId);
+          await deleteDoc(docRef);
+          console.log(`  🗑️ Suppression du token ancien: ${tokenData.platform?.browser} sur ${tokenData.platform?.os}`);
+        }
+      }
+      
+      console.log(`✅ ${tokensToDelete.length} ancien(s) token(s) supprimé(s)`);
+    }
+  } catch (error) {
+    console.error('Erreur lors du nettoyage des tokens:', error);
+  }
+};
+
+/**
+ * Vérifie si un token existe déjà pour éviter les doublons
+ * @param userId ID de l'utilisateur
+ * @param token Token FCM
+ * @returns true si le token existe déjà
+ */
+export const tokenExists = async (userId: string, token: string): Promise<boolean> => {
+  try {
+    const tokensRef = collection(db, 'device_tokens');
+    const q = query(
+      tokensRef,
+      where('userId', '==', userId),
+      where('token', '==', token)
+    );
+    
+    const snapshot = await getDocs(q);
+    return !snapshot.empty;
+  } catch (error) {
+    console.error('Erreur lors de la vérification du token:', error);
+    return false;
   }
 };
 

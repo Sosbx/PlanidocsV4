@@ -246,18 +246,18 @@ const GlobalPlanningView: React.FC<GlobalPlanningViewProps> = ({
         </div>
       </div>
       
-      <div className="overflow-x-auto">
+      <div className="relative max-h-[calc(100vh-300px)] overflow-auto">
         <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+          <thead className="bg-gray-50 sticky top-0 z-10">
             <tr>
-              <th className="sticky left-0 z-10 bg-gray-50 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="sticky left-0 top-0 z-20 bg-gray-50 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Poste
               </th>
               {dates.map((date) => (
                 <th
                   key={date.toISOString()}
-                  className={`px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider ${
-                    isWeekend(date) ? 'bg-gray-100' : ''
+                  className={`sticky top-0 z-10 px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider ${
+                    isWeekend(date) ? 'bg-gray-100' : 'bg-gray-50'
                   }`}
                 >
                   <div className="normal-case">{formatParisDate(date, 'EEE dd', { locale: fr })}</div>
@@ -275,7 +275,7 @@ const GlobalPlanningView: React.FC<GlobalPlanningViewProps> = ({
                 <React.Fragment key={period}>
                   {/* Ligne de séparation pour la période */}
                   <tr className="bg-gray-100">
-                    <td colSpan={dates.length + 1} className="px-4 py-1 text-xs font-semibold text-gray-600 uppercase">
+                    <td colSpan={dates.length + 1} className="sticky left-0 z-10 px-4 py-1 text-xs font-semibold text-gray-600 uppercase bg-gray-100">
                       {period}
                     </td>
                   </tr>
@@ -286,7 +286,7 @@ const GlobalPlanningView: React.FC<GlobalPlanningViewProps> = ({
                     
                     return (
                       <tr key={`${row.shiftType}-${rowIndex}`} className="hover:bg-gray-50">
-                        <td className="sticky left-0 z-10 bg-white px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-700">
+                        <td className="sticky left-0 z-10 bg-white px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-700 border-r border-gray-200">
                           {sameTypeRows.length > 1 ? (
                             <>
                               {row.shiftType}
@@ -314,8 +314,21 @@ const GlobalPlanningView: React.FC<GlobalPlanningViewProps> = ({
                         >
                           <div className="truncate" style={{ maxWidth: '100px' }}>
                             {(() => {
-                              const [lastName, firstName] = shiftData.userName.split(' ');
-                              const baseName = `${lastName.toUpperCase()} ${firstName ? firstName.charAt(0).toUpperCase() + '.' : ''}`;
+                              // Trouver le dernier espace pour séparer nom et prénom
+                              const lastSpaceIndex = shiftData.userName.lastIndexOf(' ');
+                              let displayName = '';
+                              
+                              if (lastSpaceIndex > -1) {
+                                const fullLastName = shiftData.userName.substring(0, lastSpaceIndex);
+                                const firstName = shiftData.userName.substring(lastSpaceIndex + 1);
+                                // Prendre seulement le premier mot du nom pour l'affichage
+                                const firstWordOfLastName = fullLastName.split(' ')[0].toUpperCase();
+                                const firstInitial = firstName ? firstName.charAt(0).toUpperCase() + '.' : '';
+                                displayName = `${firstWordOfLastName} ${firstInitial}`;
+                              } else {
+                                // Si pas d'espace, c'est seulement un nom
+                                displayName = shiftData.userName.toUpperCase();
+                              }
                               
                               // Vérifier s'il y a plusieurs médecins ce jour-là
                               const instanceCount = row.instanceCounts?.[dateStr] || 0;
@@ -323,9 +336,9 @@ const GlobalPlanningView: React.FC<GlobalPlanningViewProps> = ({
                                 // Trouver l'index de cette instance
                                 const dateShifts = groupedData[dateStr]?.[row.shiftType] || [];
                                 const instanceIndex = dateShifts.findIndex(s => s.userId === shiftData.userId);
-                                return baseName; // Pour l'instant on affiche juste le nom
+                                return displayName; // Pour l'instant on affiche juste le nom
                               }
-                              return baseName;
+                              return displayName;
                             })()}
                           </div>
                         </div>

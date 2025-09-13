@@ -20,7 +20,7 @@ export const SHIFT_PERIODS = {
 /**
  * Statuts d'échange
  */
-export type ExchangeStatus = 'pending' | 'validated' | 'cancelled' | 'unavailable';
+export type ExchangeStatus = 'pending' | 'validated' | 'cancelled' | 'unavailable' | 'matched' | 'rejected';
 
 /**
  * Types d'échange

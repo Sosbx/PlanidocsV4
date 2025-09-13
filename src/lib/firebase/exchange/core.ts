@@ -1,4 +1,4 @@
-import { collection, doc, addDoc, getDocs, updateDoc, query, orderBy, where, runTransaction, serverTimestamp, Timestamp, deleteDoc } from 'firebase/firestore';
+import { collection, doc, addDoc, getDocs, updateDoc, query, orderBy, where, runTransaction, serverTimestamp, Timestamp, deleteDoc, getDoc } from 'firebase/firestore';
 import { createParisDate, firebaseTimestampToParisDate, formatParisDate } from '@/utils/timezoneUtils';
 import { db } from '../config';
 import { format } from 'date-fns';
@@ -105,46 +105,78 @@ export const addShiftExchange = async (exchange: Omit<ShiftExchange, 'id' | 'cre
 };
 
 /**
- * Supprime un échange de garde
- * @param exchangeId ID de l'échange à supprimer
- * @throws Error si la suppression échoue
+ * Rejette un échange de garde en créant un historique
+ * @param exchangeId ID de l'échange à rejeter
+ * @param rejectedBy ID de l'utilisateur qui rejette (optionnel)
+ * @throws Error si le rejet échoue
  */
-export const removeShiftExchange = async (exchangeId: string): Promise<void> => {
+export const removeShiftExchange = async (exchangeId: string, rejectedBy?: string): Promise<void> => {
   try {
-    const exchangeRef = doc(db, COLLECTIONS.EXCHANGES, exchangeId);
-    const exchangeDoc = await getDocs(query(collection(db, COLLECTIONS.EXCHANGES), where('__name__', '==', exchangeId)));
-    
-    if (exchangeDoc.empty) {
-      throw createExchangeValidationError(
-        'INVALID_EXCHANGE',
-        'Échange non trouvé'
-      );
-    }
+    await runTransaction(db, async (transaction) => {
+      // Récupérer l'échange
+      const exchangeRef = doc(db, COLLECTIONS.EXCHANGES, exchangeId);
+      const exchangeDoc = await transaction.get(exchangeRef);
+      
+      if (!exchangeDoc.exists()) {
+        throw createExchangeValidationError(
+          'INVALID_EXCHANGE',
+          'Échange non trouvé'
+        );
+      }
 
-    const exchange = exchangeDoc.docs[0].data() as ShiftExchange;
-    
-    if (exchange.status === 'unavailable') {
-      throw createExchangeValidationError(
+      const exchange = exchangeDoc.data() as ShiftExchange;
+      
+      if (exchange.status === 'unavailable') {
+        throw createExchangeValidationError(
         'EXCHANGE_UNAVAILABLE',
         'Cette garde a déjà été échangée dans une autre transaction'
       );
     }
     
-    if (exchange.status !== 'pending' && exchange.status !== 'cancelled') { 
-      throw createExchangeValidationError(
-        'INVALID_EXCHANGE',
-        'Cet échange n\'est plus disponible'
-      );
-    }
-    
-    // Supprimer complètement le document au lieu de changer son statut
-    await deleteDoc(exchangeRef);
+      if (exchange.status !== 'pending' && exchange.status !== 'cancelled') { 
+        throw createExchangeValidationError(
+          'INVALID_EXCHANGE',
+          'Cet échange n\'est plus disponible'
+        );
+      }
+      
+      // Créer l'entrée d'historique pour le rejet
+      const historyRef = doc(collection(db, COLLECTIONS.HISTORY));
+      const now = createParisDate();
+      
+      transaction.set(historyRef, {
+        id: historyRef.id,
+        originalUserId: exchange.userId,
+        originalShiftType: exchange.shiftType,
+        newUserId: '', // Pas de nouveau propriétaire pour un rejet
+        newShiftType: null,
+        date: exchange.date,
+        period: exchange.period,
+        shiftType: exchange.shiftType,
+        timeSlot: exchange.timeSlot,
+        comment: exchange.comment || '',
+        interestedUsers: exchange.interestedUsers || [],
+        exchangedAt: now.toISOString(),
+        createdAt: exchange.createdAt,
+        isPermutation: false,
+        status: 'rejected', // Nouveau statut pour les rejets
+        rejectedBy: rejectedBy || 'admin',
+        rejectedAt: now.toISOString(),
+        originalExchangeId: exchangeId
+      });
+      
+      // Marquer l'échange comme rejeté au lieu de le supprimer
+      transaction.update(exchangeRef, {
+        status: 'rejected',
+        lastModified: serverTimestamp()
+      });
+    });
   } catch (error) {
-    console.error('Error removing shift exchange:', error);
+    console.error('Error rejecting shift exchange:', error);
     if (error instanceof Error) {
       throw error;
     }
-    throw new Error('Erreur lors de la suppression de l\'échange');
+    throw new Error('Erreur lors du rejet de l\'échange');
   }
 };
 
@@ -155,12 +187,33 @@ export const removeShiftExchange = async (exchangeId: string): Promise<void> => 
 export const getShiftExchanges = async (): Promise<ShiftExchange[]> => {
   try {
     const today = formatParisDate(createParisDate(), 'yyyy-MM-dd');
+    
+    // Récupérer la configuration de la phase pour déterminer les statuts à inclure
+    let statusesToInclude = ['pending', 'unavailable'];
+    
+    try {
+      const configDoc = await getDoc(doc(db, 'config', 'bag_phase_config'));
+      if (configDoc.exists()) {
+        const config = configDoc.data();
+        // En phase distribution, ne récupérer que les gardes pending (les validated sont dans l'historique)
+        if (config.phase === 'distribution') {
+          statusesToInclude = ['pending'];
+        }
+        // En phase completed, inclure aussi les gardes not_taken
+        else if (config.phase === 'completed') {
+          statusesToInclude = ['pending', 'unavailable', 'not_taken'];
+        }
+      }
+    } catch (error) {
+      console.warn('Could not fetch BAG phase config, using default statuses', error);
+    }
+    
     // Essayer d'abord avec l'index composé
     try {
       const q = query(
         collection(db, COLLECTIONS.EXCHANGES),
         where('date', '>=', today),
-        where('status', 'in', ['pending', 'unavailable']),
+        where('status', 'in', statusesToInclude),
         orderBy('date', 'asc')
       );
       const querySnapshot = await getDocs(q);
@@ -183,7 +236,7 @@ export const getShiftExchanges = async (): Promise<ShiftExchange[]> => {
           userId: data.userId || '',
           shiftType: data.shiftType || '',
           timeSlot: data.timeSlot || '',
-          status: (data.status || 'pending') as ('pending' | 'validated' | 'cancelled' | 'unavailable'),
+          status: (data.status || 'pending') as ('pending' | 'validated' | 'cancelled' | 'unavailable' | 'not_taken'),
           createdAt: createdAt,
           lastModified: data.lastModified || createdAt,
           interestedUsers: Array.isArray(data.interestedUsers) ? data.interestedUsers : [],
@@ -205,7 +258,7 @@ export const getShiftExchanges = async (): Promise<ShiftExchange[]> => {
         console.warn('Index not ready, falling back to simple query');
         const simpleQuery = query(
           collection(db, COLLECTIONS.EXCHANGES),
-          where('status', 'in', ['pending', 'unavailable'])
+          where('status', 'in', statusesToInclude)
         );
         const querySnapshot = await getDocs(simpleQuery);
         
@@ -229,7 +282,7 @@ export const getShiftExchanges = async (): Promise<ShiftExchange[]> => {
                 userId: data.userId || '',
                 shiftType: data.shiftType || '',
                 timeSlot: data.timeSlot || '',
-                status: (data.status || 'pending') as ('pending' | 'validated' | 'cancelled' | 'unavailable'),
+                status: (data.status || 'pending') as ('pending' | 'validated' | 'cancelled' | 'unavailable' | 'not_taken'),
                 createdAt: createdAt,
                 lastModified: data.lastModified || createdAt,
                 interestedUsers: Array.isArray(data.interestedUsers) ? data.interestedUsers : [],
@@ -270,11 +323,14 @@ export const finalizeAllExchanges = async (): Promise<number> => {
     
     const pendingExchangesSnapshot = await getDocs(pendingExchangesQuery);
     
-    // Marquer chaque échange comme indisponible
+    // Marquer chaque échange selon s'il a trouvé preneur ou non
     await runTransaction(db, async (transaction) => {
       pendingExchangesSnapshot.docs.forEach(doc => {
+        const exchangeData = doc.data();
+        const hasInterestedUsers = exchangeData.interestedUsers && exchangeData.interestedUsers.length > 0;
+        
         transaction.update(doc.ref, {
-          status: 'unavailable',
+          status: hasInterestedUsers ? 'pending' : 'not_taken', // Les gardes avec intéressés restent pending, les autres passent à not_taken
           lastModified: serverTimestamp(),
           finalizedAt: serverTimestamp()
         });
@@ -285,6 +341,47 @@ export const finalizeAllExchanges = async (): Promise<number> => {
     return pendingExchangesSnapshot.size;
   } catch (error) {
     console.error('Erreur lors de la finalisation des échanges:', error);
+    throw error;
+  }
+};
+
+/**
+ * Restaure tous les échanges not_taken en pending (utilisé lors du retour en phase 2)
+ * @returns Nombre d'échanges restaurés
+ */
+export const restoreNotTakenToPending = async (): Promise<number> => {
+  try {
+    // Chercher tous les échanges not_taken
+    const notTakenExchangesQuery = query(
+      collection(db, COLLECTIONS.EXCHANGES),
+      where('status', '==', 'not_taken')
+    );
+    
+    const notTakenExchangesSnapshot = await getDocs(notTakenExchangesQuery);
+    
+    if (notTakenExchangesSnapshot.empty) {
+      console.log('Aucun échange not_taken à restaurer');
+      return 0;
+    }
+    
+    // Restaurer chaque échange au statut 'pending'
+    let restoredCount = 0;
+    
+    await runTransaction(db, async (transaction) => {
+      notTakenExchangesSnapshot.docs.forEach(doc => {
+        transaction.update(doc.ref, {
+          status: 'pending',
+          lastModified: serverTimestamp(),
+          finalizedAt: null
+        });
+        restoredCount++;
+      });
+    });
+    
+    console.log(`${restoredCount} échanges not_taken restaurés en pending`);
+    return restoredCount;
+  } catch (error) {
+    console.error('Erreur lors de la restauration des échanges not_taken:', error);
     throw error;
   }
 };

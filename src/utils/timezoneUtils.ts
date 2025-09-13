@@ -93,6 +93,66 @@ export function parseParisDate(dateString: string | Date): Date {
 }
 
 /**
+ * Parse une datetime-local HTML en forçant le fuseau horaire Europe/Paris
+ * @param dateTimeString String au format YYYY-MM-DDTHH:mm (format HTML datetime-local)
+ * @returns Date correctement interprétée en Europe/Paris
+ */
+export function parseHtmlDateTimeLocal(dateTimeString: string): Date {
+  if (!dateTimeString) {
+    return toParisTime(new DateConstructor());
+  }
+  
+  // Format attendu: "2024-01-15T14:30"
+  const match = dateTimeString.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+  if (!match) {
+    console.error('Format datetime-local invalide:', dateTimeString);
+    return toParisTime(new DateConstructor());
+  }
+  
+  const [, yearStr, monthStr, dayStr, hourStr, minuteStr] = match;
+  const year = parseInt(yearStr, 10);
+  const month = parseInt(monthStr, 10) - 1; // Les mois sont 0-indexés
+  const day = parseInt(dayStr, 10);
+  const hour = parseInt(hourStr, 10);
+  const minute = parseInt(minuteStr, 10);
+  
+  // Créer une date naive avec ces valeurs
+  const naiveDate = new DateConstructor(year, month, day, hour, minute, 0, 0);
+  
+  // La convertir depuis Europe/Paris vers UTC
+  return fromZonedTime(naiveDate, TARGET_TIMEZONE);
+}
+
+/**
+ * Parse une date HTML (input type="date") en forçant le fuseau horaire Europe/Paris
+ * @param dateString String au format YYYY-MM-DD (format HTML date)
+ * @returns Date correctement interprétée en Europe/Paris
+ */
+export function parseHtmlDate(dateString: string): Date {
+  if (!dateString) {
+    return toParisTime(new DateConstructor());
+  }
+  
+  // Format attendu: "2024-01-15"
+  const match = dateString.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    console.error('Format date HTML invalide:', dateString);
+    return toParisTime(new DateConstructor());
+  }
+  
+  const [, yearStr, monthStr, dayStr] = match;
+  const year = parseInt(yearStr, 10);
+  const month = parseInt(monthStr, 10) - 1; // Les mois sont 0-indexés
+  const day = parseInt(dayStr, 10);
+  
+  // Créer une date naive à midi pour éviter les problèmes DST
+  const naiveDate = new DateConstructor(year, month, day, 12, 0, 0, 0);
+  
+  // La convertir depuis Europe/Paris vers UTC
+  return fromZonedTime(naiveDate, TARGET_TIMEZONE);
+}
+
+/**
  * Formate une date en utilisant le fuseau horaire Europe/Paris
  * @param date Date à formater
  * @param formatStr Format de sortie (compatible date-fns)

@@ -1,4 +1,4 @@
-import { signInWithEmailAndPassword, signOut, sendPasswordResetEmail, signInWithPopup, linkWithPopup } from 'firebase/auth';
+import { signInWithEmailAndPassword, signOut, sendPasswordResetEmail, signInWithPopup, linkWithPopup, fetchSignInMethodsForEmail, createUserWithEmailAndPassword, linkWithCredential, EmailAuthProvider } from 'firebase/auth';
 import { createParisDate } from '@/utils/timezoneUtils';
 import { auth, googleProvider } from '../../../lib/firebase/config';
 import { getAuthErrorMessage } from './errors';
@@ -112,6 +112,54 @@ export const signInUser = async (login: string, password: string): Promise<User>
     }
     
     // Si on arrive ici, toutes les tentatives ont échoué
+    // Vérifier pourquoi la connexion a échoué
+    if (lastError && (lastError.code === 'auth/invalid-credential' || 
+                      lastError.code === 'auth/wrong-password' ||
+                      lastError.code === 'auth/user-not-found')) {
+      
+      console.log('[Auth] Vérification des méthodes de connexion disponibles pour:', userData.email);
+      
+      try {
+        // Vérifier les méthodes de connexion disponibles
+        const methods = await fetchSignInMethodsForEmail(auth, userData.email);
+        console.log('[Auth] Méthodes disponibles:', methods);
+        
+        if (methods.includes('google.com') && !methods.includes('password')) {
+          // Le compte a été converti en Google-only
+          console.error('[Auth] Compte converti en Google-only, connexion par identifiants impossible');
+          throw new Error('Votre compte utilise désormais la connexion Google. Veuillez cliquer sur "Se connecter avec Google".');
+        }
+        
+        if (methods.length === 0) {
+          // Aucun compte Firebase Auth existe, mais l'utilisateur existe dans Firestore
+          console.log('[Auth] Aucun compte Firebase Auth trouvé, tentative de création...');
+          
+          // Essayer de créer le compte avec le mot de passe fourni
+          try {
+            await createUserWithEmailAndPassword(auth, userData.email, passwordVariants[0]);
+            console.log('[Auth] Compte Firebase Auth créé avec succès');
+            
+            // Si création réussie, se connecter
+            await signInWithEmailAndPassword(auth, userData.email, passwordVariants[0]);
+            return ensureUserRoles(userData);
+          } catch (createError: any) {
+            if (createError.code === 'auth/email-already-in-use') {
+              console.error('[Auth] Email déjà utilisé mais non détecté par fetchSignInMethodsForEmail');
+              throw new Error('Erreur de synchronisation du compte. Contactez l\'administrateur.');
+            }
+            throw createError;
+          }
+        }
+      } catch (checkError: any) {
+        // Si c'est notre message d'erreur custom, le propager
+        if (checkError.message && checkError.message.includes('connexion Google')) {
+          throw checkError;
+        }
+        // Sinon, logger et continuer avec l'erreur originale
+        console.error('[Auth] Erreur lors de la vérification des méthodes:', checkError);
+      }
+    }
+    
     console.error('[Auth] Échec de connexion après toutes les tentatives');
     throw new Error('Identifiants invalides');
   } catch (error) {
@@ -149,6 +197,29 @@ export const resetPassword = async (login: string): Promise<void> => {
     
     if (!userData) {
       throw new Error('Aucun compte trouvé avec cet identifiant. Vérifiez que vous avez saisi les 4 premières lettres de votre NOM en majuscules.');
+    }
+    
+    // Vérifier les méthodes de connexion disponibles pour cet email
+    try {
+      const methods = await fetchSignInMethodsForEmail(auth, userData.email);
+      console.log('[Auth] Méthodes de connexion pour réinitialisation:', methods);
+      
+      if (methods.includes('google.com') && !methods.includes('password')) {
+        // Le compte utilise uniquement Google
+        throw new Error('Votre compte utilise la connexion Google. Veuillez cliquer sur "Se connecter avec Google" pour accéder à votre compte.');
+      }
+      
+      if (methods.length === 0) {
+        // Aucun compte Firebase Auth n'existe
+        throw new Error('Compte non initialisé. Contactez l\'administrateur pour réinitialiser vos identifiants.');
+      }
+    } catch (checkError: any) {
+      // Si c'est notre message d'erreur custom, le propager
+      if (checkError.message && (checkError.message.includes('connexion Google') || checkError.message.includes('non initialisé'))) {
+        throw checkError;
+      }
+      // Sinon, continuer avec l'envoi du mail
+      console.log('[Auth] Erreur lors de la vérification, tentative d\'envoi du mail quand même');
     }
     
     await sendPasswordResetEmail(auth, userData.email);
@@ -205,6 +276,27 @@ export const signInWithGoogle = async (): Promise<User> => {
       });
       
       throw new Error('Compte non autorisé. Veuillez contacter l\'administrateur pour obtenir l\'accès.');
+    }
+    
+    // L'utilisateur existe, vérifier s'il a un mot de passe dans Firestore
+    // et essayer de lier les comptes pour permettre les deux méthodes de connexion
+    if (userData.password) {
+      try {
+        console.log('[Auth] Tentative de liaison du compte password au compte Google');
+        const credential = EmailAuthProvider.credential(userData.email, userData.password);
+        await linkWithCredential(googleUser, credential);
+        console.log('[Auth] Comptes liés avec succès - Les deux méthodes de connexion sont maintenant disponibles');
+      } catch (linkError: any) {
+        // La liaison peut échouer si les comptes sont déjà liés ou si le mot de passe est incorrect
+        // Ce n'est pas grave, l'utilisateur peut quand même se connecter avec Google
+        if (linkError.code === 'auth/provider-already-linked') {
+          console.log('[Auth] Les comptes sont déjà liés');
+        } else if (linkError.code === 'auth/wrong-password') {
+          console.log('[Auth] Mot de passe incorrect pour la liaison, mais connexion Google réussie');
+        } else {
+          console.log('[Auth] Liaison échouée:', linkError.code, '- Continuer avec Google seul');
+        }
+      }
     }
     
     // L'utilisateur existe, on retourne ses données

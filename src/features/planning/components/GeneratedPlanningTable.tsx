@@ -1046,39 +1046,41 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
                         // Déterminer les classes en fonction des différentes conditions
                         const classes = [];
                         
-                        // Priorité 1: Gardes proposées avec couleurs correspondant aux types d'opérations
-                        const operationBgClass = getOperationBackgroundClass();
-                        if (operationBgClass) {
-                          classes.push(operationBgClass);
-                        }
-                        // Priorité 2: Cellule grisée (weekend, jour férié, pont) si pas de garde proposée
-                        else if (grayedOut) {
-                          // Si c'est un desideratum, appliquer une couleur plus foncée
-                          if (showDesiderata && desideratum?.type) {
-                            if (desideratum.type === 'primary') {
-                              classes.push('bg-red-200');
-                            } else {
-                              classes.push('bg-blue-200');
-                            }
-                          } else {
-                            // Sinon, appliquer le gris standard
-                            classes.push('bg-gray-100');
-                          }
-                        } 
-                        // Priorité 3: Si pas grisé mais a un desideratum
-                        else if (showDesiderata && desideratum?.type) {
-                          if (desideratum.type === 'primary') {
-                            classes.push('bg-red-100');
-                          } else {
-                            classes.push('bg-blue-100');
-                          }
-                        }
-                        // Priorité 4: Gardes reçues
-                        else if (!desideratum?.type && isReceivedShift && bagPhaseConfig.phase !== 'completed') {
+                        // Priorité 1: Gardes reçues (doivent toujours être visibles, même en phase 3)
+                        if (isReceivedShift && !desideratum?.type) {
                           if (isReceivedPermutation) {
                             classes.push('bg-emerald-100');
                           } else {
                             classes.push('bg-green-100');
+                          }
+                        }
+                        // Priorité 2: Gardes proposées avec couleurs correspondant aux types d'opérations
+                        else {
+                          const operationBgClass = getOperationBackgroundClass();
+                          if (operationBgClass) {
+                            classes.push(operationBgClass);
+                          }
+                          // Priorité 3: Cellule grisée (weekend, jour férié, pont) si pas de garde proposée
+                          else if (grayedOut) {
+                            // Si c'est un desideratum, appliquer une couleur plus foncée
+                            if (showDesiderata && desideratum?.type) {
+                              if (desideratum.type === 'primary') {
+                                classes.push('bg-red-200');
+                              } else {
+                                classes.push('bg-blue-200');
+                              }
+                            } else {
+                              // Sinon, appliquer le gris standard
+                              classes.push('bg-gray-100');
+                            }
+                          } 
+                          // Priorité 4: Si pas grisé mais a un desideratum
+                          else if (showDesiderata && desideratum?.type) {
+                            if (desideratum.type === 'primary') {
+                              classes.push('bg-red-100');
+                            } else {
+                              classes.push('bg-blue-100');
+                            }
                           }
                         }
                         
@@ -1269,9 +1271,9 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
                   return (
 <tr 
   key={dateStr}
-  className={`${isBagPeriodStart && bagPhaseConfig.phase !== 'completed' ? 'relative bg-red-50/30' : ''}`}
+  className={`${isBagPeriodStart && !(bagPhaseConfig.phase === 'completed' && bagPhaseConfig.isValidated) ? 'relative bg-red-50/30' : ''}`}
 >
-                      <td className={`border px-2 py-1 text-xs ${grayedOut ? 'text-gray-400 bg-gray-50/50' : 'text-gray-500 bg-gray-50/30'} ${isBagPeriodStart && bagPhaseConfig.phase !== 'completed' ? 'border-t-2 border-t-red-400' : ''}`}>
+                      <td className={`border px-2 py-1 text-xs ${grayedOut ? 'text-gray-400 bg-gray-50/50' : 'text-gray-500 bg-gray-50/30'} ${isBagPeriodStart && !(bagPhaseConfig.phase === 'completed' && bagPhaseConfig.isValidated) ? 'border-t-2 border-t-red-400' : ''}`}>
                         {/* Ligne rouge pour marquer le début de la période BAG */}
                         {isFirstDayOfBagPeriod && isFirstDayOfBagPeriod(day) && (
                           <div className="absolute right-0 top-0 w-2 h-2 bg-yellow-500 rounded-full" 
@@ -1287,7 +1289,7 @@ const GeneratedPlanningTable: React.FC<GeneratedPlanningTableProps> = ({
                           <span className="text-gray-400 text-[10px] ml-1">
                             {formatDateCapitalized(day, 'EEE')}
                           </span>
-                          {isBagPeriodStart && bagPhaseConfig.phase !== 'completed' && (
+                          {isBagPeriodStart && !(bagPhaseConfig.phase === 'completed' && bagPhaseConfig.isValidated) && (
                             <span className="text-red-500/50 text-[10px] ml-auto font-medium">BàG</span>
                           )}
                         </div>

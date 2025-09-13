@@ -11,7 +11,6 @@ import {
   orderBy, 
   onSnapshot,
   runTransaction,
-  Timestamp,
   updateDoc,
   serverTimestamp,
   getDoc,
@@ -19,8 +18,8 @@ import {
   arrayRemove
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
-import { ShiftExchange, ShiftPeriod } from '@/types/exchange';
-import { BagPhase, ShiftExchangeStatus } from '@/features/shiftExchange/types';
+import { ShiftPeriod } from '@/types/exchange';
+import { BagPhase } from '@/features/shiftExchange/types';
 import { BagPhaseConfig } from '@/types/planning';
 import { 
   IShiftExchangeRepository, 
@@ -29,8 +28,7 @@ import {
 } from '../interfaces/IShiftExchangeRepository';
 import { ExchangeBaseRepository } from './ExchangeBaseRepository';
 import { getCollectionName } from '@/utils/collectionUtils';
-import { format, isWithinInterval, isBefore } from 'date-fns';
-import { normalizePeriod } from '@/utils/dateUtils';
+import { isWithinInterval, isBefore } from 'date-fns';
 import { getPlanningRepository } from '../repositories';
 import { createParisDate, toParisTime, firebaseTimestampToParisDate } from '@/utils/timezoneUtils';
 
@@ -109,7 +107,7 @@ export class ShiftExchangeRepository
   /**
    * Récupérer les échanges actifs de la bourse
    */
-  async getActiveShiftExchanges(associationId: string): Promise<ShiftExchangeDocument[]> {
+  async getActiveShiftExchanges(_associationId: string): Promise<ShiftExchangeDocument[]> {
     try {
       const exchanges = await this.getAll({
         where: [
@@ -231,7 +229,7 @@ export class ShiftExchangeRepository
   /**
    * Récupérer la configuration de la phase
    */
-  async getPhaseConfig(associationId: string): Promise<BagPhaseConfig | null> {
+  async getPhaseConfig(_associationId: string): Promise<BagPhaseConfig | null> {
     try {
       // Récupérer la configuration de la bourse aux gardes depuis Firebase
       const configDoc = await getDoc(doc(db, 'config', 'bag_phase_config'));
@@ -409,7 +407,7 @@ export class ShiftExchangeRepository
   /**
    * Rejeter un appariement
    */
-  async rejectMatch(exchangeId: string, associationId: string): Promise<void> {
+  async rejectMatch(exchangeId: string, _associationId: string): Promise<void> {
     try {
       await this.update(exchangeId, {
         status: 'rejected',
@@ -563,7 +561,7 @@ export class ShiftExchangeRepository
   /**
    * Récupérer les statistiques de la bourse
    */
-  async getBagStatistics(associationId: string): Promise<{
+  async getBagStatistics(_associationId: string): Promise<{
     totalExchanges: number;
     pendingExchanges: number;
     matchedExchanges: number;

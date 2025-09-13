@@ -11,7 +11,7 @@ export enum ShiftPeriod {
 
 export type ExchangeType = 'bag' | 'direct';
 export type OperationType = 'exchange' | 'give' | 'replacement' | 'both';
-export type ExchangeStatus = 'pending' | 'validated' | 'cancelled' | 'unavailable';
+export type ExchangeStatus = 'pending' | 'validated' | 'cancelled' | 'unavailable' | 'matched' | 'rejected';
 
 export interface BaseExchange {
   id: string;

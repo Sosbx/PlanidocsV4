@@ -1,23 +1,29 @@
 import { Timestamp } from 'firebase/firestore';
 import { BaseUser, UserRole, UserStatus, UserRoleFlags as CommonUserRoleFlags } from '../../types/common';
+import { FirestoreDocument } from '../../types/firebase';
 
 // Définir une interface locale qui étend l'interface commune
 export interface UserRoleFlags extends CommonUserRoleFlags {}
 
 /**
  * Interface pour un utilisateur de gestion
- * Étend BaseUser avec des propriétés spécifiques à la gestion des utilisateurs
+ * Étend FirestoreDocument avec des propriétés spécifiques à la gestion des utilisateurs
  */
-export interface ManagementUser extends BaseUser {
+export interface ManagementUser extends FirestoreDocument {
+  email: string;
   firstName: string; // Requis dans ce contexte
   lastName: string;  // Requis dans ce contexte
   login: string;
   password: string;
   roles: UserRoleFlags;
   hasValidatedPlanning: boolean;
+  status?: UserStatus; // Statut de l'utilisateur (actif, inactif, en attente)
   
   /** Full name (optional to maintain backward compatibility) */
   fullName?: string;
+  
+  // Propriétés optionnelles de BaseUser pour compatibilité
+  associationId?: string;
   
   // Champs RGPD
   hasAcceptedTerms?: boolean;

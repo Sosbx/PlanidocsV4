@@ -18,6 +18,7 @@ interface CellColorContext {
   isReceivedPermutation?: boolean;
   userId?: string;
   bagPhase: 'submission' | 'distribution' | 'completed';
+  isValidated?: boolean;
 }
 
 /**
@@ -34,7 +35,8 @@ export function getCellBackgroundClass(context: CellColorContext): string {
     isReceivedShift,
     isReceivedPermutation,
     userId,
-    bagPhase
+    bagPhase,
+    isValidated = false
   } = context;
 
   // Rassembler toutes les classes
@@ -56,8 +58,8 @@ export function getCellBackgroundClass(context: CellColorContext): string {
   const hasGiveOp = operationTypes.includes('give');
   const hasReplacementOp = operationTypes.includes('replacement');
 
-  // Phase complétée: appliquer les couleurs des échanges directs
-  if (bagPhase === 'completed') {
+  // Planning validé: appliquer les couleurs des échanges directs uniquement
+  if (bagPhase === 'completed' && isValidated) {
     const directExchangeBgClass = getCompletedPhaseBackgroundClass(directExchange, userId, isProposedToReplacements);
     if (directExchangeBgClass) {
       // Supprimer les classes bg existantes qui pourraient interférer
@@ -66,11 +68,11 @@ export function getCellBackgroundClass(context: CellColorContext): string {
     }
   }
   
-  // Autres phases (submission/distribution): appliquer les couleurs en fonction des types d'opérations
-  if (!isReceivedShift && bagPhase !== 'completed') {
+  // Autres phases ou phase completed non validée: appliquer les couleurs en fonction des types d'opérations
+  if (!isReceivedShift && !(bagPhase === 'completed' && isValidated)) {
     // Calculer la classe de fond basée sur les opérations
     const operationBgClass = getOperationBackgroundClass(
-      bagPhase !== 'completed',
+      !(bagPhase === 'completed' && isValidated),
       hasExchangeOp,
       hasGiveOp, 
       hasReplacementOp,
@@ -104,7 +106,7 @@ export function getCellBackgroundClass(context: CellColorContext): string {
   }
   
   // Gardes reçues
-  if (isReceivedShift && bagPhase !== 'completed') {
+  if (isReceivedShift && !(bagPhase === 'completed' && isValidated)) {
     if (isReceivedPermutation) {
       return 'bg-emerald-100/85'; // Vert émeraude plus visible
     } else {

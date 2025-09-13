@@ -44,7 +44,7 @@ const ShiftExchangePage: React.FC = () => {
     toggleInterest,
     checkForConflict
   } = useShiftExchangeCore({
-    enableHistory: false, // Pas besoin de l'historique pour la page utilisateur
+    enableHistory: true, // Activer l'historique pour afficher les positions attribuées
     enableConflictCheck: true,
     limitResults: 0 // Pas de limite pour voir toutes les gardes disponibles
   });

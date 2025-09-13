@@ -445,13 +445,21 @@ const GroupedShiftExchangeList: React.FC<GroupedShiftExchangeListProps> = ({
               {isExpanded && filteredExchanges.length > 0 && (
                 <div className="divide-y divide-gray-100/60 w-full">
                   {filteredExchanges
-                    // Trier: d'abord les gardes de l'utilisateur, puis par période (M, AM, S)
+                    // Trier: en phase completed, d'abord les non pourvues, sinon par utilisateur et période
                     .sort((a, b) => {
-                      // D'abord les gardes de l'utilisateur
+                      // En phase completed, prioriser les gardes non pourvues
+                      if (bagPhaseConfig.phase === 'completed') {
+                        const aIsPending = a.status === 'pending';
+                        const bIsPending = b.status === 'pending';
+                        if (aIsPending && !bIsPending) return -1;
+                        if (!aIsPending && bIsPending) return 1;
+                      }
+                      
+                      // Ensuite les gardes de l'utilisateur
                       if (a.userId === user?.id && b.userId !== user?.id) return -1;
                       if (a.userId !== user?.id && b.userId === user?.id) return 1;
                       
-                      // Ensuite par période (M, AM, S) dans cet ordre
+                      // Enfin par période (M, AM, S) dans cet ordre
                       const getOrdinalForPeriod = (period: ShiftPeriod | string) => {
                         if (period === ShiftPeriod.MORNING) return 0;
                         if (period === ShiftPeriod.AFTERNOON) return 1;
@@ -480,9 +488,17 @@ const GroupedShiftExchangeList: React.FC<GroupedShiftExchangeListProps> = ({
                     // Vérifier si c'est une garde de l'utilisateur
                     const isUserShift = exchange.userId === user?.id;
                     
+                    // Vérifier si c'est une garde attribuée ou non attribuée (via le statut custom)
+                    const isAttributed = (exchange as any).status === 'attributed';
+                    const isNotAttributed = (exchange as any).status === 'not_attributed';
+                    
                     // Déterminer le statut du badge
                     let badgeStatus: ShiftStatus = 'normal';
-                    if (hasConflict) {
+                    if (isAttributed) {
+                      badgeStatus = 'interested'; // Utiliser le style vert pour les gardes attribuées
+                    } else if (isNotAttributed) {
+                      badgeStatus = 'unavailable'; // Utiliser le style gris pour les positions non attribuées
+                    } else if (hasConflict) {
                       badgeStatus = 'conflict';
                     } else if (isInterested) {
                       badgeStatus = 'interested';
@@ -554,15 +570,20 @@ const GroupedShiftExchangeList: React.FC<GroupedShiftExchangeListProps> = ({
                                   {exchangeUser ? exchangeUser.lastName : 'Médecin'}
                                 </span>
                                 <div className="flex gap-1 ml-1 flex-shrink-0">
-                                  {interestedCount > 0 && bagPhaseConfig.phase !== 'completed' && (
+                                  {isAttributed && (
+                                    <span className="px-1 sm:px-2 rounded-sm bg-green-100 text-[9px] sm:text-xs text-green-700 font-medium">
+                                      Attribué
+                                    </span>
+                                  )}
+                                  {interestedCount > 0 && bagPhaseConfig.phase !== 'completed' && !isAttributed && (
                                     <span className="px-1 sm:px-2 rounded-sm bg-indigo-50 text-[9px] sm:text-xs text-indigo-700 font-medium">
                                       {interestedCount}
                                     </span>
                                   )}
-                                  {isInterested && !hasConflict && bagPhaseConfig.phase !== 'completed' && (
+                                  {isInterested && !hasConflict && bagPhaseConfig.phase !== 'completed' && !isAttributed && (
                                     <UserCheck className="h-3 w-3 sm:h-4 sm:w-4 text-green-600" />
                                   )}
-                                  {hasConflict && bagPhaseConfig.phase !== 'completed' && (
+                                  {hasConflict && bagPhaseConfig.phase !== 'completed' && !isAttributed && (
                                     <ArrowLeftRight className="h-3 w-3 sm:h-4 sm:w-4 text-red-600" />
                                   )}
                                 </div>

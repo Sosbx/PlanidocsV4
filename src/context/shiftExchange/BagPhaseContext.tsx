@@ -3,7 +3,7 @@ import { createParisDate, firebaseTimestampToParisDate } from '@/utils/timezoneU
 import { doc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from "../../lib/firebase/config";
 import { BagPhaseConfig, defaultBagPhaseConfig } from '../../types/planning';
-import { finalizeAllExchanges, restorePendingExchanges } from '../../lib/firebase/exchange';
+import { finalizeAllExchanges, restorePendingExchanges, restoreNotTakenToPending } from '../../lib/firebase/exchange';
 
 /**
  * Type pour le contexte de phase de la bourse aux gardes
@@ -80,9 +80,19 @@ export const BagPhaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       
       // Gestion optimisée des transitions de phase
       if (newConfig.phase !== config.phase) {
-        // Passage à la phase "Terminé"
-        if (newConfig.phase === 'completed' && config.phase !== 'completed') {
-          console.log('Finalizing all pending exchanges...');
+        console.log(`Phase transition: ${config.phase} → ${newConfig.phase}`);
+        
+        // Passage à la phase "Distribution" - NE PAS finaliser les échanges
+        if (newConfig.phase === 'distribution' && config.phase === 'submission') {
+          console.log('Moving to distribution phase - keeping exchanges in pending/validated status');
+          // Les échanges restent en status pending (sans preneur) ou validated (avec preneur)
+          // Cela permet de voir les gardes sans preneur dans l'export
+          await syncPlanningPeriodsWithBAG(newConfig.phase);
+        }
+        
+        // Passage à la phase "Terminé" - Finaliser SEULEMENT maintenant
+        else if (newConfig.phase === 'completed' && config.phase !== 'completed') {
+          console.log('Moving to completed phase - finalizing all pending exchanges...');
           await finalizeAllExchanges();
           
           // Synchronisation avec les périodes de planning
@@ -91,7 +101,15 @@ export const BagPhaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         
         // Retour depuis la phase "Terminé"
         else if (config.phase === 'completed' && newConfig.phase !== 'completed') {
-          console.log('Restoring pending exchanges...');
+          console.log('Leaving completed phase - restoring exchanges...');
+          
+          // Si on retourne en phase distribution, restaurer les gardes not_taken en pending
+          if (newConfig.phase === 'distribution') {
+            console.log('Returning to distribution phase - restoring not_taken exchanges to pending...');
+            await restoreNotTakenToPending();
+          }
+          
+          // Restaurer aussi les échanges unavailable qui n'ont pas d'historique
           await restorePendingExchanges();
           
           // Synchronisation avec les périodes de planning
@@ -140,12 +158,11 @@ export const BagPhaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       console.log(`Synchronisation de la période ${futurePeriod.id} avec la phase BAG ${bagPhase}`);
       
       if (bagPhase === 'completed') {
-        // Marquer la période future comme active
+        // Marquer la phase comme completed mais garder le statut 'future'
+        // Le changement vers 'active' se fera lors de la validation finale
         await updatePlanningPeriod(futurePeriod.id, {
-          bagPhase: 'completed',
-          status: 'active',
-          isValidated: true,
-          validatedAt: createParisDate()
+          bagPhase: 'completed'
+          // Ne pas changer status ni isValidated ici
         });
         
         // Archiver l'ancienne période active

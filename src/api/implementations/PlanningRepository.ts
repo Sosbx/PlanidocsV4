@@ -16,7 +16,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../lib/firebase/config';
 import { IPlanningRepository, ArchivedPeriod, SimplePlanningPeriod } from '../interfaces/IPlanningRepository';
-import { PlanningConfig, defaultConfig, PlanningPeriod, GeneratedPlanning } from '../../types/planning';
+import { PlanningConfig, PlanningPeriod, GeneratedPlanning } from '../../types/planning';
 import { getCollectionName, COLLECTIONS } from '../../utils/collectionUtils';
 import { ASSOCIATIONS } from '../../constants/associations';
 import { archiveDesiderata } from '../../lib/firebase/archiveDesiderata';
@@ -40,7 +40,7 @@ export class PlanningRepository implements IPlanningRepository {
   async getConfig(associationId: string): Promise<PlanningConfig | null> {
     try {
       const configDoc = this.getPlanningConfigDoc(associationId);
-      const docRef = doc(db, 'config', configDoc);
+      const _docRef = doc(db, 'config', configDoc);
       const snapshot = await getDocs(query(collection(db, 'config'), where('__name__', '==', configDoc)));
       
       if (snapshot.empty) {
@@ -206,23 +206,11 @@ export class PlanningRepository implements IPlanningRepository {
     
     // 3. Réinitialiser le statut de validation pour tous les utilisateurs
     const usersCollection = getCollectionName('users', associationId);
-    const usersSnapshot = await getDocs(
-      query(collection(db, usersCollection), 
-            where("associationId", "==", associationId))
-    );
+    // Récupérer TOUS les utilisateurs de la collection appropriée
+    // Pas besoin de filtrer par associationId car getCollectionName retourne déjà la bonne collection
+    const usersSnapshot = await getDocs(collection(db, usersCollection));
     
-    // Pour Rive Droite, inclure aussi les utilisateurs sans associationId
-    if (associationId === ASSOCIATIONS.RIVE_DROITE) {
-      const legacyUsersSnapshot = await getDocs(
-        query(collection(db, usersCollection), 
-              where("associationId", "==", null))
-      );
-      
-      legacyUsersSnapshot.docs.forEach(doc => {
-        batch.update(doc.ref, { hasValidatedPlanning: false });
-      });
-    }
-    
+    // Réinitialiser hasValidatedPlanning pour TOUS les utilisateurs de cette collection
     usersSnapshot.docs.forEach(doc => {
       batch.update(doc.ref, { hasValidatedPlanning: false });
     });
@@ -245,7 +233,7 @@ export class PlanningRepository implements IPlanningRepository {
         status: doc.data().status,
         bagPhase: doc.data().bagPhase,
         isValidated: doc.data().isValidated,
-        validatedAt: doc.data().validatedAt ? firebaseTimestampToParisDate(doc.data().validatedAt) : null
+        validatedAt: doc.data().validatedAt ? firebaseTimestampToParisDate(doc.data().validatedAt) : undefined
       }));
     } catch (error) {
       console.error(`Error getting planning periods for association ${associationId}:`, error);
@@ -282,7 +270,7 @@ export class PlanningRepository implements IPlanningRepository {
     await deleteDoc(docRef);
   }
   
-  async validateBagAndMergePeriods(futurePeriodId: string, associationId: string): Promise<void> {
+  async validateBagAndMergePeriods(_futurePeriodId: string, _associationId: string): Promise<void> {
     // TODO: Implémenter la fusion des périodes
     console.warn('validateBagAndMergePeriods: Non implémenté');
   }
@@ -334,7 +322,7 @@ export class PlanningRepository implements IPlanningRepository {
         status: doc.data().status,
         bagPhase: doc.data().bagPhase,
         isValidated: doc.data().isValidated,
-        validatedAt: doc.data().validatedAt ? firebaseTimestampToParisDate(doc.data().validatedAt) : null
+        validatedAt: doc.data().validatedAt ? firebaseTimestampToParisDate(doc.data().validatedAt) : undefined
       }));
       
       callback(periods);

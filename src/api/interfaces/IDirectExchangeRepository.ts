@@ -10,12 +10,21 @@ import { FirestoreDocument } from '@/types/firebase';
 /**
  * Document d'échange direct
  */
-export interface DirectExchangeDocument extends FirestoreDocument, ShiftExchange {
+export interface DirectExchangeDocument extends FirestoreDocument {
+  userId: string;
+  date: string;
+  period: ShiftPeriod;
+  shiftType: string;
+  timeSlot: string;
+  comment?: string;
   exchangeType: 'direct';
   operationTypes: OperationType[];
+  interestedUsers?: string[];
+  proposedToReplacements?: boolean;
   hasProposals?: boolean;
   acceptedBy?: string;
   acceptedAt?: string;
+  status: import('@/types/exchange').ExchangeStatus;
 }
 
 /**

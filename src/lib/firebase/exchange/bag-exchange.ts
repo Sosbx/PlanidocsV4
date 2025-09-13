@@ -6,6 +6,23 @@ import { verifyExchangeStatus, verifyPlanningAssignment } from './validation';
 import { removeAssignmentFromPlanningData, addAssignmentToPlanningData } from './planning-operations';
 
 /**
+ * Récupère le nom d'un utilisateur pour l'affichage
+ */
+async function getUserDisplayName(userId: string): Promise<string> {
+  try {
+    const userDoc = await getDoc(doc(db, 'users', userId));
+    if (userDoc.exists()) {
+      const userData = userDoc.data();
+      return `${userData.firstName} ${userData.lastName}`;
+    }
+    return userId;
+  } catch (error) {
+    console.error('Erreur lors de la récupération du nom utilisateur:', error);
+    return userId;
+  }
+}
+
+/**
  * Valide un échange de garde
  * @param exchangeId ID de l'échange à valider
  * @param interestedUserId ID de l'utilisateur intéressé
@@ -53,6 +70,26 @@ export const validateShiftExchange = async (
       
       const interestedUserExchangesSnapshot = await getDocs(interestedUserExchangesQuery);
       
+      // 3.5. Vérifier si l'utilisateur a déjà un échange validé pour ce créneau - LECTURE
+      const recentValidatedExchangeQuery = query(
+        collection(db, COLLECTIONS.HISTORY),
+        where('newUserId', '==', interestedUserId),
+        where('date', '==', exchange.date),
+        where('period', '==', exchange.period),
+        where('status', '==', 'completed')
+      );
+      const recentValidatedExchangeSnapshot = await getDocs(recentValidatedExchangeQuery);
+      
+      // Vérifier aussi s'il a donné une garde sur ce créneau
+      const recentGivenExchangeQuery = query(
+        collection(db, COLLECTIONS.HISTORY),
+        where('originalUserId', '==', interestedUserId),
+        where('date', '==', exchange.date),
+        where('period', '==', exchange.period),
+        where('status', '==', 'completed')
+      );
+      const recentGivenExchangeSnapshot = await getDocs(recentGivenExchangeQuery);
+      
       // 4. Vérifier les plannings - LECTURE
       const exchangeRef = doc(db, COLLECTIONS.EXCHANGES, exchangeId);
       const originalUserPlanningRef = doc(db, COLLECTIONS.PLANNINGS, exchange.userId);
@@ -91,6 +128,31 @@ export const validateShiftExchange = async (
         throw createExchangeValidationError(
           'GUARD_NOT_FOUND',
           'La garde n\'est plus disponible dans le planning du médecin'
+        );
+      }
+      
+      // 5.5. Vérifier les conflits avec les échanges déjà validés
+      if (!recentValidatedExchangeSnapshot.empty) {
+        const validatedExchange = recentValidatedExchangeSnapshot.docs[0].data();
+        const originalUserId = validatedExchange.originalUserId;
+        const originalUserName = await getUserDisplayName(originalUserId);
+        const interestedUserName = await getUserDisplayName(interestedUserId);
+        throw createExchangeValidationError(
+          'USER_ALREADY_HAS_EXCHANGE',
+          `${interestedUserName} a déjà obtenu une garde ${validatedExchange.shiftType} pour ce créneau (échange avec ${originalUserName}). ` +
+          `Veuillez d'abord annuler cet échange dans l'historique avant de valider celui-ci.`
+        );
+      }
+      
+      if (!recentGivenExchangeSnapshot.empty) {
+        const givenExchange = recentGivenExchangeSnapshot.docs[0].data();
+        const newUserId = givenExchange.newUserId;
+        const newUserName = await getUserDisplayName(newUserId);
+        const interestedUserName = await getUserDisplayName(interestedUserId);
+        throw createExchangeValidationError(
+          'USER_ALREADY_GAVE_SHIFT',
+          `${interestedUserName} a déjà donné sa garde sur ce créneau à ${newUserName}. ` +
+          `Veuillez d'abord annuler cet échange dans l'historique avant de valider celui-ci.`
         );
       }
 
@@ -161,6 +223,53 @@ export const validateShiftExchange = async (
             status: 'unavailable',
             lastModified: serverTimestamp()
           });
+        }
+      }
+      
+      // 8.5. Marquer l'utilisateur intéressé comme bloqué dans tous les autres échanges pour ce créneau - LECTURE puis ÉCRITURE
+      const otherExchangesQuery = query(
+        collection(db, COLLECTIONS.EXCHANGES),
+        where('date', '==', exchange.date),
+        where('period', '==', exchange.period),
+        where('status', '==', 'pending'),
+        where('interestedUsers', 'array-contains', interestedUserId)
+      );
+      
+      const otherExchangesSnapshot = await getDocs(otherExchangesQuery);
+      
+      // Stocker la liste des échanges où l'utilisateur a été marqué comme bloqué pour pouvoir les restaurer en cas d'annulation
+      const removedFromExchanges: string[] = [];
+      
+      if (!otherExchangesSnapshot.empty) {
+        console.log(`Marquage de ${interestedUserId} comme bloqué dans ${otherExchangesSnapshot.size} autres échanges sur ce créneau`);
+        
+        for (const doc of otherExchangesSnapshot.docs) {
+          if (doc.id !== exchangeId) {
+            const exchangeData = doc.data();
+            const currentBlockedUsers = exchangeData.blockedUsers || {};
+            
+            // Déterminer le type de garde obtenue pour l'afficher dans le message de blocage
+            const obtainedShiftType = originalAssignment?.shiftType || exchange.shiftType;
+            const originalUserName = await getUserDisplayName(exchange.userId);
+            
+            // Ajouter l'utilisateur aux utilisateurs bloqués avec la raison
+            currentBlockedUsers[interestedUserId] = {
+              reason: 'already_has_shift',
+              shiftType: obtainedShiftType,
+              exchangeWithUserId: exchange.userId,
+              exchangeWithUserName: originalUserName,
+              blockedAt: serverTimestamp(),
+              sourceExchangeId: exchangeId // Stocker l'ID de l'échange qui a causé le blocage
+            };
+            
+            transaction.update(doc.ref, {
+              blockedUsers: currentBlockedUsers,
+              lastModified: serverTimestamp()
+            });
+            
+            removedFromExchanges.push(doc.id);
+            console.log(`Utilisateur marqué comme bloqué dans l'échange ${doc.id}`);
+          }
         }
       }
       
@@ -292,7 +401,8 @@ export const validateShiftExchange = async (
         status: 'completed',
         originalExchangeId: exchangeId, // Stocker l'ID de l'échange d'origine
         originalUserPeriodId: originalUserPeriodId || null, // Stocker la période d'origine de l'utilisateur original
-        interestedUserPeriodId: interestedUserPeriodId || null // Stocker la période d'origine de l'utilisateur intéressé
+        interestedUserPeriodId: interestedUserPeriodId || null, // Stocker la période d'origine de l'utilisateur intéressé
+        removedFromExchanges: removedFromExchanges // Stocker la liste des échanges d'où l'utilisateur a été retiré
       });
       
       // 11. Mettre à jour l'échange comme validé - ÉCRITURE

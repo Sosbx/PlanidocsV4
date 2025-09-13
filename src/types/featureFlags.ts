@@ -36,7 +36,9 @@ export const FEATURES = {
 
 export type FeatureKey = typeof FEATURES[keyof typeof FEATURES];
 
-export const DEFAULT_FEATURES: Record<FeatureKey, Omit<FeatureFlag, 'id' | 'lastUpdated' | 'updatedBy'>> = {
+// Templates pour la création manuelle de nouveaux feature flags
+// Ces valeurs ne sont plus utilisées pour écraser les flags existants
+export const FEATURE_TEMPLATES: Record<FeatureKey, Omit<FeatureFlag, 'id' | 'lastUpdated' | 'updatedBy'>> = {
   [FEATURES.DESIDERATA]: {
     name: 'Desiderata',
     description: 'Saisir mes desiderata',

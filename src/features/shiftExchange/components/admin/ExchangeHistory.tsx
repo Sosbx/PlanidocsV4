@@ -8,15 +8,13 @@ interface ExchangeHistoryProps {
   users: User[];
   bagPhaseConfig: BagPhaseConfig;
   onRevertExchange: (historyId: string) => void;
-  onNotify: (historyId: string) => void;
 }
 
 const ExchangeHistoryComponent: React.FC<ExchangeHistoryProps> = ({
   history,
   users,
   bagPhaseConfig,
-  onRevertExchange,
-  onNotify
+  onRevertExchange
 }) => {
   return (
     <div className="bg-white shadow overflow-hidden sm:rounded-lg">
@@ -34,7 +32,6 @@ const ExchangeHistoryComponent: React.FC<ExchangeHistoryProps> = ({
           users={users}
           bagPhaseConfig={bagPhaseConfig}
           onRevertExchange={onRevertExchange}
-          onNotify={onNotify}
         />
       </div>
     </div>

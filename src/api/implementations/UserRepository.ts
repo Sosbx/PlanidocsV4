@@ -5,7 +5,7 @@
 import { User } from '@/features/users/types';
 import { IUserRepository } from '../interfaces/IUserRepository';
 import { BaseRepository } from './BaseRepository';
-import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import { getCollectionName } from '@/utils/collectionUtils';
 import { ensureUserRoles } from '@/features/users/utils/userUtils';

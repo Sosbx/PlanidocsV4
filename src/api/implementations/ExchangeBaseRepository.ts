@@ -5,13 +5,12 @@
 import { BaseRepository } from './BaseRepository';
 import { createParisDate, formatParisDate } from '@/utils/timezoneUtils';
 import { FirestoreDocument } from '@/types/firebase';
-import { ShiftAssignment } from '@/types/planning';
 import { ShiftPeriod } from '@/types/exchange';
-import { collection, query, where, getDocs, DocumentReference, DocumentData } from 'firebase/firestore';
+import { PlanningPeriodData } from '@/types/planning';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import { getCollectionName } from '@/utils/collectionUtils';
 import { normalizePeriod } from '@/utils/dateUtils';
-import { format } from 'date-fns';
 
 /**
  * Interface de base pour les documents d'échange
@@ -58,7 +57,7 @@ export abstract class ExchangeBaseRepository<T extends ExchangeDocument> extends
 
       // Vérifier dans la nouvelle structure (periods)
       if (planningData.periods) {
-        for (const periodData of Object.values(planningData.periods)) {
+        for (const periodData of Object.values(planningData.periods) as PlanningPeriodData[]) {
           const assignments = periodData.assignments || {};
           if (assignments[key]) {
             const assignment = assignments[key];

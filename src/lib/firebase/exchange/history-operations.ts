@@ -3,6 +3,7 @@ import { createParisDate } from '@/utils/timezoneUtils';
 import { db } from '../config';
 import { COLLECTIONS, createExchangeValidationError, ExchangeHistory, CacheEntry } from './types';
 import { findAssignmentInPlanning, removeAssignmentFromPlanningData, addAssignmentToPlanningData } from './planning-operations';
+import { recalculateBlockedUsersForSlot } from './blocked-users-operations';
 
 // Cache pour l'historique des échanges
 const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
@@ -44,8 +45,13 @@ export const getExchangeHistory = async (): Promise<ExchangeHistory[]> => {
           originalShiftType: data.originalShiftType || '',
           newShiftType: data.newShiftType || null,
           isPermutation: !!data.isPermutation,
-          status: 'completed', // Puisqu'on supprime les "reverted", on a que des "completed"
-          id: doc.id
+          status: data.status || 'completed',
+          id: doc.id,
+          rejectedBy: data.rejectedBy,
+          rejectedAt: data.rejectedAt,
+          removedFromExchanges: data.removedFromExchanges,
+          removedBy: data.removedBy,
+          removedUserId: data.removedUserId
         };
         return result;
       });
@@ -77,8 +83,13 @@ export const getExchangeHistory = async (): Promise<ExchangeHistory[]> => {
               originalShiftType: data.originalShiftType || '',
               newShiftType: data.newShiftType || null,
               isPermutation: !!data.isPermutation,
-              status: 'completed', // Puisqu'on supprime les "reverted", on a que des "completed"
-              id: doc.id
+              status: data.status || 'completed',
+              id: doc.id,
+              rejectedBy: data.rejectedBy,
+              rejectedAt: data.rejectedAt,
+              removedFromExchanges: data.removedFromExchanges,
+              removedBy: data.removedBy,
+              removedUserId: data.removedUserId
             };
             return result;
           })
@@ -181,13 +192,52 @@ export const revertToExchange = async (historyId: string): Promise<void> => {
       
       const unavailableExchangesSnapshot = await getDocs(unavailableExchangesQuery);
       
+      // 5. Préparer les lectures pour la restauration des intéressés
+      const exchangesToRestore: Array<{ref: any, data: any}> = [];
+      
+      if (history.removedFromExchanges && history.removedFromExchanges.length > 0) {
+        // Lire tous les échanges où l'utilisateur doit être restauré
+        for (const exchangeId of history.removedFromExchanges) {
+          const exchangeToUpdateRef = doc(db, COLLECTIONS.EXCHANGES, exchangeId);
+          const exchangeToUpdateDoc = await transaction.get(exchangeToUpdateRef);
+          
+          if (exchangeToUpdateDoc.exists()) {
+            exchangesToRestore.push({
+              ref: exchangeToUpdateRef,
+              data: exchangeToUpdateDoc.data()
+            });
+          }
+        }
+      } else {
+        // Fallback : lire tous les échanges du même créneau
+        const allExchangesQuery = query(
+          collection(db, COLLECTIONS.EXCHANGES),
+          where('date', '==', history.date),
+          where('period', '==', history.period),
+          where('status', '==', 'pending')
+        );
+        
+        const allExchangesSnapshot = await getDocs(allExchangesQuery);
+        
+        if (!allExchangesSnapshot.empty) {
+          for (const doc of allExchangesSnapshot.docs) {
+            if (doc.id !== history.originalExchangeId) {
+              exchangesToRestore.push({
+                ref: doc.ref,
+                data: doc.data()
+              });
+            }
+          }
+        }
+      }
+      
       // Extraire les données des plannings
       const originalUserPlanningData = originalUserPlanningDoc.exists() ? originalUserPlanningDoc.data() : { assignments: {}, periods: {} };
       const newUserPlanningData = newUserPlanningDoc.exists() ? newUserPlanningDoc.data() : { assignments: {}, periods: {} };
       
       // PARTIE 2: TOUTES LES ÉCRITURES
       
-      // 5. Restaurer les gardes
+      // 6. Restaurer les gardes
       const assignmentKey = `${history.date}-${history.period}`;
       
       // Vérifier si les gardes existent déjà pour éviter les duplications
@@ -325,7 +375,7 @@ export const revertToExchange = async (historyId: string): Promise<void> => {
         );
       }
       
-      // 6. Réactiver l'échange d'origine ou en créer un nouveau
+      // 7. Réactiver l'échange d'origine ou en créer un nouveau
       if (history.originalExchangeId && originalExchangeDoc && originalExchangeDoc.exists() && exchangeRef) {
         // Réactiver l'échange d'origine en conservant toutes les propriétés importantes
         console.log('Réactivation de l\'échange d\'origine:', history.originalExchangeId);
@@ -371,10 +421,10 @@ export const revertToExchange = async (historyId: string): Promise<void> => {
         });
       }
       
-      // 7. Supprimer l'entrée d'historique
+      // 8. Supprimer l'entrée d'historique
       transaction.delete(historyRef);
       
-      // 8. Réactiver les échanges désactivés
+      // 9. Réactiver les échanges désactivés
       if (!unavailableExchangesSnapshot.empty) {
         for (const doc of unavailableExchangesSnapshot.docs) {
           const exchangeData = doc.data();
@@ -386,14 +436,243 @@ export const revertToExchange = async (historyId: string): Promise<void> => {
           }
         }
       }
+      
+      // 10. Restaurer l'utilisateur dans les listes d'intéressés des autres échanges
+      // Utiliser les données préchargées
+      console.log(`Restauration de ${history.newUserId} dans ${exchangesToRestore.length} échanges`);
+      
+      for (const exchange of exchangesToRestore) {
+        const currentBlockedUsers = exchange.data.blockedUsers || {};
+        
+        // Retirer l'utilisateur de la liste des bloqués
+        if (currentBlockedUsers[history.newUserId]) {
+          console.log(`Retrait de ${history.newUserId} de la liste des bloqués de l'échange`);
+          
+          // Créer une copie de blockedUsers sans l'utilisateur
+          const updatedBlockedUsers = { ...currentBlockedUsers };
+          delete updatedBlockedUsers[history.newUserId];
+          
+          transaction.update(exchange.ref, {
+            blockedUsers: updatedBlockedUsers,
+            lastModified: serverTimestamp()
+          });
+        }
+      }
     });
     
     // Ajouter un délai après la transaction pour s'assurer que les modifications sont propagées
     await new Promise(resolve => setTimeout(resolve, 1000)); // Augmenté à 1000ms pour donner plus de temps
     
     console.log('Annulation de l\'échange terminée avec succès, délai de synchronisation appliqué');
+    
+    // Invalider le cache du blockedUsersManager avant le recalcul
+    const { blockedUsersManager } = await import('./blocked-users-manager');
+    blockedUsersManager.invalidateSlotCache(history.date, history.period);
+    console.log('Cache des utilisateurs bloqués invalidé pour', history.date, history.period);
+    
+    // Forcer l'invalidation du cache pour tous les utilisateurs affectés
+    // Cela déclenchera un recalcul des conflits dans useShiftExchangeCore
+    console.log('Invalidation du cache pour les utilisateurs affectés:', {
+      originalUserId: history.originalUserId,
+      newUserId: history.newUserId
+    });
+    
+    // Créer un événement personnalisé pour notifier les hooks React
+    // de la nécessité de rafraîchir leurs données
+    if (typeof window !== 'undefined') {
+      const event = new CustomEvent('bag-exchange-reverted', {
+        detail: {
+          date: history.date,
+          period: history.period,
+          affectedUsers: [history.originalUserId, history.newUserId]
+        }
+      });
+      window.dispatchEvent(event);
+    }
+    
+    // Recalculer les utilisateurs bloqués pour ce créneau
+    try {
+      console.log('Recalcul des utilisateurs bloqués après annulation...');
+      await recalculateBlockedUsersForSlot(history.date, history.period);
+      console.log('Recalcul des utilisateurs bloqués terminé');
+    } catch (recalcError) {
+      console.error('Erreur lors du recalcul des utilisateurs bloqués:', recalcError);
+      // Ne pas bloquer l'annulation si le recalcul échoue
+    }
+    
+    // Ajouter un délai supplémentaire pour permettre aux listeners Firebase
+    // de se synchroniser complètement
+    await new Promise(resolve => setTimeout(resolve, 500));
   } catch (error) {
     console.error('Error reverting exchange:', error);
+    throw error;
+  }
+};
+
+/**
+ * Restaure un échange rejeté
+ * @param historyId ID de l'historique de l'échange rejeté
+ * @throws Error si la restauration échoue
+ */
+export const restoreRejectedExchange = async (historyId: string): Promise<void> => {
+  try {
+    await runTransaction(db, async (transaction) => {
+      // Récupérer l'historique
+      const historyRef = doc(db, COLLECTIONS.HISTORY, historyId);
+      const historyDoc = await transaction.get(historyRef);
+      
+      if (!historyDoc.exists()) {
+        throw createExchangeValidationError(
+          'INVALID_EXCHANGE',
+          'Historique de l\'échange non trouvé'
+        );
+      }
+      
+      const history = historyDoc.data() as ExchangeHistory;
+      
+      if (history.status !== 'rejected') {
+        throw createExchangeValidationError(
+          'INVALID_EXCHANGE',
+          'Cet échange n\'est pas un échange rejeté'
+        );
+      }
+      
+      console.log('Restauration de l\'échange rejeté:', {
+        historyId,
+        originalUserId: history.originalUserId,
+        date: history.date,
+        period: history.period,
+        shiftType: history.shiftType
+      });
+      
+      // Vérifier si l'échange original existe toujours
+      if (history.originalExchangeId) {
+        const exchangeRef = doc(db, COLLECTIONS.EXCHANGES, history.originalExchangeId);
+        const exchangeDoc = await transaction.get(exchangeRef);
+        
+        if (exchangeDoc.exists()) {
+          // Restaurer l'échange au statut 'pending'
+          transaction.update(exchangeRef, {
+            status: 'pending',
+            lastModified: serverTimestamp()
+          });
+        } else {
+          // Recréer l'échange s'il n'existe plus
+          const newExchangeRef = doc(collection(db, COLLECTIONS.EXCHANGES));
+          transaction.set(newExchangeRef, {
+            userId: history.originalUserId,
+            date: history.date,
+            period: history.period,
+            shiftType: history.shiftType,
+            timeSlot: history.timeSlot,
+            comment: history.comment || '',
+            createdAt: history.createdAt || serverTimestamp(),
+            lastModified: serverTimestamp(),
+            status: 'pending',
+            interestedUsers: history.interestedUsers || [],
+            operationTypes: ['exchange'],
+            exchangeType: 'bag'
+          });
+        }
+      }
+      
+      // Supprimer l'entrée d'historique
+      transaction.delete(historyRef);
+    });
+    
+    console.log('Échange rejeté restauré avec succès');
+  } catch (error) {
+    console.error('Error restoring rejected exchange:', error);
+    throw error;
+  }
+};
+
+/**
+ * Restaure un retrait d'intérêt (remet l'utilisateur dans la liste des intéressés)
+ * @param historyId ID de l'historique du retrait d'intérêt
+ * @throws Error si la restauration échoue
+ */
+export const restoreInterestRemoval = async (historyId: string): Promise<void> => {
+  try {
+    await runTransaction(db, async (transaction) => {
+      // Récupérer l'historique
+      const historyRef = doc(db, COLLECTIONS.HISTORY, historyId);
+      const historyDoc = await transaction.get(historyRef);
+      
+      if (!historyDoc.exists()) {
+        throw createExchangeValidationError(
+          'INVALID_EXCHANGE',
+          'Historique du retrait non trouvé'
+        );
+      }
+      
+      const history = historyDoc.data() as ExchangeHistory;
+      
+      if (history.status !== 'interest_removed') {
+        throw createExchangeValidationError(
+          'INVALID_EXCHANGE',
+          'Cet historique n\'est pas un retrait d\'intérêt'
+        );
+      }
+      
+      if (!history.removedUserId || !history.originalExchangeId) {
+        throw createExchangeValidationError(
+          'INVALID_EXCHANGE',
+          'Informations de retrait incomplètes'
+        );
+      }
+      
+      console.log('Restauration du retrait d\'intérêt:', {
+        historyId,
+        exchangeId: history.originalExchangeId,
+        removedUserId: history.removedUserId,
+        date: history.date,
+        period: history.period
+      });
+      
+      // Vérifier si l'échange existe toujours
+      const exchangeRef = doc(db, COLLECTIONS.EXCHANGES, history.originalExchangeId);
+      const exchangeDoc = await transaction.get(exchangeRef);
+      
+      if (!exchangeDoc.exists()) {
+        throw createExchangeValidationError(
+          'INVALID_EXCHANGE',
+          'L\'échange original n\'existe plus'
+        );
+      }
+      
+      const exchange = exchangeDoc.data();
+      
+      if (exchange.status !== 'pending') {
+        throw createExchangeValidationError(
+          'INVALID_EXCHANGE',
+          'L\'échange n\'est plus en attente'
+        );
+      }
+      
+      const currentInterestedUsers = exchange.interestedUsers || [];
+      
+      // Vérifier que l'utilisateur n'est pas déjà dans la liste
+      if (currentInterestedUsers.includes(history.removedUserId)) {
+        throw createExchangeValidationError(
+          'INVALID_EXCHANGE',
+          'L\'utilisateur est déjà dans la liste des intéressés'
+        );
+      }
+      
+      // Remettre l'utilisateur dans la liste des intéressés
+      transaction.update(exchangeRef, {
+        interestedUsers: [...currentInterestedUsers, history.removedUserId],
+        lastModified: serverTimestamp()
+      });
+      
+      // Supprimer l'entrée d'historique
+      transaction.delete(historyRef);
+    });
+    
+    console.log('Retrait d\'intérêt restauré avec succès');
+  } catch (error) {
+    console.error('Error restoring interest removal:', error);
     throw error;
   }
 };

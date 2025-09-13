@@ -13,6 +13,11 @@ interface FeatureFlagsContextType {
   updateFeatureFlag: (update: FeatureFlagUpdate) => Promise<void>;
   canAccessFeature: (featureKey: FeatureKey, userRoles?: string[]) => boolean;
   isSuperAdmin: boolean;
+  hasUnauthorizedChanges: boolean;
+  getFeatureDiagnostics: (featureKey: FeatureKey) => {
+    updatedBy: string;
+    lastUpdated: Date;
+  } | null;
 }
 
 const FeatureFlagsContext = createContext<FeatureFlagsContextType | undefined>(undefined);
@@ -20,6 +25,8 @@ const FeatureFlagsContext = createContext<FeatureFlagsContextType | undefined>(u
 export const FeatureFlagsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [featureFlags, setFeatureFlags] = useState<FeatureFlag[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasUnauthorizedChanges, setHasUnauthorizedChanges] = useState(false);
+  const [lastKnownFlags, setLastKnownFlags] = useState<Map<string, FeatureFlag>>(new Map());
   const { currentAssociation } = useAssociation();
   const { user } = useAuth();
   const { isSuperAdminMode } = useSuperAdmin();
@@ -30,11 +37,30 @@ export const FeatureFlagsProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const initializeAndSubscribe = async () => {
       setLoading(true);
       
-      // Initialize default feature flags if needed
-      await featureFlagsService.initializeFeatureFlags();
+      // Plus besoin d'initialiser car les flags sont gérés manuellement
       
       // Subscribe to feature flags changes
       const unsubscribe = featureFlagsService.subscribeToFeatureFlags((flags) => {
+        // Détecter les changements non autorisés
+        if (lastKnownFlags.size > 0) {
+          flags.forEach(flag => {
+            const lastKnown = lastKnownFlags.get(flag.id);
+            if (lastKnown) {
+              // Vérifier si un flag a été modifié par quelqu'un d'autre
+              if ((lastKnown.status.RD !== flag.status.RD || lastKnown.status.RG !== flag.status.RG) && 
+                  flag.updatedBy !== user?.email) {
+                console.warn(`[FeatureFlags] Changement externe détecté pour ${flag.id} par ${flag.updatedBy}`);
+                setHasUnauthorizedChanges(true);
+              }
+            }
+          });
+        }
+        
+        // Mettre à jour le cache local
+        const newLastKnown = new Map<string, FeatureFlag>();
+        flags.forEach(flag => newLastKnown.set(flag.id, flag));
+        setLastKnownFlags(newLastKnown);
+        
         setFeatureFlags(flags);
         setLoading(false);
       });
@@ -95,6 +121,16 @@ export const FeatureFlagsProvider: React.FC<{ children: React.ReactNode }> = ({ 
     await featureFlagsService.updateFeatureFlag(update, user.email || 'unknown');
   }, [user]);
 
+  const getFeatureDiagnostics = useCallback((featureKey: FeatureKey) => {
+    const feature = featureFlags.find(f => f.id === featureKey);
+    if (!feature) return null;
+    
+    return {
+      updatedBy: feature.updatedBy,
+      lastUpdated: feature.lastUpdated
+    };
+  }, [featureFlags]);
+
   const value: FeatureFlagsContextType = {
     featureFlags,
     loading,
@@ -102,7 +138,9 @@ export const FeatureFlagsProvider: React.FC<{ children: React.ReactNode }> = ({ 
     getFeatureStatus,
     updateFeatureFlag,
     canAccessFeature,
-    isSuperAdmin
+    isSuperAdmin,
+    hasUnauthorizedChanges,
+    getFeatureDiagnostics
   };
 
   return (

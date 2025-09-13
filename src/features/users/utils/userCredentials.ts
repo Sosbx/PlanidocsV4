@@ -111,7 +111,7 @@ export const generateCredentials = async (data: { email: string } | ExternalUser
       const { firstName, lastName, email } = data;
       
       // Valider l'email avec le schema externe
-      externalEmailSchema.parseParisDate(email);
+      externalEmailSchema.parse(email);
       
       // Générer le login de base
       const baseLogin = lastName.slice(0, 4).toUpperCase();
@@ -140,7 +140,7 @@ export const generateCredentials = async (data: { email: string } | ExternalUser
     }
 
     // Pour les utilisateurs H24
-    const validatedEmail = h24EmailSchema.parseParisDate(email);
+    const validatedEmail = h24EmailSchema.parse(email);
     const [firstName, lastName] = validatedEmail
       .split('@')[0]
       .split('.');

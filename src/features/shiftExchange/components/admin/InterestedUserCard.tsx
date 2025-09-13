@@ -8,6 +8,7 @@ import type { ShiftExchange as FeatureShiftExchange } from '../../../../features
 type ShiftExchange = PlanningShiftExchange | FeatureShiftExchange;
 import type { User } from '../../../../features/auth/types';
 import { ConfirmationModal } from '../../../../components/modals';
+import { calculateSuccessRate } from '../../../../utils/bagStatistics';
 import '../../../../styles/BadgeStyles.css';
 
 interface InterestedUserCardProps {
@@ -22,6 +23,15 @@ interface InterestedUserCardProps {
   onRemoveUser: (exchangeId: string, userId: string) => void;
   exchanges?: ShiftExchange[];
   history?: any[];
+  isBlocked?: boolean;
+  blockReason?: {
+    reason: 'already_has_shift' | 'invalid_permutation' | 'dependency_broken';
+    shiftType: string;
+    exchangeWithUserId: string;
+    exchangeWithUserName: string;
+    sourceExchangeId?: string;
+    dependsOn?: string[];
+  };
 }
 
 const InterestedUserCard: React.FC<InterestedUserCardProps> = ({
@@ -36,6 +46,8 @@ const InterestedUserCard: React.FC<InterestedUserCardProps> = ({
   onRemoveUser,
   exchanges = [],
   history = [],
+  isBlocked = false,
+  blockReason,
 }) => {
   const [showValidateConfirmation, setShowValidateConfirmation] = useState(false);
 
@@ -100,7 +112,7 @@ const InterestedUserCard: React.FC<InterestedUserCardProps> = ({
   }
 
   // Calculer le pourcentage de gardes reçues par rapport à celles où l'utilisateur s'est positionné
-  const calculateSuccessRate = () => {
+  const getSuccessRate = () => {
     if (!history || !exchanges) return null;
     
     const positionedCount = exchanges.filter(e => e.interestedUsers?.includes(userId)).length;
@@ -108,10 +120,10 @@ const InterestedUserCard: React.FC<InterestedUserCardProps> = ({
     
     if (positionedCount === 0) return null;
     
-    return Math.round((receivedCount / positionedCount) * 100);
+    return calculateSuccessRate(receivedCount, positionedCount);
   };
   
-  const successRate = calculateSuccessRate();
+  const successRate = getSuccessRate();
 
   const handleValidateClick = () => {
     if (isAlreadyInExchange) {
@@ -129,7 +141,9 @@ const InterestedUserCard: React.FC<InterestedUserCardProps> = ({
   return (
     <>
     <div className={`flex items-center justify-between p-1.5 border rounded-lg ${
-      exchange.status === 'unavailable'
+      isBlocked
+        ? 'border-gray-300 bg-gray-100 opacity-60'
+        : exchange.status === 'unavailable'
         ? 'border-red-300 bg-red-50'
         : hasConflict 
         ? 'border-red-200 bg-red-50'
@@ -138,7 +152,9 @@ const InterestedUserCard: React.FC<InterestedUserCardProps> = ({
         : 'border-green-200 bg-green-50'
     }`}>
       <div className="flex items-center">
-        {hasConflict ? (
+        {isBlocked ? (
+          <AlertTriangle className="h-4 w-4 text-gray-500 mr-2" />
+        ) : hasConflict ? (
           <AlertTriangle className="h-4 w-4 text-red-500 mr-2" />
         ) : isAlreadyInExchange ? (
           <AlertTriangle className="h-4 w-4 text-orange-500 mr-2" />
@@ -178,6 +194,16 @@ const InterestedUserCard: React.FC<InterestedUserCardProps> = ({
               {conflictShiftTypes?.[exchange.id]?.[userId] || userAssignment?.shiftType || 'Garde inconnue'}
             </span>
           )}
+          {isBlocked && blockReason && (
+            <span className="text-xs text-gray-600 mt-1">
+              {blockReason.reason === 'already_has_shift' && 
+                `A déjà obtenu ${blockReason.shiftType} avec ${blockReason.exchangeWithUserName}`}
+              {blockReason.reason === 'invalid_permutation' && 
+                `Permutation invalide - ${blockReason.exchangeWithUserName} n'a plus ${blockReason.shiftType}`}
+              {blockReason.reason === 'dependency_broken' && 
+                `Échange dépendant annulé`}
+            </span>
+          )}
         </div>
       </div>
       <div className="flex items-center gap-2">
@@ -185,26 +211,26 @@ const InterestedUserCard: React.FC<InterestedUserCardProps> = ({
           <button
             onClick={() => onRemoveUser(exchange.id, userId)}
             className={`p-1 border rounded-full transition-all ${
-              bagPhaseConfig.phase !== 'distribution'
+              bagPhaseConfig.phase !== 'distribution' || isBlocked
                 ? 'text-gray-300 bg-gray-50 cursor-not-allowed'
                 : 'text-gray-500 hover:text-red-600 bg-white hover:bg-red-50 border-gray-300 hover:border-red-300'
             }`}
-            disabled={bagPhaseConfig.phase !== 'distribution'}
-            title="Annuler cet intérêt"
+            disabled={bagPhaseConfig.phase !== 'distribution' || isBlocked}
+            title={isBlocked ? "Utilisateur bloqué" : "Annuler cet intérêt"}
           >
             <X className="h-4 w-4" />
           </button>
           <button
             onClick={handleValidateClick}
             className={`p-1 rounded-full border transition-all ${
-              bagPhaseConfig.phase !== 'distribution'
+              bagPhaseConfig.phase !== 'distribution' || isBlocked
                 ? 'text-gray-300 bg-gray-50 cursor-not-allowed'
                 : hasConflict
                   ? 'text-red-600 hover:text-white bg-white hover:bg-red-600 border-red-300 hover:border-red-600'
                   : 'text-green-600 hover:text-white bg-white hover:bg-green-600 border-green-300 hover:border-green-600'
             }`}
-            disabled={bagPhaseConfig.phase !== 'distribution'}
-            title={hasConflict ? "Échanger malgré le conflit" : "Échanger la garde"}
+            disabled={bagPhaseConfig.phase !== 'distribution' || isBlocked}
+            title={isBlocked ? "Utilisateur bloqué" : hasConflict ? "Échanger malgré le conflit" : "Échanger la garde"}
           >
             <ArrowLeftRight className="h-4 w-4" />
           </button>

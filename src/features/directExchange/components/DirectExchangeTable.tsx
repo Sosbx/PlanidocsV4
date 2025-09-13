@@ -713,6 +713,6 @@ const DirectExchangeTable: React.FC<DirectExchangeTableProps> = memo(({
       </table>
     </div>
   );
-};
+});
 
 export default DirectExchangeTable;

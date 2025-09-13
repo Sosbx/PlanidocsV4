@@ -154,8 +154,10 @@ const fetchPlanningsForPeriod = async (
     usersSnapshot.forEach((doc) => {
       const userData = doc.data() as User;
       if (userData && userData.lastName) {
-        userCache.set(doc.id, userData.lastName.toUpperCase());
-        console.log(`Utilisateur trouvé: ${doc.id} -> ${userData.lastName}`);
+        // N'extraire que le premier mot du nom pour les noms composés
+        const firstWordOfLastName = userData.lastName.split(' ')[0].toUpperCase();
+        userCache.set(doc.id, firstWordOfLastName);
+        console.log(`Utilisateur trouvé: ${doc.id} -> ${firstWordOfLastName}`);
       }
     });
     
@@ -240,7 +242,8 @@ const generateLogContent = (
         
         // Prendre le médecin correspondant à cette ligne numérotée (postNum - 1 car index commence à 0)
         const assignment = assignmentsForType[postNum - 1];
-        const doctorName = assignment?.userName?.toUpperCase() || '';
+        // Extraire uniquement le premier mot du nom pour les noms composés
+        const doctorName = assignment?.userName?.split(' ')[0].toUpperCase() || '';
         
         // Ajouter la ligne avec le format exact : + TAB date TAB nom TAB poste
         lines.push(`+\t${dateStr}\t${doctorName}\t${postCode}`);

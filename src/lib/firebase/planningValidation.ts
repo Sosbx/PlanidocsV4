@@ -5,6 +5,7 @@ import { finalizeAllExchanges } from './exchange';
 import { addDirectExchange } from './directExchange';
 import { ShiftExchange } from '../../types/planning';
 import { ShiftPeriod } from '../../types/exchange';
+import { getPlanningPeriods, updatePlanningPeriod } from './planning';
 
 /**
  * Valide le planning de la bourse aux gardes après la phase 3
@@ -81,7 +82,10 @@ export const validateBagPlanning = async (): Promise<void> => {
         });
       }
       
-      // 6.3 Finaliser tous les échanges en attente
+      // 6.3 NE PAS finaliser les échanges en attente en phase distribution
+      // Les gardes doivent rester en statut 'pending' pour être modifiables
+      // Seules les gardes réellement échangées doivent avoir le statut 'unavailable'
+      /*
       pendingExchangesSnapshot.docs.forEach(docSnapshot => {
         transaction.update(docSnapshot.ref, {
           status: 'unavailable',
@@ -89,6 +93,7 @@ export const validateBagPlanning = async (): Promise<void> => {
           finalizedAt: serverTimestamp()
         });
       });
+      */
       
       // 6.4 Créer des échanges directs pour les gardes finalisées qui sont dans la période courante
       if (currentPeriod) {
@@ -129,6 +134,31 @@ export const validateBagPlanning = async (): Promise<void> => {
         }
       }
     });
+    
+    // 7. Mettre à jour le statut de la période de planning de 'future' à 'active'
+    try {
+      const periods = await getPlanningPeriods();
+      const futurePeriod = periods.find(p => p.status === 'future' && p.bagPhase === 'completed');
+      
+      if (futurePeriod) {
+        await updatePlanningPeriod(futurePeriod.id, {
+          status: 'active',
+          isValidated: true,
+          validatedAt: createParisDate()
+        });
+        
+        // Archiver l'ancienne période active
+        const activePeriod = periods.find(p => p.status === 'active' && p.id !== futurePeriod.id);
+        if (activePeriod) {
+          await updatePlanningPeriod(activePeriod.id, {
+            status: 'archived'
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error updating planning periods status:', error);
+      // Ne pas bloquer la validation si la mise à jour des périodes échoue
+    }
     
     console.log('Planning validé avec succès');
     

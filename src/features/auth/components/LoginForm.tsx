@@ -188,6 +188,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, onGoogleSignIn, error, 
                     type="button"
                     onClick={onGoogleSignIn}
                     disabled={isLoading || loginSuccess}
+                    data-google-signin="true"
                     className={`w-full flex items-center justify-center gap-3 py-3.5 px-4 border-2 border-blue-400 rounded-lg shadow-lg text-base font-medium text-gray-700 bg-white
                       ${isLoading || loginSuccess
                         ? 'opacity-75 cursor-not-allowed' 

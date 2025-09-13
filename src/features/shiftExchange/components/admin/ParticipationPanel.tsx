@@ -5,6 +5,7 @@ import { fr } from 'date-fns/locale';
 import type { ShiftExchange as PlanningShiftExchange } from '../../../../types/planning';
 import type { ShiftExchange as FeatureShiftExchange } from '../../types';
 import type { User } from '../../../../types/users';
+import { calculateSuccessRate, calculatePercentage } from '../../../../utils/bagStatistics';
 
 // Type union pour accepter les deux types de ShiftExchange
 type ShiftExchange = PlanningShiftExchange | FeatureShiftExchange;
@@ -52,7 +53,13 @@ const ParticipationPanel: React.FC<ParticipationPanelProps> = ({
   const userStats = useMemo(() => {
     try {
       const stats: Record<string, UserStats> = {};
-      const totalPositions = safeExchanges.length;
+      
+      // Calculer le total des postes en incluant l'historique des gardes complétées
+      // pour avoir un total constant qui ne diminue pas après attribution
+      const completedPositionsCount = safeHistory.filter(h => 
+        h.status === 'completed' && h.originalExchangeId
+      ).length;
+      const totalPositions = safeExchanges.length + completedPositionsCount;
 
       // Si pas de données utilisateurs, retourner un tableau vide
       if (safeUsers.length === 0) {
@@ -72,10 +79,22 @@ const ParticipationPanel: React.FC<ParticipationPanelProps> = ({
         };
       });
 
-      // Compter les intérêts
+      // Compter les intérêts actuels (gardes non attribuées)
       safeExchanges.forEach(exchange => {
         if (exchange && exchange.interestedUsers && Array.isArray(exchange.interestedUsers)) {
           exchange.interestedUsers.forEach(userId => {
+            if (stats[userId]) {
+              stats[userId].interestCount++;
+            }
+          });
+        }
+      });
+      
+      // Compter aussi les intérêts passés pour les gardes déjà attribuées
+      safeHistory.forEach(h => {
+        if (h && h.status === 'completed' && h.interestedUsers && Array.isArray(h.interestedUsers)) {
+          // Pour chaque utilisateur qui était intéressé par cette garde
+          h.interestedUsers.forEach(userId => {
             if (stats[userId]) {
               stats[userId].interestCount++;
             }
@@ -86,7 +105,7 @@ const ParticipationPanel: React.FC<ParticipationPanelProps> = ({
       // Compter les postes reçus (avec déduplication)
       const processedHistoryIds = new Set<string>();
       safeHistory.forEach(h => {
-        if (h && h.newUserId && stats[h.newUserId]) {
+        if (h && h.newUserId && stats[h.newUserId] && h.status === 'completed') {
           // Éviter les doublons basés sur la combinaison date-period-userId
           const uniqueKey = `${h.date}-${h.period}-${h.newUserId}`;
           if (!processedHistoryIds.has(uniqueKey)) {
@@ -98,26 +117,10 @@ const ParticipationPanel: React.FC<ParticipationPanelProps> = ({
 
       // Calculer les taux avec validation
       Object.values(stats).forEach(stat => {
-        stat.interestRate = totalPositions > 0 
-          ? Math.round((stat.interestCount / totalPositions) * 100) 
-          : 0;
+        stat.interestRate = calculatePercentage(stat.interestCount, totalPositions);
         
         // Calculer le taux d'attribution avec plafonnement à 100%
-        const rawAttributionRate = stat.interestCount > 0 
-          ? (stat.receivedCount / stat.interestCount) * 100
-          : 0;
-        
-        // Log pour débogage si le taux dépasse 100%
-        if (rawAttributionRate > 100) {
-          console.warn(`Taux d'attribution anormal pour ${stat.userName}:`, {
-            receivedCount: stat.receivedCount,
-            interestCount: stat.interestCount,
-            calculatedRate: rawAttributionRate
-          });
-        }
-        
-        // Plafonner à 100% maximum
-        stat.attributionRate = Math.min(100, Math.round(rawAttributionRate));
+        stat.attributionRate = calculateSuccessRate(stat.receivedCount, stat.interestCount);
       });
 
       // Filtrer uniquement les utilisateurs qui ont au moins manifesté un intérêt
@@ -189,33 +192,50 @@ const ParticipationPanel: React.FC<ParticipationPanelProps> = ({
 
   // Fonction pour récupérer les détails des gardes d'un utilisateur
   const getUserExchangeDetails = (userId: string) => {
-    const userExchanges = safeExchanges
+    // Récupérer les échanges actifs où l'utilisateur est intéressé
+    const activeExchanges = safeExchanges
       .filter(exchange => exchange.interestedUsers?.includes(userId))
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    
-    // Log temporaire pour debug
-    if (userExchanges.length > 0) {
-      console.log(`Détails pour ${userId}:`, {
-        exchanges: userExchanges.slice(0, 3), // Premiers échanges
-        history: safeHistory.filter(h => h.newUserId === userId).slice(0, 3) // Historique correspondant
-      });
-    }
-    
-    return userExchanges.map(exchange => ({
+      .map(exchange => ({
         id: exchange.id,
         date: exchange.date,
         period: exchange.period,
         shiftType: exchange.shiftType,
-        isAttributed: safeHistory.some(h => 
-          // Vérifier par originalExchangeId (méthode moderne)
-          (h.originalExchangeId === exchange.id && h.newUserId === userId) ||
-          // OU vérifier par correspondance date/période/utilisateurs (pour les anciennes données)
-          (h.date === exchange.date && 
-           h.period === exchange.period && 
-           h.originalUserId === exchange.userId && 
-           h.newUserId === userId)
-        )
+        isAttributed: false,
+        isActive: true
       }));
+    
+    // Récupérer les gardes de l'historique où l'utilisateur était intéressé
+    const historicalExchanges = safeHistory
+      .filter(h => {
+        // Inclure si l'utilisateur était dans la liste des intéressés
+        return h.interestedUsers?.includes(userId) || 
+               // OU s'il a reçu la garde
+               h.newUserId === userId;
+      })
+      .map(h => ({
+        id: h.originalExchangeId || h.id,
+        date: h.date,
+        period: h.period,
+        shiftType: h.shiftType,
+        isAttributed: h.newUserId === userId && h.status === 'completed',
+        isActive: false,
+        status: h.status
+      }));
+    
+    // Combiner et trier par date
+    const allExchanges = [...activeExchanges, ...historicalExchanges]
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    
+    // Dédupliquer en gardant la version la plus récente (historique prévaut sur actif)
+    const uniqueExchanges = new Map();
+    allExchanges.forEach(exchange => {
+      const key = `${exchange.date}-${exchange.period}-${exchange.shiftType}`;
+      if (!uniqueExchanges.has(key) || !exchange.isActive) {
+        uniqueExchanges.set(key, exchange);
+      }
+    });
+    
+    return Array.from(uniqueExchanges.values());
   };
 
   // Helper pour obtenir la couleur de la période
@@ -284,7 +304,7 @@ const ParticipationPanel: React.FC<ParticipationPanelProps> = ({
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div>
                   <span className="text-gray-600">Total postes BAG:</span>
-                  <span className="font-semibold ml-1">{safeExchanges.length}</span>
+                  <span className="font-semibold ml-1">{safeExchanges.length + safeHistory.filter(h => h.status === 'completed' && h.originalExchangeId).length}</span>
                 </div>
                 <div>
                   <span className="text-gray-600">Médecins actifs:</span>
@@ -356,7 +376,7 @@ const ParticipationPanel: React.FC<ParticipationPanelProps> = ({
                               {stat.interestRate}%
                             </span>
                             <span className="text-xs text-gray-600">
-                              ({stat.interestCount}/{safeExchanges.length})
+                              ({stat.interestCount}/{safeExchanges.length + safeHistory.filter(h => h.status === 'completed' && h.originalExchangeId).length})
                             </span>
                           </div>
                         </td>

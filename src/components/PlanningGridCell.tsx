@@ -35,7 +35,7 @@ interface PlanningGridCellProps {
   userId?: string;
   isGrayedOut: boolean;
   period: 'M' | 'AM' | 'S';
-  bagPhaseConfig: { phase: 'submission' | 'distribution' | 'completed' };
+  bagPhaseConfig: { phase: 'submission' | 'distribution' | 'completed'; isValidated?: boolean };
   isAdminView?: boolean;
   onCellClick: (event: React.MouseEvent, cellKey: string, assignment: ShiftAssignment) => void;
 }
@@ -195,7 +195,8 @@ const PlanningGridCell: React.FC<PlanningGridCellProps> = React.memo(({
       isReceivedShift,
       isReceivedPermutation,
       userId,
-      bagPhase: bagPhaseConfig.phase
+      bagPhase: bagPhaseConfig.phase,
+      isValidated: bagPhaseConfig.isValidated
     });
     
     // Collecter toutes les classes supplémentaires

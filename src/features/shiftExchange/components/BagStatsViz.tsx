@@ -5,6 +5,7 @@ import { db } from "../../../lib/firebase/config";
 import type { ExchangeHistory } from '../types';
 import type { ShiftExchange as FeatureShiftExchange } from '../types';
 import type { ShiftExchange as PlanningShiftExchange } from '../../../types/planning';
+import { calculatePercentage, calculateSuccessRate, calculateUserStats } from '../../../utils/bagStatistics';
 
 // Type union pour accepter les deux types de ShiftExchange
 type ShiftExchange = FeatureShiftExchange | PlanningShiftExchange;
@@ -92,7 +93,7 @@ const BagStatsViz: React.FC<BagStatsVizProps> = ({ users, exchanges, history, cl
     }
   }, [users, exchanges, history]);
 
-  // Préparation des données pour le tableau
+  // Utiliser les fonctions centralisées pour calculer les stats
   const statsData = useMemo(() => {
     console.log('BagStatsViz - Calcul des stats:', {
       usersCount: users?.length || 0,
@@ -107,76 +108,33 @@ const BagStatsViz: React.FC<BagStatsVizProps> = ({ users, exchanges, history, cl
     const userStats = users
       .filter(user => user.roles.isUser) // Seulement les utilisateurs (pas les admin)
       .map(user => {
-        // Compter les gardes proposées par cet utilisateur
-        const proposedTotal = exchanges.filter(ex => ex.userId === user.id).length;
-        
-        // Compter les gardes où l'utilisateur s'est positionné
-        const positionedTotal = exchanges.filter(ex => 
-          ex.interestedUsers?.includes(user.id)
-        ).length;
-        
-        // Compter les gardes récupérées (où il est le newUserId)
-        const receivedTotal = history.filter(ex => ex.newUserId === user.id).length;
-        
-        // Compter les gardes données (où il est le originalUserId)
-        const givenTotal = history.filter(ex => ex.originalUserId === user.id).length;
-        
-        // Log pour débogage si les valeurs semblent anormales
-        if (user.lastName === 'DEMO' || receivedTotal > positionedTotal) {
-          console.log(`Stats pour ${user.lastName}:`, {
-            proposedTotal,
-            positionedTotal,
-            receivedTotal,
-            givenTotal,
-            exchanges: exchanges.filter(ex => ex.userId === user.id),
-            positioned: exchanges.filter(ex => ex.interestedUsers?.includes(user.id)),
-            received: history.filter(ex => ex.newUserId === user.id)
-          });
-        }
+        // Utiliser calculateUserStats pour obtenir toutes les stats
+        const stats = calculateUserStats(user.id, exchanges, history);
 
-        // Compter par période
-        const proposedByPeriod = {
-          M: exchanges.filter(ex => ex.userId === user.id && ex.period === 'M').length,
-          AM: exchanges.filter(ex => ex.userId === user.id && ex.period === 'AM').length,
-          S: exchanges.filter(ex => ex.userId === user.id && ex.period === 'S').length
-        };
-
-        // Compter les gardes récupérées par période
-        const receivedByPeriod = {
-          M: history.filter(ex => ex.newUserId === user.id && ex.period === 'M').length,
-          AM: history.filter(ex => ex.newUserId === user.id && ex.period === 'AM').length,
-          S: history.filter(ex => ex.newUserId === user.id && ex.period === 'S').length
-        };
-
-        // Compter les gardes durant le weekend ou jour férié
-        const weekendOrHoliday = history.filter(ex => {
-          const date = new Date(ex.date);
-          return isGrayedOut(date) && (ex.originalUserId === user.id || ex.newUserId === user.id);
-        }).length;
-
-        // Calculer des pourcentages
-        const totalActions = proposedTotal + positionedTotal + receivedTotal;
-        const proposedPercent = totalActions > 0 ? Math.round((proposedTotal / totalActions) * 100) : 0;
-        const positionedPercent = totalActions > 0 ? Math.round((positionedTotal / totalActions) * 100) : 0;
-        const receivedPercent = totalActions > 0 ? Math.round((receivedTotal / totalActions) * 100) : 0;
+        // Calculer des pourcentages pour l'affichage
+        const totalActions = stats.proposedCount + stats.positionedCount + stats.receivedCount;
+        const proposedPercent = calculatePercentage(stats.proposedCount, totalActions);
+        const positionedPercent = calculatePercentage(stats.positionedCount, totalActions);
+        const receivedPercent = calculatePercentage(stats.receivedCount, totalActions);
         
-        // Calculer l'équilibre entre gardes données et reçues
-        const balance = receivedTotal - givenTotal;
+        // Calculer l'équilibre
+        const balance = stats.receivedCount - stats.givenCount;
 
         return {
           id: user.id,
           name: `${user.lastName} ${user.firstName}`,
-          proposedTotal,
-          positionedTotal,
-          receivedTotal,
-          givenTotal,
-          proposedByPeriod,
-          receivedByPeriod,
-          weekendOrHoliday,
+          proposedTotal: stats.proposedCount,
+          positionedTotal: stats.positionedCount,
+          receivedTotal: stats.receivedCount,
+          givenTotal: stats.givenCount,
+          proposedByPeriod: stats.proposedByPeriod,
+          receivedByPeriod: stats.receivedByPeriod,
+          weekendOrHoliday: stats.weekendHolidayCount,
           proposedPercent,
           positionedPercent,
           receivedPercent,
-          balance
+          balance,
+          successRate: stats.successRate
         };
       })
       // Tri par nom
@@ -215,9 +173,9 @@ const BagStatsViz: React.FC<BagStatsVizProps> = ({ users, exchanges, history, cl
     
     // Calculer les pourcentages globaux
     const totalActions = totalProposed + totalPositioned + totalReceived;
-    const proposedPercent = totalActions > 0 ? Math.round((totalProposed / totalActions) * 100) : 0;
-    const positionedPercent = totalActions > 0 ? Math.round((totalPositioned / totalActions) * 100) : 0;
-    const receivedPercent = totalActions > 0 ? Math.round((totalReceived / totalActions) * 100) : 0;
+    const proposedPercent = calculatePercentage(totalProposed, totalActions);
+    const positionedPercent = calculatePercentage(totalPositioned, totalActions);
+    const receivedPercent = calculatePercentage(totalReceived, totalActions);
 
     return {
       proposedTotal: totalProposed,
@@ -469,7 +427,7 @@ const BagStatsViz: React.FC<BagStatsVizProps> = ({ users, exchanges, history, cl
                       <span className="text-sm font-medium text-gray-900">{user.receivedTotal}</span>
                       {user.positionedTotal > 0 && (
                         <span className="text-xs text-gray-500">
-                          ({Math.round((user.receivedTotal / user.positionedTotal) * 100)}%)
+                          ({calculateSuccessRate(user.receivedTotal, user.positionedTotal)}%)
                         </span>
                       )}
                       <div className="flex items-center gap-1 mt-1">
@@ -527,7 +485,7 @@ const BagStatsViz: React.FC<BagStatsVizProps> = ({ users, exchanges, history, cl
                       <span className="text-sm font-bold text-gray-900">{totalStats.receivedTotal}</span>
                       {totalStats.positionedTotal > 0 && (
                         <span className="text-xs text-gray-500">
-                          ({Math.round((totalStats.receivedTotal / totalStats.positionedTotal) * 100)}%)
+                          ({calculateSuccessRate(totalStats.receivedTotal, totalStats.positionedTotal)}%)
                         </span>
                       )}
                       <div className="flex items-center gap-1 mt-1">

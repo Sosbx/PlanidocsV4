@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Calendar, Percent, Save, RotateCcw, Users, CheckSquare, Settings, ChevronDown, ChevronLeft, ChevronRight, Archive, Search, X } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { usePlanningConfig } from '../context/planning/PlanningContext';
-import { formatParisDate, createParisDate, toParisTime, addMonthsParis } from '../utils/timezoneUtils';
+import { formatParisDate, createParisDate, toParisTime, addMonthsParis, parseHtmlDate, parseHtmlDateTimeLocal } from '../utils/timezoneUtils';
 import ConfigurationDisplay from '../components/ConfigurationDisplay';
 import ConfirmationModal from '../components/ConfirmationModal';
 import UserStatusList from '../features/users/components/UserStatusList';
@@ -63,6 +63,11 @@ const AdminPage: React.FC = () => {
   
   // Adapter les utilisateurs pour les composants
 
+  // Charger les périodes archivées au démarrage
+  useEffect(() => {
+    loadArchivedPeriods();
+  }, [loadArchivedPeriods]);
+
   // Déterminer l'onglet actif à partir de l'URL lors du chargement initial
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
@@ -85,9 +90,9 @@ const AdminPage: React.FC = () => {
 
   useEffect(() => {
     if (config.isConfigured) {
-      const startDate = config.startDate.toISOString().split('T')[0];
-      const endDate = config.endDate.toISOString().split('T')[0];
-      const deadline = toParisTime(config.deadline).toISOString().slice(0, 16);
+      const startDate = formatParisDate(config.startDate, 'yyyy-MM-dd');
+      const endDate = formatParisDate(config.endDate, 'yyyy-MM-dd');
+      const deadline = formatParisDate(config.deadline, "yyyy-MM-dd'T'HH:mm");
       
       setFormData({
         startDate,
@@ -108,9 +113,9 @@ const AdminPage: React.FC = () => {
       nextDeadline.setDate(nextStartDate.getDate() - 14); // Par défaut, deadline 2 semaines avant le début
       
       setNewPeriodData({
-        startDate: nextStartDate.toISOString().split('T')[0],
-        endDate: nextEndDate.toISOString().split('T')[0],
-        deadline: nextDeadline.toISOString().slice(0, 16),
+        startDate: formatParisDate(nextStartDate, 'yyyy-MM-dd'),
+        endDate: formatParisDate(nextEndDate, 'yyyy-MM-dd'),
+        deadline: formatParisDate(nextDeadline, "yyyy-MM-dd'T'HH:mm"),
       });
     }
   }, [config]);
@@ -367,14 +372,14 @@ const AdminPage: React.FC = () => {
       console.log(`Mise à jour de la configuration pour l'association ${currentAssociation}`);
       
       await updateConfig({
-        startDate: createParisDate(formData.startDate),
-        endDate: createParisDate(formData.endDate),
-        deadline: createParisDate(formData.deadline),
+        startDate: parseHtmlDate(formData.startDate),
+        endDate: parseHtmlDate(formData.endDate),
+        deadline: parseHtmlDateTimeLocal(formData.deadline),
         primaryDesiderataLimit: formData.primaryDesiderataLimit,
         secondaryDesiderataLimit: formData.secondaryDesiderataLimit,
         isConfigured: true,
         associationId: currentAssociation, // Ajouter l'association courante
-        holidayBlocks: config.holidayBlocks // Conserver les blocages existants
+        holidayBlocks: config.holidayBlocks || {} // Utiliser un objet vide si undefined
       });
       
       setToast({
@@ -495,6 +500,9 @@ const AdminPage: React.FC = () => {
         type: 'success'
       });
       
+      // Recharger les périodes archivées après réinitialisation
+      await loadArchivedPeriods();
+      
       setShowResetConfirmation(false);
     } catch (error) {
       console.error(`Erreur lors de la réinitialisation de la configuration pour ${currentAssociation}:`, error);
@@ -528,9 +536,9 @@ const AdminPage: React.FC = () => {
       
       // Créer la nouvelle configuration
       const newConfig = {
-        startDate: createParisDate(newPeriodData.startDate),
-        endDate: createParisDate(newPeriodData.endDate),
-        deadline: createParisDate(newPeriodData.deadline),
+        startDate: parseHtmlDate(newPeriodData.startDate),
+        endDate: parseHtmlDate(newPeriodData.endDate),
+        deadline: parseHtmlDateTimeLocal(newPeriodData.deadline),
         primaryDesiderataLimit: formData.primaryDesiderataLimit,
         secondaryDesiderataLimit: formData.secondaryDesiderataLimit,
         associationId: currentAssociation // Ajouter l'association courante

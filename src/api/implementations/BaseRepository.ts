@@ -22,7 +22,7 @@ import {
 import { firebaseTimestampToParisDate } from '@/utils/timezoneUtils';
 import { db } from '@/lib/firebase/config';
 import { FirestoreDocument } from '@/types/firebase';
-import { IRepository, QueryOptions, WhereCondition } from '../interfaces/IRepository';
+import { IRepository, QueryOptions } from '../interfaces/IRepository';
 import { getCollectionName } from '@/utils/collectionUtils';
 
 /**

@@ -69,6 +69,7 @@ const AdminMenu: React.FC<AdminMenuProps & { links: NavLinkDefinition[] }> = ({ 
 const navItemRecentToasts: Record<string, number> = {};
 
 const NavItem: React.FC<NavItemProps & { disabled?: boolean }> = ({ to, icon: Icon, children, onClick, className = '', disabled }) => {
+  const { showToast } = useToastContext();
   const { getFeatureStatus } = useFeatureFlags();
   const featureKey = to.substring(1).replace(/-/g, ''); // Convertir le path en feature key
   const status = getFeatureStatus(featureKey as any);

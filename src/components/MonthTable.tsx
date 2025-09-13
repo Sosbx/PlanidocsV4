@@ -180,7 +180,7 @@ const MonthTable: React.FC<MonthTableProps> = React.memo(({
                     border px-2 py-1 text-[11px] relative
                     ${grayedOut ? 'text-gray-400 bg-gray-50/50' : 'text-gray-500 bg-gray-50/30'}
                     ${isYesterday ? 'border-b-indigo-300 border-b-2' : ''}
-                    ${isBagPeriodStart && bagPhaseConfig.phase !== 'completed' ? 'border-t-2 border-t-red-400' : ''}
+                    ${isBagPeriodStart && !(bagPhaseConfig.phase === 'completed' && bagPhaseConfig.isValidated) ? 'border-t-2 border-t-red-400' : ''}
                   `} 
                   data-grayed-out={grayedOut ? 'true' : 'false'}
                   title={isYesterday ? "Séparation entre jours passés et futurs" : isBagPeriodStart ? "Début de la période Bourse aux Gardes" : ""}
@@ -193,7 +193,7 @@ const MonthTable: React.FC<MonthTableProps> = React.memo(({
                   )}
                   <div className="flex justify-start items-center relative">
                     {/* Texte "BàG" vertical parfaitement collé à la bordure gauche */}
-                    {isBagPeriodStart && bagPhaseConfig.phase !== 'completed' && (
+                    {isBagPeriodStart && !(bagPhaseConfig.phase === 'completed' && bagPhaseConfig.isValidated) && (
                       <div className="absolute top-0 h-full text-[7px] text-red-500 opacity-30 font-bold"
                            style={{ 
                              writingMode: 'vertical-rl', 

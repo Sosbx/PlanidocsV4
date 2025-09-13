@@ -2,20 +2,25 @@ import React, { useState, useEffect } from 'react';
 import { useFeatureFlags } from '../context/featureFlags/FeatureFlagsContext';
 import { useAssociation } from '../context/association/AssociationContext';
 import { useSuperAdmin } from '../context/superAdmin/SuperAdminContext';
-import { FeatureFlagUpdate, FeatureStatus, DEFAULT_FEATURES, FEATURES } from '../types/featureFlags';
+import { FeatureFlag, FeatureKey, FeatureFlagUpdate, FeatureStatus, FEATURE_TEMPLATES, FEATURES } from '../types/featureFlags';
 import { ASSOCIATIONS, ASSOCIATION_NAMES } from '../constants/associations';
 import { LoadingSpinner } from '../components/common';
-import { CheckCircle, XCircle, Beaker, Settings, Users, RefreshCw, AlertCircle, Shield, Eye } from 'lucide-react';
+import { CheckCircle, XCircle, Beaker, Settings, Users, AlertCircle, Eye, Info, Clock, User, Plus, Lock, RefreshCw } from 'lucide-react';
 import { featureFlagsService } from '../lib/firebase/featureFlags';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../features/auth/hooks/useAuth';
 
 const SuperAdminPage: React.FC = () => {
-  const { featureFlags, loading, updateFeatureFlag } = useFeatureFlags();
+  const { featureFlags, loading, updateFeatureFlag, hasUnauthorizedChanges, getFeatureDiagnostics } = useFeatureFlags();
   const { currentAssociation, setCurrentAssociation } = useAssociation();
   const { isSuperAdminMode, toggleSuperAdminMode, canAccessSuperAdmin } = useSuperAdmin();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [updating, setUpdating] = useState<string | null>(null);
-  const [syncing, setSyncing] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState<string | null>(null);
+  const [missingFeatures, setMissingFeatures] = useState<string[]>([]);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [creatingFeature, setCreatingFeature] = useState(false);
 
   if (!canAccessSuperAdmin) {
     return (
@@ -27,6 +32,14 @@ const SuperAdminPage: React.FC = () => {
       </div>
     );
   }
+
+  useEffect(() => {
+    const loadMissingFeatures = async () => {
+      const missing = await featureFlagsService.getMissingFeatures();
+      setMissingFeatures(missing);
+    };
+    loadMissingFeatures();
+  }, [featureFlags]);
 
   if (loading) {
     return (
@@ -52,20 +65,6 @@ const SuperAdminPage: React.FC = () => {
     }
   };
 
-  const syncFeatureFlags = async () => {
-    setSyncing(true);
-    try {
-      // Réinitialiser les feature flags pour ajouter les nouvelles fonctionnalités
-      await featureFlagsService.initializeFeatureFlags();
-      // Recharger la page pour voir les changements
-      window.location.reload();
-    } catch (error) {
-      console.error('Error syncing feature flags:', error);
-      alert('Erreur lors de la synchronisation');
-    } finally {
-      setSyncing(false);
-    }
-  };
 
   const getStatusIcon = (status: FeatureStatus) => {
     switch (status) {
@@ -89,6 +88,20 @@ const SuperAdminPage: React.FC = () => {
     }
   };
 
+  const createFeature = async (featureKey: string) => {
+    setCreatingFeature(true);
+    try {
+      await featureFlagsService.createFeatureFlag(featureKey as FeatureKey, user?.email || 'unknown');
+      alert(`Feature ${featureKey} créée avec succès!`);
+      setShowCreateModal(false);
+      window.location.reload();
+    } catch (error) {
+      alert(`Erreur lors de la création: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
+    } finally {
+      setCreatingFeature(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-100">
       <div className="container mx-auto px-4 py-8 max-w-7xl">
@@ -100,23 +113,17 @@ const SuperAdminPage: React.FC = () => {
               <h1 className="text-3xl font-bold text-gray-900">Super Admin - Gestion des accès</h1>
             </div>
             <div className="flex items-center space-x-4">
-              <button
-                onClick={syncFeatureFlags}
-                disabled={syncing}
-                className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {syncing ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Synchronisation...</span>
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="w-4 h-4" />
-                    <span>Synchroniser</span>
-                  </>
-                )}
-              </button>
+              {missingFeatures.length > 0 && (
+                <button
+                  onClick={() => setShowCreateModal(true)}
+                  className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                  title="Créer un nouveau feature flag"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Créer Feature</span>
+                </button>
+              )}
+              
               <div className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">
                 Association active: {currentAssociation}
               </div>
@@ -128,7 +135,7 @@ const SuperAdminPage: React.FC = () => {
             <div className="bg-purple-50 p-4 rounded-lg">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center space-x-2">
-                  {isSuperAdminMode ? <Shield className="w-5 h-5 text-purple-600" /> : <Eye className="w-5 h-5 text-purple-600" />}
+                  {isSuperAdminMode ? <Lock className="w-5 h-5 text-purple-600" /> : <Eye className="w-5 h-5 text-purple-600" />}
                   <span className="font-semibold">Mode</span>
                 </div>
               </div>
@@ -142,7 +149,7 @@ const SuperAdminPage: React.FC = () => {
               >
                 {isSuperAdminMode ? (
                   <>
-                    <Shield className="w-4 h-4 inline mr-2" />
+                    <Lock className="w-4 h-4 inline mr-2" />
                     Mode Super Admin
                   </>
                 ) : (
@@ -206,22 +213,23 @@ const SuperAdminPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Vérification des fonctionnalités manquantes */}
-        {featureFlags.length < Object.keys(DEFAULT_FEATURES).length && (
-          <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+        {/* Alerte changements non autorisés */}
+        {hasUnauthorizedChanges && (
+          <div className="mb-6 bg-orange-50 border border-orange-200 rounded-lg p-4">
             <div className="flex items-center space-x-2">
-              <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0" />
+              <AlertCircle className="w-5 h-5 text-orange-600 flex-shrink-0" />
               <div>
-                <p className="text-sm text-yellow-800 font-medium">
-                  Certaines fonctionnalités sont manquantes dans la base de données.
+                <p className="text-sm text-orange-800 font-medium">
+                  Des modifications ont été détectées depuis un autre appareil ou navigateur.
                 </p>
-                <p className="text-sm text-yellow-700 mt-1">
-                  Cliquez sur "Synchroniser" pour ajouter les fonctionnalités manquantes.
+                <p className="text-sm text-orange-700 mt-1">
+                  Rafraîchissez la page pour voir les derniers changements.
                 </p>
               </div>
             </div>
           </div>
         )}
+
 
         {/* Feature Flags Table */}
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
@@ -249,6 +257,9 @@ const SuperAdminPage: React.FC = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Rôles requis
                   </th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Diagnostics
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -260,11 +271,13 @@ const SuperAdminPage: React.FC = () => {
                       'planning', 
                       'shiftExchange',
                       'directExchange',
+                      'directExchangeModal',
                       'adminDesiderata',
                       'adminShiftExchange',
                       'generatedPlanning',
                       'userManagement',
-                      'replacements'
+                      'replacements',
+                      'history'
                     ];
                     return order.indexOf(a.id) - order.indexOf(b.id);
                   })
@@ -272,7 +285,9 @@ const SuperAdminPage: React.FC = () => {
                   <tr key={feature.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div>
-                        <div className="text-sm font-medium text-gray-900">{feature.name}</div>
+                        <div className="text-sm font-medium text-gray-900">
+                          {feature.name}
+                        </div>
                         <div className="text-sm text-gray-500">{feature.description}</div>
                       </div>
                     </td>
@@ -338,8 +353,26 @@ const SuperAdminPage: React.FC = () => {
                         )) || <span className="text-sm text-gray-500">Tous</span>}
                       </div>
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                      <button
+                        onClick={() => setShowDiagnostics(showDiagnostics === feature.id ? null : feature.id)}
+                        className="p-1 hover:bg-gray-100 rounded transition-colors"
+                        title="Voir les diagnostics"
+                      >
+                        <Info className="w-4 h-4 text-gray-600" />
+                      </button>
+                    </td>
                   </tr>
                 ))}
+                {featureFlags.map((feature) => 
+                  showDiagnostics === feature.id && (
+                    <tr key={`${feature.id}-diagnostics`}>
+                      <td colSpan={6} className="px-6 py-4 bg-gray-50">
+                        <DiagnosticsPanel feature={feature} getFeatureDiagnostics={getFeatureDiagnostics} />
+                      </td>
+                    </tr>
+                  )
+                )}
               </tbody>
             </table>
           </div>
@@ -370,6 +403,88 @@ const SuperAdminPage: React.FC = () => {
                 <p className="text-sm text-gray-600">Complètement invisible et inaccessible</p>
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Modal pour créer une nouvelle feature */}
+        {showCreateModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full">
+              <h3 className="text-lg font-semibold mb-4">Créer un nouveau Feature Flag</h3>
+              
+              {missingFeatures.length === 0 ? (
+                <p className="text-gray-600 mb-4">Toutes les features sont déjà créées.</p>
+              ) : (
+                <>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Sélectionnez une feature à créer. Elle sera créée avec les valeurs du template.
+                  </p>
+                  
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {missingFeatures.map((featureKey) => {
+                      const template = FEATURE_TEMPLATES[featureKey as keyof typeof FEATURE_TEMPLATES];
+                      return (
+                        <button
+                          key={featureKey}
+                          onClick={() => createFeature(featureKey)}
+                          disabled={creatingFeature}
+                          className="w-full text-left p-3 border rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                        >
+                          <div className="font-medium">{template?.name || featureKey}</div>
+                          <div className="text-sm text-gray-600">{template?.description || 'Pas de description'}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+              
+              <div className="mt-6 flex justify-end space-x-3">
+                <button
+                  onClick={() => setShowCreateModal(false)}
+                  className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors"
+                >
+                  Annuler
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const DiagnosticsPanel: React.FC<{
+  feature: FeatureFlag;
+  getFeatureDiagnostics: (featureKey: string) => {
+    updatedBy: string;
+    lastUpdated: Date;
+  } | null;
+}> = ({ feature, getFeatureDiagnostics }) => {
+  const diagnostics = getFeatureDiagnostics(feature.id);
+  
+  if (!diagnostics) return null;
+  
+  return (
+    <div className="space-y-3">
+      <h4 className="font-semibold text-sm text-gray-700 flex items-center gap-2">
+        <Info className="w-4 h-4" />
+        Informations de diagnostic pour {feature.name}
+      </h4>
+      
+      <div className="bg-white p-3 rounded-lg border border-gray-200">
+        <h5 className="text-xs font-medium text-gray-600 mb-2">Dernière modification</h5>
+        <div className="space-y-1 text-sm">
+          <div className="flex items-center gap-2">
+            <User className="w-3 h-3 text-gray-500" />
+            <span className="text-gray-700">{diagnostics.updatedBy}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Clock className="w-3 h-3 text-gray-500" />
+            <span className="text-gray-700">
+              {new Date(diagnostics.lastUpdated).toLocaleString('fr-FR')}
+            </span>
           </div>
         </div>
       </div>

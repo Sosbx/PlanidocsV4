@@ -90,7 +90,7 @@ export const LazyImage: React.FC<LazyImageProps> = ({
     <SkeletonBase
       variant="rectangular"
       className={`bg-gray-200 ${skeletonClassName}`}
-      animation="shimmer"
+      animation="pulse"
     />
   );
 

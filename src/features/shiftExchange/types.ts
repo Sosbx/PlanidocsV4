@@ -56,7 +56,7 @@ export interface ShiftExchange {
   shiftType: string;
   timeSlot: string;
   exchangeType?: ShiftExchangeType | 'bag' | 'direct';  // Rendu optionnel pour la compatibilité avec l'ancienne définition
-  status: 'pending' | 'validated' | 'cancelled' | 'unavailable';  // Rendu compatible avec l'ancienne définition
+  status: 'pending' | 'validated' | 'cancelled' | 'unavailable' | 'not_taken' | 'rejected';  // Rendu compatible avec l'ancienne définition
   comment?: string;
   matchedWith?: string;
   matchedUserId?: string;
@@ -73,6 +73,15 @@ export interface ShiftExchange {
   proposedToReplacements?: boolean;
   // Propriétés ajoutées pour la compatibilité avec le composant GeneratedPlanningTable
   operationTypes: string[]; // Source unique de vérité pour les types d'opérations
+  blockedUsers?: Record<string, {
+    reason: 'already_has_shift' | 'invalid_permutation' | 'dependency_broken';
+    shiftType: string;
+    exchangeWithUserId: string;
+    exchangeWithUserName: string;
+    blockedAt: any; // Timestamp Firebase
+    sourceExchangeId?: string; // ID de l'échange qui a causé le blocage
+    dependsOn?: string[]; // IDs des échanges dont dépend cet utilisateur
+  }>;
 }
 
 /**
@@ -93,11 +102,14 @@ export interface ExchangeHistory {
   isPermutation: boolean;
   originalShiftType: string;
   newShiftType: string | null;
-  status: 'completed'; // Modifié pour être compatible avec /src/types/planning.ts
+  status: 'completed' | 'rejected'; // Modifié pour être compatible avec /src/types/planning.ts
   createdAt?: string;
   originalExchangeId?: string; // ID de l'échange d'origine avant validation
   originalUserPeriodId?: string | null; // ID de la période d'origine pour l'utilisateur original
   interestedUserPeriodId?: string | null; // ID de la période d'origine pour l'utilisateur intéressé
+  removedFromExchanges?: string[]; // Liste des IDs d'échanges d'où l'utilisateur a été retiré lors de la validation
+  rejectedBy?: string; // ID de l'utilisateur qui a rejeté l'échange
+  rejectedAt?: string; // Date de rejet
 }
 
 /**

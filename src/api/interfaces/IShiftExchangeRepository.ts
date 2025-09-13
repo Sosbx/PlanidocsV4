@@ -3,7 +3,7 @@
  */
 
 import { ShiftExchange, ShiftPeriod } from '@/types/exchange';
-import { BagPhase, ShiftExchangeStatus } from '@/features/shiftExchange/types';
+import { BagPhase } from '@/features/shiftExchange/types';
 import { IRepository } from './IRepository';
 import { FirestoreDocument } from '@/types/firebase';
 import { BagPhaseConfig } from '@/types/planning';
@@ -11,8 +11,22 @@ import { BagPhaseConfig } from '@/types/planning';
 /**
  * Document d'échange dans la bourse aux gardes
  */
-export interface ShiftExchangeDocument extends FirestoreDocument, ShiftExchange {
+export interface ShiftExchangeDocument extends FirestoreDocument {
+  userId: string;
+  date: string;
+  period: ShiftPeriod;
+  shiftType: string;
+  timeSlot: string;
+  comment?: string;
   exchangeType: 'bag';
+  operationTypes: import('@/types/exchange').OperationType[];
+  operationType?: import('@/types/exchange').OperationType;
+  interestedUsers?: string[];
+  proposedToReplacements?: boolean;
+  hasProposals?: boolean;
+  acceptedBy?: string;
+  acceptedAt?: string;
+  status: import('@/types/exchange').ExchangeStatus;
 }
 
 /**

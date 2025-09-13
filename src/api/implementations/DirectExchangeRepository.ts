@@ -12,14 +12,12 @@ import {
   onSnapshot,
   runTransaction,
   Timestamp,
-  deleteDoc,
   setDoc,
   updateDoc,
-  serverTimestamp,
-  getDoc
+  serverTimestamp
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
-import { ShiftExchange, OperationType, ShiftPeriod } from '@/types/exchange';
+import { OperationType } from '@/types/exchange';
 import { DirectExchangeProposal, ProposalStatus } from '@/features/directExchange/types';
 import { 
   IDirectExchangeRepository, 
@@ -28,8 +26,7 @@ import {
 } from '../interfaces/IDirectExchangeRepository';
 import { ExchangeBaseRepository } from './ExchangeBaseRepository';
 import { getCollectionName } from '@/utils/collectionUtils';
-import { format, isWithinInterval } from 'date-fns';
-import { normalizePeriod } from '@/utils/dateUtils';
+import { isWithinInterval } from 'date-fns';
 import { getUserRepository } from '../repositories';
 
 /**
@@ -101,7 +98,7 @@ export class DirectExchangeRepository
   /**
    * Récupérer les échanges actifs
    */
-  async getActiveExchanges(associationId: string): Promise<DirectExchangeDocument[]> {
+  async getActiveExchanges(_associationId: string): Promise<DirectExchangeDocument[]> {
     try {
       const exchanges = await this.getAll({
         where: [
@@ -396,7 +393,7 @@ export class DirectExchangeRepository
   /**
    * Annuler un échange
    */
-  async cancelExchange(exchangeId: string, associationId: string): Promise<void> {
+  async cancelExchange(exchangeId: string, _associationId: string): Promise<void> {
     try {
       await this.update(exchangeId, {
         status: 'cancelled'
@@ -447,8 +444,8 @@ export class DirectExchangeRepository
    * S'abonner aux changements des échanges
    */
   subscribeToExchanges(
-    userId: string,
-    associationId: string,
+    _userId: string,
+    _associationId: string,
     callback: (exchanges: DirectExchangeDocument[]) => void
   ): () => void {
     const q = query(
@@ -501,7 +498,7 @@ export class DirectExchangeRepository
       const userRepository = getUserRepository(associationId);
       const user = await userRepository.getById(userId);
       
-      return user?.status === 'remplaçant' || false;
+      return user?.roles?.isReplacement || false;
     } catch (error) {
       console.error('Erreur lors de la vérification du statut remplaçant:', error);
       return false;

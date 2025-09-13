@@ -228,7 +228,7 @@ const ModernNavbar: React.FC = () => {
                     >
                       {/* User Info */}
                       <div className="p-4 border-b border-gray-100">
-                        <div className="font-medium text-gray-900">{user.displayName}</div>
+                        <div className="font-medium text-gray-900">{user.fullName || `${user.firstName} ${user.lastName}`.trim()}</div>
                         <div className="text-sm text-gray-500">{user.email}</div>
                         {isSuperAdminMode && (
                           <div className="mt-2 inline-flex items-center gap-1 px-2 py-1 bg-gradient-to-r from-orange-400 to-red-400 text-white rounded-full text-xs shadow-md">
@@ -524,7 +524,7 @@ const ModernNavbar: React.FC = () => {
                       {getUserInitials(user)}
                     </div>
                     <div>
-                      <div className="font-medium">{user.displayName}</div>
+                      <div className="font-medium">{user.fullName || `${user.firstName} ${user.lastName}`.trim()}</div>
                       <div className="text-sm text-gray-500">{user.email}</div>
                     </div>
                   </div>

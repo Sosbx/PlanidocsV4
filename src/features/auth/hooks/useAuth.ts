@@ -5,6 +5,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { signInUser, signOutUser, signInWithGoogle } from '../utils/session';
 import { getUserByEmail } from '../../../lib/firebase/users';
 import { ensureUserRoles } from '../../../features/users/utils/userUtils';
+import { removeDeviceToken } from '../../../lib/firebase/deviceTokens';
 import type { User } from '../../../features/users/types';
 import { ASSOCIATIONS } from '../../../constants/associations';
 
@@ -76,6 +77,39 @@ export const useAuth = () => {
   const logout = async () => {
     try {
       setLoading(true);
+      
+      // Nettoyer les tokens FCM et les données de notification avant la déconnexion
+      if (user) {
+        try {
+          // Récupérer et supprimer le token FCM de cet appareil
+          const userTokenKey = `fcm_token_${user.id}`;
+          const currentToken = localStorage.getItem(userTokenKey) || localStorage.getItem('fcm_token');
+          
+          if (currentToken) {
+            console.log('Suppression du token FCM pour l\'utilisateur déconnecté');
+            await removeDeviceToken(user.id, currentToken);
+          }
+        } catch (tokenError) {
+          // Ne pas bloquer la déconnexion si la suppression du token échoue
+          console.error('Erreur lors de la suppression du token FCM:', tokenError);
+        }
+        
+        // Nettoyer le localStorage des données de notification
+        const keysToRemove = [
+          'fcm_token',
+          `fcm_token_${user.id}`,
+          'notification_permission_requested',
+          `notification_banner_dismissed_${user.id}`,
+          `notification_denied_dismissed_${user.id}`
+        ];
+        
+        keysToRemove.forEach(key => {
+          localStorage.removeItem(key);
+        });
+        
+        console.log('Nettoyage des données de notification terminé');
+      }
+      
       await signOutUser();
       setUser(null);
       setError(null);

@@ -310,7 +310,12 @@ exports.sendReminderEmail = functions.region(region).https.onRequest(async (req,
         message: `Email et notification de rappel envoyés avec succès à ${userData.email}`,
         emailSent: true,
         notificationSent: true,
-        pushSent: !!notifResult.pushSuccess
+        pushSent: notifResult.pushSuccess > 0,
+        pushDetails: {
+          success: notifResult.pushSuccess || 0,
+          failure: notifResult.pushFailure || 0,
+          total: notifResult.totalTokens || 0
+        }
       });
     } catch (error) {
       console.error('Erreur dans sendReminderEmail:', error);
@@ -705,10 +710,180 @@ exports.scheduledReminderEmails = functions.region(region).pubsub
   });
 
 /**
+ * Fonction utilitaire pour envoyer une notification push via FCM
+ * @param {string} userId - ID de l'utilisateur destinataire
+ * @param {string} title - Titre de la notification
+ * @param {string} body - Corps du message
+ * @param {object} data - Données supplémentaires
+ * @returns {object} Résultat de l'envoi
+ */
+const sendPushNotification = async (userId, title, body, data = {}) => {
+  try {
+    // Récupérer les tokens de l'utilisateur
+    const tokensSnapshot = await admin.firestore()
+      .collection('device_tokens')
+      .where('userId', '==', userId)
+      .get();
+    
+    if (tokensSnapshot.empty) {
+      console.log(`Aucun token FCM trouvé pour l'utilisateur ${userId}`);
+      return { 
+        success: false, 
+        reason: 'no_tokens',
+        successCount: 0,
+        failureCount: 0
+      };
+    }
+    
+    // Collecter les tokens et leurs métadonnées
+    const tokenDocs = [];
+    tokensSnapshot.forEach(doc => {
+      const docData = doc.data();
+      tokenDocs.push({
+        id: doc.id,
+        token: docData.token,
+        platform: docData.platform
+      });
+    });
+    
+    const tokens = tokenDocs.map(doc => doc.token);
+    console.log(`${tokens.length} token(s) trouvé(s) pour l'utilisateur ${userId}`);
+    
+    // Préparer le message FCM avec configuration complète
+    const message = {
+      notification: {
+        title: title,
+        body: body,
+        icon: '/favicon.ico',
+        badge: '/badge-icon.png'
+      },
+      data: {
+        ...data,
+        userId: userId,
+        timestamp: new Date().toISOString()
+      },
+      tokens: tokens,
+      // Configuration spécifique pour le web
+      webpush: {
+        fcmOptions: {
+          link: data.link ? `https://planidocs.com${data.link}` : 'https://planidocs.com'
+        },
+        notification: {
+          icon: '/favicon.ico',
+          badge: '/badge-icon.png',
+          requireInteraction: true,
+          vibrate: [200, 100, 200],
+          actions: [
+            {
+              action: 'open',
+              title: 'Ouvrir'
+            }
+          ]
+        }
+      },
+      // Configuration pour Android
+      android: {
+        priority: 'high',
+        notification: {
+          icon: 'ic_notification',
+          color: '#4299e1',
+          sound: 'default',
+          clickAction: 'FLUTTER_NOTIFICATION_CLICK'
+        }
+      },
+      // Configuration pour iOS
+      apns: {
+        payload: {
+          aps: {
+            sound: 'default',
+            badge: 1,
+            contentAvailable: true
+          }
+        }
+      }
+    };
+    
+    // Envoyer via FCM
+    const response = await admin.messaging().sendMulticast(message);
+    
+    console.log(`Résultat FCM pour ${userId}: ${response.successCount}/${tokens.length} envoyés`);
+    
+    // Gérer les échecs et nettoyer les tokens invalides
+    if (response.failureCount > 0) {
+      const tokensToDelete = [];
+      const errorDetails = [];
+      
+      response.responses.forEach((resp, idx) => {
+        if (!resp.success && resp.error) {
+          errorDetails.push({
+            token: tokens[idx].substring(0, 20) + '...',
+            error: resp.error.message,
+            code: resp.error.code
+          });
+          
+          // Marquer pour suppression si token invalide
+          if (resp.error.code === 'messaging/invalid-registration-token' ||
+              resp.error.code === 'messaging/registration-token-not-registered' ||
+              resp.error.code === 'messaging/invalid-argument') {
+            tokensToDelete.push(tokens[idx]);
+          }
+        }
+      });
+      
+      console.error(`Erreurs FCM pour ${userId}:`, errorDetails);
+      
+      // Supprimer les tokens invalides de Firestore
+      if (tokensToDelete.length > 0) {
+        console.log(`Nettoyage de ${tokensToDelete.length} token(s) invalide(s)`);
+        for (const token of tokensToDelete) {
+          const querySnapshot = await admin.firestore()
+            .collection('device_tokens')
+            .where('userId', '==', userId)
+            .where('token', '==', token)
+            .get();
+          
+          const deletePromises = [];
+          querySnapshot.forEach(doc => {
+            deletePromises.push(doc.ref.delete());
+          });
+          await Promise.all(deletePromises);
+        }
+      }
+    }
+    
+    // Enregistrer dans les logs
+    await admin.firestore().collection('push_logs').add({
+      userId: userId,
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      title: title,
+      successCount: response.successCount,
+      failureCount: response.failureCount,
+      totalTokens: tokens.length,
+      type: data.type || 'manual'
+    });
+    
+    return {
+      success: response.successCount > 0,
+      successCount: response.successCount,
+      failureCount: response.failureCount,
+      totalTokens: tokens.length
+    };
+    
+  } catch (error) {
+    console.error(`Erreur sendPushNotification pour ${userId}:`, error);
+    return { 
+      success: false, 
+      error: error.message,
+      successCount: 0,
+      failureCount: 0
+    };
+  }
+};
+
+/**
  * Fonction utilitaire pour créer une notification et l'envoyer en push
  * 
- * Cette fonction interne utilise directement la fonction sendPushNotification existante
- * pour éviter la duplication de code
+ * Cette fonction crée une notification en base et tente de l'envoyer en push
  */
 const createAndSendNotification = async (userId, title, message, type, link, associationId, transactionId = null, bulkId = null) => {
   try {
@@ -728,80 +903,29 @@ const createAndSendNotification = async (userId, title, message, type, link, ass
       ...(bulkId && { bulkId })
     });
     
-    // 2. Tentative d'envoi de notification push
-    try {
-      // Récupérer les tokens d'appareil de l'utilisateur
-      const tokensSnapshot = await admin.firestore()
-        .collection('device_tokens')
-        .where('userId', '==', userId)
-        .get();
-      
-      if (!tokensSnapshot.empty) {
-        const tokens = tokensSnapshot.docs.map(doc => doc.data().token);
-        
-        // Envoyer la notification push directement sans utiliser la fonction existante
-        // car celle-ci est déjà déployée et nous ne voulons pas la modifier
-        const pushResult = await admin.messaging().sendMulticast({
-          notification: {
-            title: title,
-            body: message
-          },
-          data: {
-            type: type || 'desiderata_reminder',
-            link: link || '/desiderata',
-            createdAt: new Date().toISOString(),
-            notificationId: notificationRef.id,
-            ...(transactionId && { transactionId }),
-            ...(bulkId && { bulkId })
-          },
-          tokens: tokens
-        });
-        
-        // Nettoyer les tokens invalides
-        if (pushResult.failureCount > 0) {
-          const failedTokens = [];
-          pushResult.responses.forEach((resp, idx) => {
-            if (!resp.success) {
-              failedTokens.push(tokens[idx]);
-            }
-          });
-          
-          // Supprimer les tokens invalides
-          const deletePromises = failedTokens.map(token => 
-            admin.firestore().collection('device_tokens')
-              .where('token', '==', token)
-              .get()
-              .then(snapshot => {
-                snapshot.forEach(doc => doc.ref.delete());
-              })
-          );
-          
-          await Promise.all(deletePromises);
-        }
-        
-        return {
-          success: true,
-          notificationId: notificationRef.id,
-          pushSuccess: pushResult.successCount,
-          pushFailure: pushResult.failureCount
-        };
-      } else {
-        // Notification en base de données créée, mais pas d'envoi push
-        return {
-          success: true,
-          notificationId: notificationRef.id,
-          message: "Notification créée, mais aucun appareil enregistré pour l'envoi push"
-        };
-      }
-    } catch (pushError) {
-      console.error(`Erreur d'envoi push pour l'utilisateur ${userId}:`, pushError);
-      // Notification en base créée même si push échoue
-      return { 
-        success: true,
-        notificationId: notificationRef.id,
-        pushError: pushError.message 
-      };
-    }
+    // 2. Tentative d'envoi de notification push via notre fonction dédiée
+    const pushData = {
+      type: type || 'desiderata_reminder',
+      link: link || '/desiderata',
+      notificationId: notificationRef.id,
+      associationId: associationId,
+      ...(transactionId && { transactionId }),
+      ...(bulkId && { bulkId })
+    };
+    
+    const pushResult = await sendPushNotification(userId, title, message, pushData);
+    
+    // Retourner le résultat combiné
+    return {
+      success: true,
+      notificationId: notificationRef.id,
+      pushSuccess: pushResult.successCount || 0,
+      pushFailure: pushResult.failureCount || 0,
+      totalTokens: pushResult.totalTokens || 0,
+      message: pushResult.reason === 'no_tokens' 
+        ? "Notification créée, mais aucun appareil enregistré pour l'envoi push" 
+        : `Notification envoyée à ${pushResult.successCount} appareil(s)` 
+    };
   } catch (error) {
     console.error(`Erreur lors de la création de notification pour l'utilisateur ${userId}:`, error);
     throw error;

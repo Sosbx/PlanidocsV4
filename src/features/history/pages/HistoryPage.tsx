@@ -120,21 +120,21 @@ const HistoryPage: React.FC = () => {
             <ExchangeHistoryTable
               filters={filters}
               showAllUsers={showAllUsers}
-              userId={user?.uid}
+              userId={user?.id}
             />
           )}
           {activeTab === 'bag' && (
             <BagHistoryTable
               filters={filters}
               showAllUsers={showAllUsers}
-              userId={user?.uid}
+              userId={user?.id}
             />
           )}
           {activeTab === 'replacements' && (
             <ReplacementHistoryTable
               filters={filters}
               showAllUsers={showAllUsers}
-              userId={user?.uid}
+              userId={user?.id}
             />
           )}
         </div>

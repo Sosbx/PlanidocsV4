@@ -5,13 +5,16 @@ import { db } from '../../../lib/firebase/config';
 import ConfirmationModal from '../../../components/ConfirmationModal';
 import Toast from '../../../components/common/Toast';
 import { useShiftExchangeCore } from '../hooks';
-import { revertToExchange } from '../../../lib/firebase/exchange';
+import { useBagData } from '../hooks/useBagData';
+import { useBagPhase } from '../hooks';
+import { revertToExchange, restoreRejectedExchange, restoreInterestRemoval } from '../../../lib/firebase/exchange';
 import { getAllShiftTypesFromPlannings } from '../../../lib/firebase/planning';
 import type { ExchangeHistory, ShiftExchange } from '../types';
 import { ShiftPeriod } from '../types';
 import { ValidatePlanningButton, UserSelector } from '../../../features/planning/components/admin';
 import { useUserAssignments } from '../../../features/users/hooks';
 import { useAuth } from '../../../features/auth/hooks';
+import { useUsers } from '../../auth/hooks';
 import '../../../styles/BadgeStyles.css';
 
 // Import des composants migrés
@@ -25,7 +28,8 @@ import {
 import {
   ExchangeList,
   ExchangeHistoryList,
-  ParticipationPanel
+  ParticipationPanel,
+  RestoreAllButton
 } from '../components/admin';
 
 /**
@@ -33,25 +37,37 @@ import {
  * Utilise le hook centralisé pour éviter les duplications
  */
 const AdminShiftExchangePage: React.FC = () => {
-  // Hook principal optimisé avec historique activé
+  // Hooks de base
+  const { user } = useAuth();
+  const { users } = useUsers();
+  const { config: bagPhaseConfig } = useBagPhase();
+  
+  // Hook centralisé pour les données BAG
+  const bagData = useBagData(users);
   const {
-    user,
-    users,
-    bagPhaseConfig,
     exchanges,
     history,
+    pendingExchanges,
+    userStats,
+    globalStats,
     loading,
-    conflictStates,
-    conflictDetails,
+    error,
+    refreshData,
+    getUserAssignments
+  } = bagData;
+  
+  // Hook pour les actions (garde la logique existante)
+  const {
     validateExchange,
     rejectExchange,
     removeUser,
     checkForConflict,
-    refreshData
+    conflictStates,
+    conflictDetails
   } = useShiftExchangeCore({
-    enableHistory: true,
+    enableHistory: false, // Pas besoin, on utilise bagData
     enableConflictCheck: true,
-    limitResults: 0 // Pas de limite pour l'admin - afficher toutes les gardes disponibles
+    limitResults: 0
   });
 
   // États locaux pour l'interface admin
@@ -62,6 +78,11 @@ const AdminShiftExchangePage: React.FC = () => {
   const [filterPeriod, setFilterPeriod] = useState<'all' | ShiftPeriod>('all');
   const [showOnlyWithInterested, setShowOnlyWithInterested] = useState(false);
   const [filterUserId, setFilterUserId] = useState<string>('');
+  // États pour les filtres de l'historique
+  const [historyFilterPeriod, setHistoryFilterPeriod] = useState<'all' | ShiftPeriod>('all');
+  const [historyFilterUserId, setHistoryFilterUserId] = useState<string>('');
+  const [historySortColumn, setHistorySortColumn] = useState<'validation' | 'date'>('validation');
+  const [historySortDirection, setHistorySortDirection] = useState<'asc' | 'desc'>('desc');
   const [toast, setToast] = useState({ 
     visible: false, 
     message: '', 
@@ -75,15 +96,8 @@ const AdminShiftExchangePage: React.FC = () => {
   // États pour les conflits détaillés par utilisateur
   const [conflictShiftTypes, setConflictShiftTypes] = useState<Record<string, Record<string, string>>>({});
   
-  // État pour toutes les gardes proposées (pour les statistiques)
-  const [allExchangesForStats, setAllExchangesForStats] = useState<ShiftExchange[]>([]);
-  const [allExchangesLoading, setAllExchangesLoading] = useState(true);
-  
-  // Hook pour les assignations utilisateur
+  // Hook pour les assignations utilisateur (utilise les données centralisées)
   const { userAssignments } = useUserAssignments(exchanges);
-  
-  // Hook pour l'utilisateur courant
-  const { user: currentUser } = useAuth();
   
   
   // Utilisateurs triés par ordre alphabétique (excluant les admin-only)
@@ -101,49 +115,6 @@ const AdminShiftExchangePage: React.FC = () => {
       });
   }, [users]);
 
-  // Récupérer TOUTES les gardes proposées pour les statistiques
-  useEffect(() => {
-    let unsubscribe: (() => void) | undefined;
-    
-    const fetchAllExchangesForStats = async () => {
-      try {
-        setAllExchangesLoading(true);
-        
-        // Requête sans filtre de statut mais avec filtre de date pour éviter de charger trop de données anciennes
-        const today = new Date();
-        today.setMonth(today.getMonth() - 3); // Gardes des 3 derniers mois et futures
-        const threeMonthsAgo = today.toISOString().split('T')[0];
-        
-        const exchangesQuery = query(
-          collection(db, 'shift_exchanges'),
-          where('date', '>=', threeMonthsAgo),
-          orderBy('date', 'asc')
-        );
-        
-        unsubscribe = onSnapshot(exchangesQuery, (snapshot) => {
-          const allExchanges = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          })) as ShiftExchange[];
-          
-          console.log('AllExchangesForStats chargés:', allExchanges.length, 'gardes');
-          setAllExchangesForStats(allExchanges);
-          setAllExchangesLoading(false);
-        });
-      } catch (error) {
-        console.error('Erreur lors de la récupération des exchanges pour les stats:', error);
-        setAllExchangesLoading(false);
-      }
-    };
-    
-    fetchAllExchangesForStats();
-    
-    return () => {
-      if (unsubscribe) {
-        unsubscribe();
-      }
-    };
-  }, []);
 
 
   // Vérification optimisée des conflits pour chaque utilisateur intéressé
@@ -315,8 +286,17 @@ const AdminShiftExchangePage: React.FC = () => {
       const originalUser = sortedUsers.find(u => u.id === exchange.originalUserId);
       const newUser = sortedUsers.find(u => u.id === exchange.newUserId);
       const isPermutation = exchange.isPermutation;
+      const isRejected = exchange.status === 'rejected';
+      const isInterestRemoved = exchange.status === 'interest_removed';
       
-      await revertToExchange(exchangeToRevert);
+      // Utiliser la fonction appropriée selon le statut
+      if (isRejected) {
+        await restoreRejectedExchange(exchangeToRevert);
+      } else if (isInterestRemoved) {
+        await restoreInterestRemoval(exchangeToRevert);
+      } else {
+        await revertToExchange(exchangeToRevert);
+      }
       
       const userNames = `${originalUser?.lastName || 'Inconnu'} ${isPermutation ? '↔' : '→'} ${newUser?.lastName || 'Inconnu'}`;
       const exchangeType = isPermutation ? 'Permutation' : 'Échange';
@@ -329,7 +309,11 @@ const AdminShiftExchangePage: React.FC = () => {
       
       setToast({
         visible: true,
-        message: `${exchangeType} annulé(e) avec succès (${userNames})`,
+        message: isRejected 
+          ? `Échange rejeté restauré avec succès` 
+          : isInterestRemoved
+          ? `Intérêt restauré avec succès`
+          : `${exchangeType} annulé(e) avec succès (${userNames})`,
         type: 'success'
       });
     } catch (error) {
@@ -353,12 +337,12 @@ const AdminShiftExchangePage: React.FC = () => {
     return (
       <BagStatsViz
         users={sortedUsers}
-        exchanges={(!allExchangesLoading && allExchangesForStats.length > 0 ? allExchangesForStats : exchanges) as any}
+        exchanges={exchanges as any}
         history={history as any}
         className="mb-6"
       />
     );
-  }, [activeTab, sortedUsers, allExchangesForStats, allExchangesLoading, exchanges, history]);
+  }, [activeTab, sortedUsers, exchanges, history]);
 
   // Vérification des droits admin
   if (!user?.roles.isAdmin) {
@@ -402,6 +386,14 @@ const AdminShiftExchangePage: React.FC = () => {
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-2xl font-bold">Gestion des Échanges de Gardes</h1>
         <div className="flex gap-2">
+          {(bagPhaseConfig.phase === 'distribution' || bagPhaseConfig.phase === 'completed') && (
+            <RestoreAllButton 
+              onRestoreComplete={async () => {
+                await refreshData();
+                setToast({ visible: true, message: 'Données rafraîchies après restauration', type: 'info' });
+              }}
+            />
+          )}
           <ValidatePlanningButton 
             onSuccess={(message) => setToast({ visible: true, message, type: 'success' })}
             onError={(message) => setToast({ visible: true, message, type: 'error' })}
@@ -502,9 +494,24 @@ const AdminShiftExchangePage: React.FC = () => {
 
       <ConfirmationModal
         isOpen={showRevertConfirmation}
-        title="Annuler l'échange"
-        message="Êtes-vous sûr de vouloir annuler cet échange ? La garde sera remise dans son état initial et réapparaîtra dans la bourse aux gardes avec tous les utilisateurs intéressés."
-        confirmLabel="Annuler l'échange"
+        title={exchangeToRevert && (() => {
+          const exchange = history.find(h => h.id === exchangeToRevert);
+          if (exchange?.status === 'rejected') return "Restaurer l'échange rejeté";
+          if (exchange?.status === 'interest_removed') return "Restaurer l'intérêt";
+          return "Annuler l'échange";
+        })()}
+        message={exchangeToRevert && (() => {
+          const exchange = history.find(h => h.id === exchangeToRevert);
+          if (exchange?.status === 'rejected') return "Êtes-vous sûr de vouloir restaurer cet échange rejeté ? Il réapparaîtra dans la bourse aux gardes en attente de validation.";
+          if (exchange?.status === 'interest_removed') return "Êtes-vous sûr de vouloir restaurer cet intérêt ? L'utilisateur sera remis dans la liste des intéressés.";
+          return "Êtes-vous sûr de vouloir annuler cet échange ? La garde sera remise dans son état initial et réapparaîtra dans la bourse aux gardes avec tous les utilisateurs intéressés.";
+        })()}
+        confirmLabel={exchangeToRevert && (() => {
+          const exchange = history.find(h => h.id === exchangeToRevert);
+          if (exchange?.status === 'rejected') return "Restaurer l'échange";
+          if (exchange?.status === 'interest_removed') return "Restaurer l'intérêt";
+          return "Annuler l'échange";
+        })()}
         onConfirm={confirmRevertExchange}
         onCancel={() => {
           setShowRevertConfirmation(false);
@@ -512,8 +519,8 @@ const AdminShiftExchangePage: React.FC = () => {
         }}
       />
 
-      {/* Filtres de période - visible uniquement pour l'onglet échanges */}
-      {activeTab === 'exchanges' && (
+      {/* Filtres de période - visible pour les onglets échanges et historique */}
+      {(activeTab === 'exchanges' || activeTab === 'history') && (
         <div className="bg-white rounded-lg shadow-md mt-6 mb-4">
           <div className="px-3 py-2 border-b border-gray-200 flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -524,9 +531,9 @@ const AdminShiftExchangePage: React.FC = () => {
               
               <div className="flex items-center gap-1">
                 <button
-                  onClick={() => setFilterPeriod('all')}
+                  onClick={() => activeTab === 'exchanges' ? setFilterPeriod('all') : setHistoryFilterPeriod('all')}
                   className={`px-1.5 py-0.5 rounded text-[10px] transition-colors ${
-                    filterPeriod === 'all'
+                    (activeTab === 'exchanges' ? filterPeriod : historyFilterPeriod) === 'all'
                       ? 'bg-gray-100 text-gray-800 font-medium'
                       : 'text-gray-500 hover:bg-gray-50'
                   }`}
@@ -534,9 +541,9 @@ const AdminShiftExchangePage: React.FC = () => {
                   Tous
                 </button>
                 <button
-                  onClick={() => setFilterPeriod(ShiftPeriod.MORNING)}
+                  onClick={() => activeTab === 'exchanges' ? setFilterPeriod(ShiftPeriod.MORNING) : setHistoryFilterPeriod(ShiftPeriod.MORNING)}
                   className={`flex items-center px-1.5 py-0.5 rounded text-[10px] transition-colors ${
-                    filterPeriod === ShiftPeriod.MORNING
+                    (activeTab === 'exchanges' ? filterPeriod : historyFilterPeriod) === ShiftPeriod.MORNING
                       ? 'bg-amber-50 text-amber-700 font-medium'
                       : 'text-gray-500 hover:bg-gray-50'
                   }`}
@@ -545,9 +552,9 @@ const AdminShiftExchangePage: React.FC = () => {
                   M
                 </button>
                 <button
-                  onClick={() => setFilterPeriod(ShiftPeriod.AFTERNOON)}
+                  onClick={() => activeTab === 'exchanges' ? setFilterPeriod(ShiftPeriod.AFTERNOON) : setHistoryFilterPeriod(ShiftPeriod.AFTERNOON)}
                   className={`flex items-center px-1.5 py-0.5 rounded text-[10px] transition-colors ${
-                    filterPeriod === ShiftPeriod.AFTERNOON
+                    (activeTab === 'exchanges' ? filterPeriod : historyFilterPeriod) === ShiftPeriod.AFTERNOON
                       ? 'bg-blue-50 text-blue-700 font-medium'
                       : 'text-gray-500 hover:bg-gray-50'
                   }`}
@@ -556,9 +563,9 @@ const AdminShiftExchangePage: React.FC = () => {
                   AM
                 </button>
                 <button
-                  onClick={() => setFilterPeriod(ShiftPeriod.EVENING)}
+                  onClick={() => activeTab === 'exchanges' ? setFilterPeriod(ShiftPeriod.EVENING) : setHistoryFilterPeriod(ShiftPeriod.EVENING)}
                   className={`flex items-center px-1.5 py-0.5 rounded text-[10px] transition-colors ${
-                    filterPeriod === ShiftPeriod.EVENING
+                    (activeTab === 'exchanges' ? filterPeriod : historyFilterPeriod) === ShiftPeriod.EVENING
                       ? 'bg-purple-50 text-purple-700 font-medium'
                       : 'text-gray-500 hover:bg-gray-50'
                   }`}
@@ -569,24 +576,26 @@ const AdminShiftExchangePage: React.FC = () => {
               </div>
             </div>
             
-            {/* Bouton pour filtrer les gardes avec intéressés */}
-            <button
-              onClick={() => setShowOnlyWithInterested(!showOnlyWithInterested)}
-              className={`flex items-center px-2 py-1 border text-xs font-medium rounded-md transition-colors ${
-                showOnlyWithInterested
-                  ? 'border-green-500 bg-green-50 text-green-700'
-                  : 'border-gray-300 text-gray-600 bg-white hover:bg-gray-50'
-              }`}
-              title="Afficher uniquement les gardes avec des intéressés"
-            >
-              <Users className="h-3.5 w-3.5 mr-1" />
-              <span className="hidden sm:inline">
-                {showOnlyWithInterested ? 'Avec intéressés' : 'Toutes les gardes'}
-              </span>
-              <span className="sm:hidden">
-                {showOnlyWithInterested ? 'Avec int.' : 'Toutes'}
-              </span>
-            </button>
+            {/* Bouton pour filtrer les gardes avec intéressés - uniquement pour l'onglet échanges */}
+            {activeTab === 'exchanges' && (
+              <button
+                onClick={() => setShowOnlyWithInterested(!showOnlyWithInterested)}
+                className={`flex items-center px-2 py-1 border text-xs font-medium rounded-md transition-colors ${
+                  showOnlyWithInterested
+                    ? 'border-green-500 bg-green-50 text-green-700'
+                    : 'border-gray-300 text-gray-600 bg-white hover:bg-gray-50'
+                }`}
+                title="Afficher uniquement les gardes avec des intéressés"
+              >
+                <Users className="h-3.5 w-3.5 mr-1" />
+                <span className="hidden sm:inline">
+                  {showOnlyWithInterested ? 'Avec intéressés' : 'Toutes les gardes'}
+                </span>
+                <span className="sm:hidden">
+                  {showOnlyWithInterested ? 'Avec int.' : 'Toutes'}
+                </span>
+              </button>
+            )}
           </div>
           
           {/* Filtre par utilisateur */}
@@ -599,28 +608,32 @@ const AdminShiftExchangePage: React.FC = () => {
               <div className="flex-1 max-w-xs">
                 <UserSelector
                   users={sortedUsers}
-                  selectedUserId={filterUserId}
-                  onUserChange={setFilterUserId}
+                  selectedUserId={activeTab === 'exchanges' ? filterUserId : historyFilterUserId}
+                  onUserChange={activeTab === 'exchanges' ? setFilterUserId : setHistoryFilterUserId}
                   onPrevious={() => {
-                    const currentIndex = sortedUsers.findIndex(u => u.id === filterUserId);
+                    const currentUserId = activeTab === 'exchanges' ? filterUserId : historyFilterUserId;
+                    const setUserId = activeTab === 'exchanges' ? setFilterUserId : setHistoryFilterUserId;
+                    const currentIndex = sortedUsers.findIndex(u => u.id === currentUserId);
                     if (currentIndex > 0) {
-                      setFilterUserId(sortedUsers[currentIndex - 1].id);
-                    } else if (filterUserId && sortedUsers.length > 0) {
-                      setFilterUserId('');
+                      setUserId(sortedUsers[currentIndex - 1].id);
+                    } else if (currentUserId && sortedUsers.length > 0) {
+                      setUserId('');
                     }
                   }}
                   onNext={() => {
-                    const currentIndex = filterUserId ? sortedUsers.findIndex(u => u.id === filterUserId) : -1;
+                    const currentUserId = activeTab === 'exchanges' ? filterUserId : historyFilterUserId;
+                    const setUserId = activeTab === 'exchanges' ? setFilterUserId : setHistoryFilterUserId;
+                    const currentIndex = currentUserId ? sortedUsers.findIndex(u => u.id === currentUserId) : -1;
                     if (currentIndex < sortedUsers.length - 1) {
-                      setFilterUserId(sortedUsers[currentIndex + 1].id);
+                      setUserId(sortedUsers[currentIndex + 1].id);
                     }
                   }}
                   showSearch={true}
                 />
               </div>
-              {filterUserId && (
+              {(activeTab === 'exchanges' ? filterUserId : historyFilterUserId) && (
                 <button
-                  onClick={() => setFilterUserId('')}
+                  onClick={() => activeTab === 'exchanges' ? setFilterUserId('') : setHistoryFilterUserId('')}
                   className="px-2 py-1 text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-200 rounded transition-colors"
                   title="Effacer le filtre"
                 >
@@ -643,18 +656,23 @@ const AdminShiftExchangePage: React.FC = () => {
                 users={sortedUsers}
                 bagPhaseConfig={bagPhaseConfig}
                 onRevertExchange={handleRevertExchange}
-                onNotify={(historyId: string) => {
-                  setToast({
-                    visible: true,
-                    message: 'Notification envoyée avec succès',
-                    type: 'success'
-                  });
+                filterPeriod={historyFilterPeriod}
+                filterUserId={historyFilterUserId}
+                sortColumn={historySortColumn}
+                sortDirection={historySortDirection}
+                onSortChange={(column) => {
+                  if (historySortColumn === column) {
+                    setHistorySortDirection(historySortDirection === 'asc' ? 'desc' : 'asc');
+                  } else {
+                    setHistorySortColumn(column);
+                    setHistorySortDirection('desc');
+                  }
                 }}
               />
             ) : (
               <ExchangeList
                 exchanges={exchanges as any}
-                allExchanges={(!allExchangesLoading && allExchangesForStats.length > 0 ? allExchangesForStats : exchanges) as any}
+                allExchanges={exchanges as any}
                 users={sortedUsers}
                 history={history as any}
                 bagPhaseConfig={bagPhaseConfig}
@@ -677,7 +695,7 @@ const AdminShiftExchangePage: React.FC = () => {
 
       {/* Panneau flottant de participation */}
       <ParticipationPanel
-        exchanges={(!allExchangesLoading && allExchangesForStats.length > 0 ? allExchangesForStats : exchanges) as any}
+        exchanges={exchanges as any}
         users={sortedUsers}
         history={history as any}
         isOpen={showParticipationPanel}

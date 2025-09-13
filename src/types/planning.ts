@@ -37,12 +37,21 @@ export interface ShiftExchange {
   comment?: string;
   createdAt: string;
   interestedUsers?: string[];
-  status: 'pending' | 'validated' | 'cancelled' | 'unavailable';
+  status: 'pending' | 'validated' | 'cancelled' | 'unavailable' | 'not_taken' | 'rejected' | 'interest_removed';
   lastModified: string;
   proposedToReplacements?: boolean;
   // Propriétés ajoutées pour la compatibilité avec le composant GeneratedPlanningTable
   exchangeType?: 'bag' | 'direct';
   operationTypes: string[]; // Source unique de vérité pour les types d'opérations
+  blockedUsers?: Record<string, {
+    reason: 'already_has_shift' | 'invalid_permutation' | 'dependency_broken';
+    shiftType: string;
+    exchangeWithUserId: string;
+    exchangeWithUserName: string;
+    blockedAt: any; // Timestamp Firebase
+    sourceExchangeId?: string; // ID de l'échange qui a causé le blocage
+    dependsOn?: string[]; // IDs des échanges dont dépend cet utilisateur
+  }>;
 }
 
 export interface ExchangeHistory {
@@ -60,11 +69,16 @@ export interface ExchangeHistory {
   isPermutation: boolean;
   originalShiftType: string;
   newShiftType: string | null;
-  status: 'completed'; // Plus de status 'reverted' car on supprime ces entrées
+  status: 'completed' | 'rejected' | 'interest_removed'; // Ajout des statuts 'rejected' et 'interest_removed'
   createdAt?: string;
   originalExchangeId?: string; // ID de l'échange d'origine avant validation
   originalUserPeriodId?: string | null; // ID de la période d'origine pour l'utilisateur original
   interestedUserPeriodId?: string | null; // ID de la période d'origine pour l'utilisateur intéressé
+  removedFromExchanges?: string[]; // Liste des IDs d'échanges d'où l'utilisateur a été retiré lors de la validation
+  rejectedBy?: string; // ID de l'utilisateur qui a rejeté l'échange
+  rejectedAt?: string; // Date de rejet
+  removedBy?: string; // ID de l'utilisateur qui a retiré l'intérêt (pour interest_removed)
+  removedUserId?: string; // ID de l'utilisateur qui a été retiré de la liste des intéressés
 }
 
 export interface ExchangeValidationError extends Error {

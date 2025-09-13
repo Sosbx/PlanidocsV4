@@ -447,6 +447,11 @@ export const validateShiftExchange = async (
 
       // 6. Déterminer le type d'échange
       const exchangeType: ExchangeType = hasConflictingAssignment ? 'permutation' : 'simple';
+      
+      // 6bis. Récupérer l'association de l'utilisateur original - LECTURE
+      const originalUserRef = doc(db, 'users', exchange.userId);
+      const originalUserDoc = await transaction.get(originalUserRef);
+      const associationId = originalUserDoc.exists() ? originalUserDoc.data()?.associationId || 'RD' : 'RD';
       const assignmentKey = `${exchange.date}-${exchange.period}`;
       const historyRef = doc(db, COLLECTIONS.HISTORY, exchangeId);
       
@@ -723,7 +728,8 @@ export const validateShiftExchange = async (
         status: 'completed',
         originalExchangeId: exchangeId, // Stocker l'ID de l'échange d'origine
         originalUserPeriodId: originalUserPeriodId || null, // Stocker la période d'origine de l'utilisateur original
-        interestedUserPeriodId: interestedUserPeriodId || null // Stocker la période d'origine de l'utilisateur intéressé
+        interestedUserPeriodId: interestedUserPeriodId || null, // Stocker la période d'origine de l'utilisateur intéressé
+        associationId // Ajouter l'associationId pour faciliter le filtrage
       });
       
       // 11. Mettre à jour l'échange comme validé - ÉCRITURE
@@ -1299,11 +1305,14 @@ export const finalizeAllExchanges = async (): Promise<void> => {
     
     const pendingExchangesSnapshot = await getDocs(pendingExchangesQuery);
     
-    // Marquer chaque échange comme indisponible
+    // Marquer chaque échange selon s'il a trouvé preneur ou non
     await runTransaction(db, async (transaction) => {
       pendingExchangesSnapshot.docs.forEach(doc => {
+        const exchangeData = doc.data();
+        const hasInterestedUsers = exchangeData.interestedUsers && exchangeData.interestedUsers.length > 0;
+        
         transaction.update(doc.ref, {
-          status: 'unavailable',
+          status: hasInterestedUsers ? 'pending' : 'not_taken', // Les gardes avec intéressés restent pending, les autres passent à not_taken
           lastModified: serverTimestamp(),
           finalizedAt: serverTimestamp()
         });
@@ -1383,12 +1392,29 @@ export const getShiftExchanges = async (): Promise<ShiftExchange[]> => {
     }
 
     const today = formatParisDate(createParisDate(), 'yyyy-MM-dd');
+    
+    // Récupérer la configuration de la phase pour déterminer les statuts à inclure
+    let statusesToInclude = ['pending', 'unavailable'];
+    
+    try {
+      const configDoc = await getDoc(doc(db, 'config', 'bag_phase_config'));
+      if (configDoc.exists()) {
+        const config = configDoc.data();
+        // En phase distribution, ne récupérer que les gardes pending et validated
+        if (config.phase === 'distribution') {
+          statusesToInclude = ['pending', 'validated'];
+        }
+      }
+    } catch (error) {
+      console.warn('Could not fetch BAG phase config, using default statuses', error);
+    }
+    
     // Essayer d'abord avec l'index composé
     try {
       const q = query(
         collection(db, COLLECTIONS.EXCHANGES),
         where('date', '>=', today),
-        where('status', 'in', ['pending', 'unavailable']),
+        where('status', 'in', statusesToInclude),
         orderBy('date', 'asc')
       );
       const querySnapshot = await getDocs(q);
@@ -1437,7 +1463,7 @@ export const getShiftExchanges = async (): Promise<ShiftExchange[]> => {
         console.warn('Index not ready, falling back to simple query');
         const simpleQuery = query(
           collection(db, COLLECTIONS.EXCHANGES),
-          where('status', 'in', ['pending', 'unavailable'])
+          where('status', 'in', statusesToInclude)
         );
         const querySnapshot = await getDocs(simpleQuery);
         

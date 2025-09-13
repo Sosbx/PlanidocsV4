@@ -13,6 +13,7 @@ type ShiftExchange = PlanningShiftExchange | FeatureShiftExchange;
 import type { User } from '../../../../types/users';
 import { isGrayedOut } from '../../../../utils/dateUtils';
 import InterestedUserCard from './InterestedUserCard';
+import { calculateSuccessRate } from '../../../../utils/bagStatistics';
 import { ConfirmationModal } from '../../../../components/modals';
 import '../../../../styles/BadgeStyles.css';
 
@@ -100,20 +101,40 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
 
   const handleProposeToReplacements = async (exchange: ShiftExchange) => {
     try {
+      // Vérifier que l'exchange a bien un ID
+      if (!exchange.id) {
+        console.error('Exchange object is missing ID:', exchange);
+        alert('Erreur : L\'échange n\'a pas d\'identifiant valide.');
+        return;
+      }
+
+      // Vérifier que toutes les propriétés requises sont présentes
+      if (!exchange.date || !exchange.period || !exchange.shiftType || !exchange.timeSlot || !exchange.userId) {
+        console.error('Exchange object is missing required properties:', exchange);
+        alert('Erreur : L\'échange n\'a pas toutes les propriétés requises.');
+        return;
+      }
+
       setProposingToReplacements(exchange.id);
       
       if (exchange.proposedToReplacements) {
         // Retirer la proposition
-        await cancelPropositionToReplacements(exchange as PlanningShiftExchange);
+        await cancelPropositionToReplacements(exchange as PlanningShiftExchange, true);
         alert(`La garde du ${formatParisDate(new Date(exchange.date), 'dd/MM/yyyy')} (${exchange.period}) a été retirée de la liste des remplaçants.`);
       } else {
-        // Proposer aux remplaçants
-        await proposeToReplacements(exchange as PlanningShiftExchange);
+        // Proposer aux remplaçants - ignorer la vérification de statut en phase distribution/completed
+        const shouldIgnoreStatusCheck = bagPhaseConfig.phase === 'distribution' || bagPhaseConfig.phase === 'completed';
+        await proposeToReplacements(exchange as PlanningShiftExchange, [], shouldIgnoreStatusCheck);
         alert(`La garde du ${formatParisDate(new Date(exchange.date), 'dd/MM/yyyy')} (${exchange.period}) a été proposée aux remplaçants.`);
       }
     } catch (error) {
       console.error('Error proposing/canceling to replacements:', error);
-      alert('Une erreur est survenue lors de l\'opération.');
+      // Afficher un message d'erreur plus détaillé
+      let errorMessage = 'Une erreur est survenue lors de l\'opération.';
+      if (error instanceof Error) {
+        errorMessage += ` Détails : ${error.message}`;
+      }
+      alert(errorMessage);
     } finally {
       setProposingToReplacements(null);
     }
@@ -123,9 +144,10 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
   const isEligibleForReplacement = (exchange: ShiftExchange) => {
     // Vérifier si la garde est en attente et que la date limite est dépassée
     // OU si elle est déjà proposée aux remplaçants (pour permettre de retirer la proposition)
-    return (exchange.status === 'pending' && 
-           (exchange.interestedUsers?.length === 0 || exchange.interestedUsers?.length === 0) &&
-           bagPhaseConfig.phase === 'distribution') ||
+    // OU si elle est non pourvue en phase terminée
+    return ((exchange.status === 'pending' || exchange.status === 'not_taken') && 
+           (exchange.interestedUsers?.length === 0) &&
+           (bagPhaseConfig.phase === 'distribution' || bagPhaseConfig.phase === 'completed')) ||
            exchange.proposedToReplacements;
   };
 
@@ -280,6 +302,7 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
               const isWeekendOrHoliday = isGrayedOut(date);
               const interestedUsers = exchange.interestedUsers || [];
               const isUnavailable = exchange.status === 'unavailable';
+              const isNotTaken = exchange.status === 'not_taken';
 
               return (
                 <tr key={exchange.id} className={`
@@ -291,9 +314,12 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
                       <div className="flex items-center">
                         <span className="text-sm font-medium text-gray-900">
                           {exchangeUser?.lastName.toUpperCase() || 'INCONNU'}
-                          {history?.length > 0 && exchangeUser && exchanges.filter(e => e.interestedUsers?.includes(exchangeUser.id)).length > 0 && (
+                          {history?.length > 0 && exchangeUser && (allExchanges || exchanges).filter(e => e.interestedUsers?.includes(exchangeUser.id)).length > 0 && (
                             <span className="text-xs text-gray-500 ml-1">
-                              ({Math.round((history.filter(h => h.newUserId === exchangeUser?.id).length / exchanges.filter(e => e.interestedUsers?.includes(exchangeUser?.id)).length) * 100)}%)
+                              ({calculateSuccessRate(
+                                history.filter(h => h.newUserId === exchangeUser?.id).length,
+                                (allExchanges || exchanges).filter(e => e.interestedUsers?.includes(exchangeUser?.id)).length
+                              )}%)
                             </span>
                           )}
                         </span>
@@ -335,24 +361,36 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
                         <AlertTriangle className="h-4 w-4 mr-2" />
                         <span className="text-sm">Garde indisponible</span>
                       </div>
+                    ) : isNotTaken ? (
+                      <div className="flex items-center text-orange-600">
+                        <AlertTriangle className="h-4 w-4 mr-2" />
+                        <span className="text-sm">Garde non pourvue</span>
+                      </div>
                     ) : interestedUsers.length > 0 ? (
                       <div className="space-y-1">
-                        {interestedUsers.map(userId => (
-                          <InterestedUserCard
-                            key={userId}
-                            userId={userId}
-                            users={users}
-                            exchange={exchange}
-                            conflictStates={conflictStates}
-                            conflictShiftTypes={conflictShiftTypes}
-                            userAssignments={userAssignments}
-                            bagPhaseConfig={bagPhaseConfig}
-                            onValidateExchange={onValidateExchange}
-                            onRemoveUser={onRemoveUser}
-                            exchanges={allExchanges || exchanges}
-                            history={history}
-                          />
-                        ))}
+                        {interestedUsers.map(userId => {
+                          const isBlocked = exchange.blockedUsers?.[userId] !== undefined;
+                          const blockReason = exchange.blockedUsers?.[userId];
+                          
+                          return (
+                            <InterestedUserCard
+                              key={userId}
+                              userId={userId}
+                              users={users}
+                              exchange={exchange}
+                              conflictStates={conflictStates}
+                              conflictShiftTypes={conflictShiftTypes}
+                              userAssignments={userAssignments}
+                              bagPhaseConfig={bagPhaseConfig}
+                              onValidateExchange={onValidateExchange}
+                              onRemoveUser={onRemoveUser}
+                              exchanges={allExchanges || exchanges}
+                              history={history}
+                              isBlocked={isBlocked}
+                              blockReason={blockReason}
+                            />
+                          );
+                        })}
                       </div>
                     ) : (
                       <span className="text-sm text-gray-500 italic">
@@ -362,26 +400,16 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-right">
                     <div className="flex justify-end gap-2">
-                      {bagPhaseConfig.phase === 'completed' ? (
-                        <label className="flex items-center cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={selectedForReplacements.has(exchange.id)}
-                            onChange={() => toggleReplacementSelection(exchange.id)}
-                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                          />
-                          <span className="ml-2 text-sm text-gray-700">Remplaçants</span>
-                        </label>
-                      ) : (
+                      {(bagPhaseConfig.phase === 'distribution' || bagPhaseConfig.phase === 'completed') && !bagPhaseConfig.isValidated ? (
                         <>
                           <button
                             onClick={() => handleRejectClick(exchange.id)}
                             className={`inline-flex items-center px-2.5 py-1.5 border text-xs font-medium rounded ${
-                              bagPhaseConfig.phase !== 'distribution' || isUnavailable
+                              isUnavailable
                                 ? 'border-gray-300 text-gray-300 bg-gray-50 cursor-not-allowed'
                                 : 'border-red-300 text-red-700 bg-white hover:bg-red-50'
                             }`}
-                            disabled={bagPhaseConfig.phase !== 'distribution' || isUnavailable}
+                            disabled={isUnavailable}
                           >
                             <X className="h-3 w-3 mr-1" />
                             Rejeter
@@ -406,7 +434,7 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
                             </button>
                           )}
                         </>
-                      )}
+                      ) : null}
                     </div>
                   </td>
                 </tr>
@@ -424,6 +452,7 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
           const isWeekendOrHoliday = isGrayedOut(date);
           const interestedUsers = exchange.interestedUsers || [];
           const isUnavailable = exchange.status === 'unavailable';
+          const isNotTaken = exchange.status === 'not_taken';
 
           return (
             <div key={exchange.id} className={`bg-white rounded-lg shadow-sm border border-gray-200 p-4 ${
@@ -444,7 +473,10 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
                     {exchangeUser?.lastName.toUpperCase() || 'INCONNU'}
                     {history?.length > 0 && exchangeUser && exchanges.filter(e => e.interestedUsers?.includes(exchangeUser.id)).length > 0 && (
                       <span className="text-xs text-gray-500 ml-1">
-                        ({Math.round((history.filter(h => h.newUserId === exchangeUser?.id).length / exchanges.filter(e => e.interestedUsers?.includes(exchangeUser?.id)).length) * 100)}%)
+                        ({calculateSuccessRate(
+                          history.filter(h => h.newUserId === exchangeUser?.id).length,
+                          exchanges.filter(e => e.interestedUsers?.includes(exchangeUser?.id)).length
+                        )}%)
                       </span>
                     )}
                   </div>
@@ -470,33 +502,46 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
                 </div>
               </div>
 
-              {/* Garde indisponible */}
+              {/* Garde indisponible ou non pourvue */}
               {isUnavailable && (
                 <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center text-amber-700">
                   <AlertTriangle className="h-5 w-5 mr-2 text-amber-500" />
                   <span>Cette garde est actuellement indisponible</span>
                 </div>
               )}
+              {isNotTaken && (
+                <div className="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-lg flex items-center text-orange-700">
+                  <AlertTriangle className="h-5 w-5 mr-2 text-orange-500" />
+                  <span>Cette garde n'a pas trouvé preneur</span>
+                </div>
+              )}
 
               {/* Intéressés */}
               <div className="space-y-2">
                 {interestedUsers.length > 0 && !isUnavailable ? (
-                  interestedUsers.map(userId => (
-                    <InterestedUserCard
-                      key={userId}
-                      userId={userId}
-                      users={users}
-                      exchange={exchange}
-                      conflictStates={conflictStates}
-                      conflictShiftTypes={conflictShiftTypes}
-                      userAssignments={userAssignments}
-                      bagPhaseConfig={bagPhaseConfig}
-                      onValidateExchange={onValidateExchange}
-                      onRemoveUser={onRemoveUser}
-                      exchanges={allExchanges || exchanges}
-                      history={history}
-                    />
-                  ))
+                  interestedUsers.map(userId => {
+                    const isBlocked = exchange.blockedUsers?.[userId] !== undefined;
+                    const blockReason = exchange.blockedUsers?.[userId];
+                    
+                    return (
+                      <InterestedUserCard
+                        key={userId}
+                        userId={userId}
+                        users={users}
+                        exchange={exchange}
+                        conflictStates={conflictStates}
+                        conflictShiftTypes={conflictShiftTypes}
+                        userAssignments={userAssignments}
+                        bagPhaseConfig={bagPhaseConfig}
+                        onValidateExchange={onValidateExchange}
+                        onRemoveUser={onRemoveUser}
+                        exchanges={allExchanges || exchanges}
+                        history={history}
+                        isBlocked={isBlocked}
+                        blockReason={blockReason}
+                      />
+                    );
+                  })
                 ) : !isUnavailable ? (
                   <div className="text-sm text-gray-500 italic text-center py-2">
                     Aucun intéressé
@@ -507,26 +552,12 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
               {/* Actions */}
               {!isUnavailable && (
                 <div className="mt-4 flex justify-end gap-2">
-                  {bagPhaseConfig.phase === 'completed' ? (
-                    <label className="flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={selectedForReplacements.has(exchange.id)}
-                        onChange={() => toggleReplacementSelection(exchange.id)}
-                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                      />
-                      <span className="ml-2 text-sm text-gray-700">Donner aux remplaçants</span>
-                    </label>
-                  ) : (
+                  {(bagPhaseConfig.phase === 'distribution' || bagPhaseConfig.phase === 'completed') && !bagPhaseConfig.isValidated ? (
                     <>
                       <button
                         onClick={() => handleRejectClick(exchange.id)}
-                        className={`inline-flex items-center p-2 border rounded-full ${
-                          bagPhaseConfig.phase !== 'distribution'
-                            ? 'border-gray-300 text-gray-300 bg-gray-50 cursor-not-allowed'
-                            : 'border-red-300 text-red-700 bg-white hover:bg-red-50'
-                        }`}
-                        disabled={bagPhaseConfig.phase !== 'distribution'}
+                        className="inline-flex items-center p-2 border rounded-full border-red-300 text-red-700 bg-white hover:bg-red-50"
+                        disabled={false}
                         title="Rejeter"
                       >
                         <X className="h-5 w-5" />
@@ -547,7 +578,7 @@ const ExchangeList: React.FC<ExchangeListProps> = ({
                         </button>
                       )}
                     </>
-                  )}
+                  ) : null}
                 </div>
               )}
             </div>

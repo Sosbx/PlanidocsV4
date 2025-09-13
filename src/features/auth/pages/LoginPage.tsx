@@ -29,7 +29,23 @@ const LoginPage: React.FC = () => {
       navigate(from, { replace: true });
     } catch (err) {
       clearTimeout(messageTimeout);
-      setError(err instanceof Error ? err.message : 'Une erreur est survenue lors de la connexion');
+      const errorMessage = err instanceof Error ? err.message : 'Une erreur est survenue lors de la connexion';
+      setError(errorMessage);
+      
+      // Si le message indique d'utiliser Google, on peut optionnellement faire clignoter le bouton Google
+      if (errorMessage.includes('connexion Google')) {
+        // Petit délai pour que l'utilisateur lise le message
+        setTimeout(() => {
+          const googleButton = document.querySelector('[data-google-signin]');
+          if (googleButton) {
+            googleButton.classList.add('animate-pulse');
+            // Retirer l'animation après quelques secondes
+            setTimeout(() => {
+              googleButton.classList.remove('animate-pulse');
+            }, 3000);
+          }
+        }, 500);
+      }
     } finally {
       setIsLoading(false);
       setLoadingMessage('Vérification en cours...');

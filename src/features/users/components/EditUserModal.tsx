@@ -6,11 +6,17 @@ interface EditUserModalProps {
   user: User | null;
   isOpen: boolean;
   onClose: () => void;
-  onSave: (userId: string, roles: { isAdmin: boolean; isUser: boolean; isManager: boolean; isPartTime: boolean; isCAT: boolean; isReplacement: boolean }) => void;
+  onSave: (userId: string, data: { 
+    roles: { isAdmin: boolean; isUser: boolean; isManager: boolean; isPartTime: boolean; isCAT: boolean; isReplacement: boolean },
+    firstName?: string,
+    lastName?: string
+  }) => void;
 }
 
 export const EditUserModal: React.FC<EditUserModalProps> = ({ user, isOpen, onClose, onSave }) => {
   const [roles, setRoles] = useState<UserRoleFlags | null>(null);
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -23,8 +29,12 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({ user, isOpen, onCl
         isCAT: user.roles.isCAT || false,
         isReplacement: user.roles.isReplacement || false
       });
+      setFirstName(user.firstName || '');
+      setLastName(user.lastName || '');
     } else {
       setRoles(null);
+      setFirstName('');
+      setLastName('');
     }
   }, [user]);
 
@@ -34,7 +44,11 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({ user, isOpen, onCl
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      await onSave(user.id, roles);
+      await onSave(user.id, {
+        roles,
+        firstName: firstName.trim(),
+        lastName: lastName.trim()
+      });
       onClose();
     } finally {
       setIsSubmitting(false);
@@ -45,7 +59,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({ user, isOpen, onCl
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 w-full max-w-md">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold">Modifier les rôles</h2>
+          <h2 className="text-xl font-semibold">Modifier l'utilisateur</h2>
           <button 
             onClick={onClose}
             disabled={isSubmitting}
@@ -55,14 +69,43 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({ user, isOpen, onCl
           </button>
         </div>
 
-        <div className="mb-4">
-          <p className="text-sm text-gray-600">
-            {user.firstName} {user.lastName}
-          </p>
-          <p className="text-sm text-gray-500">{user.email}</p>
-        </div>
-
         <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <h3 className="text-sm font-medium text-gray-700 mb-2">Informations personnelles</h3>
+            <div className="space-y-3">
+              <div>
+                <label htmlFor="lastName" className="block text-sm font-medium text-gray-700">
+                  Nom
+                </label>
+                <input
+                  type="text"
+                  id="lastName"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                  disabled={isSubmitting}
+                  required
+                />
+              </div>
+              <div>
+                <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">
+                  Prénom
+                </label>
+                <input
+                  type="text"
+                  id="firstName"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                  disabled={isSubmitting}
+                  required
+                />
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Email: {user.email}</p>
+              </div>
+            </div>
+          </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Rôles

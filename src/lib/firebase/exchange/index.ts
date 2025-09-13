@@ -15,7 +15,8 @@ export {
   removeShiftExchange,
   getShiftExchanges,
   finalizeAllExchanges,
-  restorePendingExchanges
+  restorePendingExchanges,
+  restoreNotTakenToPending
 } from './core';
 
 // Réexporter les fonctions de validation
@@ -39,8 +40,16 @@ export {
 // Réexporter les fonctions de gestion de l'historique
 export {
   getExchangeHistory,
-  revertToExchange
+  revertToExchange,
+  restoreRejectedExchange,
+  restoreInterestRemoval
 } from './history-operations';
+
+// Export du gestionnaire d'historique
+export { historyManager, type CreateHistoryData, type HistoryOperationType } from './history-manager';
+
+// Export du gestionnaire des utilisateurs bloqués
+export { blockedUsersManager, type BlockedUserReason } from './blocked-users-manager';
 
 // Réexporter les fonctions d'abonnement
 export {
@@ -77,3 +86,17 @@ export {
   startCacheCleanup,
   invalidateCache
 } from './optimized';
+
+// Réexporter les fonctions de restauration
+export {
+  restoreAllBagExchanges,
+  canRestoreAllExchanges,
+  restoreFromBackup,
+  listAvailableBackups
+} from './restore-operations';
+
+// Réexporter les fonctions de gestion des utilisateurs bloqués
+export {
+  recalculateBlockedUsersForSlot,
+  checkInvalidExchanges
+} from './blocked-users-operations';

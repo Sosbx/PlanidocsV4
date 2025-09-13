@@ -25,11 +25,19 @@ const UsersManagementPage: React.FC = () => {
     setEditingUser(user);
   };
 
-  const handleSaveUser = async (userId: string, roles: { isAdmin: boolean; isUser: boolean; isManager: boolean; isPartTime: boolean; isCAT: boolean; isReplacement: boolean }) => {
+  const handleSaveUser = async (userId: string, data: { 
+    roles: { isAdmin: boolean; isUser: boolean; isManager: boolean; isPartTime: boolean; isCAT: boolean; isReplacement: boolean },
+    firstName?: string,
+    lastName?: string
+  }) => {
     try {
-      await updateUser(userId, { roles });
+      const updateData: any = { roles: data.roles };
+      if (data.firstName !== undefined) updateData.firstName = data.firstName;
+      if (data.lastName !== undefined) updateData.lastName = data.lastName;
+      
+      await updateUser(userId, updateData);
     } catch (error) {
-      console.error('Error updating user roles:', error);
+      console.error('Error updating user:', error);
     }
   };
 

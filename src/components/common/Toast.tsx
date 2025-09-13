@@ -6,9 +6,10 @@ interface ToastProps {
   isVisible: boolean;
   type?: 'success' | 'error' | 'info';
   onClose: () => void;
+  duration?: number; // Durée en millisecondes avant fermeture automatique
 }
 
-const Toast: React.FC<ToastProps> = ({ message, isVisible, type = 'error', onClose }) => {
+const Toast: React.FC<ToastProps> = ({ message, isVisible, type = 'error', onClose, duration = 2000 }) => {
   const [shouldRender, setShouldRender] = useState(false);
 
   useEffect(() => {
@@ -22,6 +23,17 @@ const Toast: React.FC<ToastProps> = ({ message, isVisible, type = 'error', onClo
       return () => clearTimeout(timer);
     }
   }, [isVisible, shouldRender]);
+
+  // Timer pour fermeture automatique
+  useEffect(() => {
+    if (isVisible && duration > 0) {
+      const autoCloseTimer = setTimeout(() => {
+        onClose();
+      }, duration);
+      
+      return () => clearTimeout(autoCloseTimer);
+    }
+  }, [isVisible, duration, onClose]);
 
   if (!shouldRender) return null;
 

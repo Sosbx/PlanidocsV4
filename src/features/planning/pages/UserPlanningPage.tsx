@@ -622,19 +622,6 @@ const UserPlanningPage: React.FC = () => {
     );
   }
 
-  if (!config.isConfigured) {
-    return (
-      <div className={`max-w-7xl mx-auto px-4 py-8 ${bottomNavPadding}`}>
-        <div className="bg-yellow-50 p-6 rounded-lg shadow-md">
-          <h2 className="text-xl font-semibold text-yellow-800 mb-2">Planning non configuré</h2>
-          <p className="text-yellow-700">
-            Le planning n'a pas encore été configuré par l'administrateur.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   if (loading) {
     return <LoadingSpinner />;
   }
