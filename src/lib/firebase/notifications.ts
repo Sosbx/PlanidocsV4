@@ -4,7 +4,7 @@ import { db } from './config';
 import { ShiftPeriod } from '../../types/exchange';
 import { getPeriodDisplayText, formatDate } from '../../utils/dateUtils';
 import { FirestoreCacheUtils } from '../../utils/cacheUtils';
-import { sendPushNotification } from './pushNotifications';
+// Import sendPushNotification supprimé - notifications push désactivées
 
 // Types de notifications
 export enum NotificationType {
@@ -219,28 +219,8 @@ export const addNotification = async (
     // Invalider le cache pour cet utilisateur
     FirestoreCacheUtils.invalidate(`notifications_user_${options.userId}`);
     
-    // Envoyer également une notification push
-    try {
-      const pushData = {
-        userId: options.userId,
-        title: options.title,
-        body: options.message,
-        type: options.type,
-        data: {
-          relatedId: options.relatedId || '',
-          link: options.link || '',
-          type: options.type,
-          createdAt: createParisDate().toISOString()
-        }
-      };
-      
-      // Envoyer la notification push
-      await sendPushNotification(pushData);
-      console.log('Notification push envoyée avec succès');
-    } catch (pushError) {
-      console.error('Erreur lors de l\'envoi de la notification push:', pushError);
-      // Ne pas bloquer le processus si l'envoi de notification push échoue
-    }
+    // Notifications push désactivées - seules les notifications in-app sont créées
+    console.log('Notification in-app créée (push désactivé)');
     
     return notificationRef.id;
   } catch (error) {

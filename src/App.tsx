@@ -14,8 +14,6 @@ import { ConnectionStatus, LoadingSpinner } from './components/common';
 import { AssociationProvider } from './context/association/AssociationContext';
 import { FeatureFlagsProvider } from './context/featureFlags/FeatureFlagsContext';
 import { SuperAdminProvider } from './context/superAdmin/SuperAdminContext';
-import NotificationPermissionManager from './components/notifications/NotificationPermissionManager';
-import WelcomeNotificationPrompt from './components/notifications/WelcomeNotificationPrompt';
 import { ToastProvider } from './context/toast';
 import { GoogleCalendarProvider } from './context/googleCalendar/GoogleCalendarContext';
 import { DirectExchangeProvider } from './context/directExchange/DirectExchangeContext';
@@ -25,32 +23,6 @@ import './utils/debugShiftExchanges';
 import './utils/exchangeHistoryDiagnostic';
 import './utils/migrateExchangeHistory';
 
-// Import des outils de test des notifications en développement
-if (import.meta.env.DEV) {
-  import('./utils/testNotifications').then(() => {
-    console.log('🔧 Outils de test des notifications chargés - utilisez testNotifications.test() ou testNotifications.checkStatus()');
-  });
-  
-  import('./utils/fcmTokenManager').then(() => {
-    console.log('🔧 FCM Token Manager chargé - utilisez fcmManager.help() pour l\'aide');
-  });
-  
-  import('./utils/notificationDiagnostic').then(() => {
-    console.log('🔧 Diagnostic des notifications chargé - utilisez notificationDiagnostic.run() pour le diagnostic');
-  });
-  
-  import('./utils/notificationReset').then(() => {
-    console.log('🔧 Réinitialisation des notifications chargée - utilisez notificationReset.reset() pour réinitialiser');
-  });
-  
-  import('./utils/pushDiagnostic').then(() => {
-    console.log('🔍 Diagnostic push chargé - utilisez pushDiagnostic.run() pour lancer le diagnostic complet');
-  });
-  
-  import('./utils/checkTokenStatus').then(() => {
-    console.log('🔑 Vérification des tokens FCM chargée - utilisez checkTokenStatus.report() pour un rapport complet');
-  });
-}
 
 // Import des pages critiques directement (utiles dès le début)
 import LoginPage from './features/auth/pages/LoginPage';
@@ -291,9 +263,6 @@ const App: React.FC = () => {
                               <Route path="/" element={<Navigate to="/dashboard" replace />} />
                             </Routes>
                             <ConnectionStatus />
-                            {/* Gestionnaire de permissions pour les notifications push */}
-                            <NotificationPermissionManager />
-                            <WelcomeNotificationPrompt />
                           </div>
                         </ProtectedRoute>
                       }

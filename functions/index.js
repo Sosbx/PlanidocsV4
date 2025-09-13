@@ -290,7 +290,7 @@ exports.sendReminderEmail = functions.region(region).https.onRequest(async (req,
       const deadlineDate = new Date(deadline);
       const formattedDeadline = formatParisDate(deadlineDate);
       
-      // 3. Créer une notification et l'envoyer en push en utilisant notre fonction utilitaire
+      // 3. Créer une notification in-app uniquement
       const notifMessage = `N'oubliez pas de valider vos désiderata avant le ${formattedDeadline}. Votre participation est essentielle pour la création du planning.`;
       const notifResult = await createAndSendNotification(
         userId,
@@ -302,19 +302,19 @@ exports.sendReminderEmail = functions.region(region).https.onRequest(async (req,
         transactionId
       );
       
-      console.log(`Notification créée pour l'utilisateur ${userId}:`, notifResult);
+      console.log(`Notification in-app créée pour l'utilisateur ${userId}`);
       
       // Répondre avec succès
       return res.status(200).json({ 
         success: true,
-        message: `Email et notification de rappel envoyés avec succès à ${userData.email}`,
+        message: `Email de rappel envoyé avec succès à ${userData.email}`,
         emailSent: true,
         notificationSent: true,
-        pushSent: notifResult.pushSuccess > 0,
+        pushSent: false,
         pushDetails: {
-          success: notifResult.pushSuccess || 0,
-          failure: notifResult.pushFailure || 0,
-          total: notifResult.totalTokens || 0
+          success: 0,
+          failure: 0,
+          total: 0
         }
       });
     } catch (error) {
@@ -709,15 +709,9 @@ exports.scheduledReminderEmails = functions.region(region).pubsub
     }
   });
 
-/**
- * Fonction utilitaire pour envoyer une notification push via FCM
- * @param {string} userId - ID de l'utilisateur destinataire
- * @param {string} title - Titre de la notification
- * @param {string} body - Corps du message
- * @param {object} data - Données supplémentaires
- * @returns {object} Résultat de l'envoi
- */
-const sendPushNotification = async (userId, title, body, data = {}) => {
+// Fonction sendPushNotification supprimée - Plus de notifications push
+// Les notifications push ont été désactivées
+const sendPushNotificationDisabled = async (userId, title, body, data = {}) => {
   try {
     console.log(`\n🔍 Début sendPushNotification pour utilisateur: ${userId}`);
     console.log(`   Titre: ${title}`);
@@ -907,14 +901,27 @@ const sendPushNotification = async (userId, title, body, data = {}) => {
   }
 };
 
+// Fonction stub pour remplacer sendPushNotification
+const sendPushNotification = async (userId, title, body, data = {}) => {
+  // Plus de notifications push - retourner toujours faux
+  console.log(`Notifications push désactivées pour ${userId}`);
+  return {
+    success: false,
+    reason: 'push_disabled',
+    successCount: 0,
+    failureCount: 0,
+    totalTokens: 0
+  };
+};
+
 /**
- * Fonction utilitaire pour créer une notification et l'envoyer en push
+ * Fonction utilitaire pour créer une notification in-app uniquement
  * 
- * Cette fonction crée une notification en base et tente de l'envoyer en push
+ * Cette fonction crée une notification dans Firestore (plus de push)
  */
 const createAndSendNotification = async (userId, title, message, type, link, associationId, transactionId = null, bulkId = null) => {
   try {
-    // 1. Créer une notification dans Firestore
+    // Créer une notification dans Firestore uniquement
     const notificationRef = await admin.firestore().collection('notifications').add({
       userId: userId,
       title: title,
@@ -930,28 +937,14 @@ const createAndSendNotification = async (userId, title, message, type, link, ass
       ...(bulkId && { bulkId })
     });
     
-    // 2. Tentative d'envoi de notification push via notre fonction dédiée
-    const pushData = {
-      type: type || 'desiderata_reminder',
-      link: link || '/desiderata',
-      notificationId: notificationRef.id,
-      associationId: associationId,
-      ...(transactionId && { transactionId }),
-      ...(bulkId && { bulkId })
-    };
-    
-    const pushResult = await sendPushNotification(userId, title, message, pushData);
-    
-    // Retourner le résultat combiné
+    // Plus d'envoi push - retourner uniquement le succès de la création
     return {
       success: true,
       notificationId: notificationRef.id,
-      pushSuccess: pushResult.successCount || 0,
-      pushFailure: pushResult.failureCount || 0,
-      totalTokens: pushResult.totalTokens || 0,
-      message: pushResult.reason === 'no_tokens' 
-        ? "Notification créée, mais aucun appareil enregistré pour l'envoi push" 
-        : `Notification envoyée à ${pushResult.successCount} appareil(s)` 
+      pushSuccess: 0,
+      pushFailure: 0,
+      totalTokens: 0,
+      message: "Notification in-app créée avec succès"
     };
   } catch (error) {
     console.error(`Erreur lors de la création de notification pour l'utilisateur ${userId}:`, error);
@@ -959,52 +952,4 @@ const createAndSendNotification = async (userId, title, message, type, link, ass
   }
 };
 
-/**
- * Fonction callable pour envoyer des notifications push
- */
-exports.sendPushNotification = functions.region(region).https.onCall(async (data, context) => {
-  try {
-    // Vérifier l'authentification
-    if (!context.auth) {
-      throw new functions.https.HttpsError('unauthenticated', 'Vous devez être connecté pour envoyer des notifications');
-    }
-    
-    // Vérifier les paramètres requis
-    const { userId, title, message, type, link, associationId } = data;
-    
-    if (!userId || !title || !message) {
-      throw new functions.https.HttpsError('invalid-argument', 'Les paramètres userId, title et message sont requis');
-    }
-    
-    console.log(`Envoi de notification push:`, { userId, title, type, associationId });
-    
-    // Créer un ID de transaction unique
-    const transactionId = `push_${Date.now()}_${userId}`;
-    
-    // Créer et envoyer la notification
-    const notifResult = await createAndSendNotification(
-      userId,
-      title,
-      message,
-      type || 'general',
-      link || '/',
-      associationId,
-      transactionId
-    );
-    
-    // Retourner le résultat
-    return { 
-      success: true,
-      message: `Notification créée avec succès pour l'utilisateur ${userId}`,
-      notificationSent: true,
-      pushSent: !!notifResult.pushSuccess,
-      details: notifResult
-    };
-  } catch (error) {
-    console.error('Erreur dans sendPushNotification:', error);
-    throw new functions.https.HttpsError(
-      'internal', 
-      error.message || 'Une erreur est survenue lors de l\'envoi de la notification'
-    );
-  }
-});
+// Export sendPushNotification supprimé - Les notifications push sont désactivées

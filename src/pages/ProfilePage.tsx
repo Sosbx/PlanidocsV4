@@ -18,7 +18,7 @@ import { resetPassword, linkGoogleAccount } from '../features/auth/utils/session
 import { auth } from '../lib/firebase/config';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import { NotificationType } from '../lib/firebase/notifications';
-import NotificationSettings from '../components/notifications/NotificationSettings';
+// Import NotificationSettings supprimé - notifications push désactivées
 
 // Type pour les paramètres de notification
 interface NotificationSettings {
@@ -430,8 +430,7 @@ const ProfilePage: React.FC = () => {
       </div>
       
       <div className="space-y-6">
-        {/* Paramètres des notifications push */}
-        <NotificationSettings />
+        {/* Paramètres des notifications push supprimés - fonctionnalité désactivée */}
         
         <div className="flex flex-col space-y-1">
           <h3 className="text-lg font-medium text-gray-800">Préférences de notification</h3>
