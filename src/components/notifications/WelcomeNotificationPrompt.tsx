@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, X, CheckCircle, AlertCircle } from 'lucide-react';
+import { Bell, X, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import { useAuth } from '../../features/auth/hooks';
 import { requestNotificationPermission } from '../../lib/firebase/messaging';
 import { saveDeviceToken } from '../../lib/firebase/deviceTokens';
+import { resetNotificationSystem } from '../../utils/notificationReset';
 
 /**
  * Composant de bienvenue qui apparaît à la connexion
@@ -67,9 +68,41 @@ const WelcomeNotificationPrompt: React.FC = () => {
       } else {
         setStatus('error');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erreur:', error);
-      setStatus('error');
+      
+      // Vérifier si c'est une erreur qui nécessite une réinitialisation manuelle
+      if (error.message === 'PUSH_SERVICE_ERROR_NEEDS_MANUAL_RESET' ||
+          error.message === 'PUSH_SERVICE_ERROR_RESET_FAILED') {
+        setStatus('error-reset-needed');
+      } else {
+        setStatus('error');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const handleReset = async () => {
+    setLoading(true);
+    setStatus('resetting');
+    
+    try {
+      console.log('🔄 Réinitialisation du système de notifications...');
+      const result = await resetNotificationSystem(user?.id);
+      
+      if (result.success) {
+        setStatus('reset-success');
+        // Recharger la page après 2 secondes
+        setTimeout(() => {
+          window.location.reload();
+        }, 2000);
+      } else {
+        setStatus('reset-failed');
+      }
+    } catch (error) {
+      console.error('Erreur lors de la réinitialisation:', error);
+      setStatus('reset-failed');
     } finally {
       setLoading(false);
     }
@@ -137,6 +170,60 @@ const WelcomeNotificationPrompt: React.FC = () => {
               <span className="text-sm">
                 Les notifications ont été refusées. Vous pouvez les activer dans les paramètres du navigateur.
               </span>
+            </div>
+          </div>
+        )}
+        
+        {status === 'error-reset-needed' && (
+          <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-4">
+            <div className="flex flex-col">
+              <div className="flex items-center text-orange-800 mb-2">
+                <AlertCircle className="h-5 w-5 mr-2" />
+                <span className="font-medium">Problème de configuration détecté</span>
+              </div>
+              <p className="text-sm text-orange-700 mb-3">
+                Le système de notifications rencontre un problème. Une réinitialisation est nécessaire.
+              </p>
+              <button
+                onClick={handleReset}
+                disabled={loading}
+                className="flex items-center justify-center px-3 py-2 bg-orange-600 text-white font-medium rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Réinitialiser le système
+              </button>
+            </div>
+          </div>
+        )}
+        
+        {status === 'resetting' && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+            <div className="flex items-center text-blue-800">
+              <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></span>
+              <span className="font-medium">Réinitialisation en cours...</span>
+            </div>
+          </div>
+        )}
+        
+        {status === 'reset-success' && (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
+            <div className="flex items-center text-green-800">
+              <CheckCircle className="h-5 w-5 mr-2" />
+              <span className="font-medium">Réinitialisation réussie ! Rechargement de la page...</span>
+            </div>
+          </div>
+        )}
+        
+        {status === 'reset-failed' && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+            <div className="flex flex-col">
+              <div className="flex items-center text-red-800 mb-2">
+                <AlertCircle className="h-5 w-5 mr-2" />
+                <span className="font-medium">Échec de la réinitialisation</span>
+              </div>
+              <p className="text-sm text-red-700">
+                Veuillez recharger la page manuellement et réessayer.
+              </p>
             </div>
           </div>
         )}

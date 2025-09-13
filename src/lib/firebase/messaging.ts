@@ -1,5 +1,6 @@
 import { getMessaging, getToken, onMessage } from "firebase/messaging";
 import { app } from "./config";
+import { resetNotificationSystem, hasRecentReset } from "../../utils/notificationReset";
 
 // Initialiser Firebase Cloud Messaging
 export const messaging = typeof window !== 'undefined' ? getMessaging(app) : null;
@@ -148,7 +149,7 @@ const getTokenWithRetry = async (
 };
 
 // Demander la permission et obtenir le token FCM
-export const requestNotificationPermission = async (): Promise<string | null> => {
+export const requestNotificationPermission = async (autoReset: boolean = true): Promise<string | null> => {
   try {
     console.log('🔔 === Début de la demande de permission pour les notifications ===');
     
@@ -212,7 +213,39 @@ export const requestNotificationPermission = async (): Promise<string | null> =>
       console.error('💬 Message d\'erreur:', error.message);
     }
     
-    // Erreurs spécifiques FCM
+    // Gestion spécifique de l'erreur "push service error"
+    if (error.message?.includes('Registration failed - push service error') || 
+        error.message?.includes('push service error')) {
+      console.error('🔄 Erreur du service push détectée');
+      
+      // Si autoReset est activé et qu'on n'a pas déjà fait un reset récent
+      if (autoReset && !hasRecentReset()) {
+        console.log('🔄 Tentative de réinitialisation automatique...');
+        
+        try {
+          const resetResult = await resetNotificationSystem();
+          
+          if (resetResult.success) {
+            console.log('✅ Réinitialisation réussie. Nouvelle tentative...');
+            // Attendre un peu avant de réessayer
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            // Réessayer sans auto-reset pour éviter la boucle
+            return await requestNotificationPermission(false);
+          } else {
+            console.error('❌ La réinitialisation a échoué');
+            throw new Error('PUSH_SERVICE_ERROR_NEEDS_MANUAL_RESET');
+          }
+        } catch (resetError) {
+          console.error('❌ Erreur lors de la réinitialisation:', resetError);
+          throw new Error('PUSH_SERVICE_ERROR_RESET_FAILED');
+        }
+      } else {
+        console.log('⚠️ Réinitialisation récente déjà effectuée ou autoReset désactivé');
+        throw new Error('PUSH_SERVICE_ERROR_NEEDS_MANUAL_RESET');
+      }
+    }
+    
+    // Autres erreurs spécifiques FCM
     if (error.code === 'messaging/registration-token-not-registered') {
       console.error('🔄 Le token FCM n\'est pas enregistré. Réessayez.');
     } else if (error.code === 'messaging/invalid-vapid-key') {

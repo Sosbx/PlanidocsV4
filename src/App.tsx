@@ -38,6 +38,10 @@ if (import.meta.env.DEV) {
   import('./utils/notificationDiagnostic').then(() => {
     console.log('🔧 Diagnostic des notifications chargé - utilisez notificationDiagnostic.run() pour le diagnostic');
   });
+  
+  import('./utils/notificationReset').then(() => {
+    console.log('🔧 Réinitialisation des notifications chargée - utilisez notificationReset.reset() pour réinitialiser');
+  });
 }
 
 // Import des pages critiques directement (utiles dès le début)
